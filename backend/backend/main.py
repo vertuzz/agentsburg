@@ -129,10 +129,20 @@ def create_app(
     app.state.settings = settings
     app.state.clock = clock
 
-    # CORS — allow frontend dev server and any configured origins
+    # CORS — allow frontend dev server and production origins.
+    # In Docker, nginx proxies all requests so the browser only talks to nginx
+    # (port 80). We also allow localhost:5173 for local dev without Docker.
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.server.debug else ["http://localhost:5173"],
+        allow_origins=[
+            "*",
+        ] if settings.server.debug else [
+            "http://localhost",
+            "http://localhost:80",
+            "http://localhost:5173",
+            "http://127.0.0.1",
+            "http://127.0.0.1:80",
+        ],
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -151,8 +161,9 @@ def create_app(
     app.include_router(mcp_router)
 
     # REST API router — dashboard endpoints (Phase 9)
-    # from backend.api.router import router as api_router
-    # app.include_router(api_router, prefix="/api")
+    from backend.api.router import router as api_router
+
+    app.include_router(api_router, prefix="/api")
 
     return app
 

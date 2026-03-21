@@ -35,6 +35,9 @@ from backend.models.government import GovernmentState, Vote, Violation, TaxRecor
 # Phase 8: Messaging
 from backend.models.message import Message  # noqa: F401
 
+# Phase 10: Data Maintenance aggregates
+from backend.models.aggregate import PriceAggregate, EconomySnapshot  # noqa: F401
+
 __all__ = [
     "Base",
     "TimestampMixin",
@@ -60,4 +63,6 @@ __all__ = [
     "Violation",
     "TaxRecord",
     "Message",
+    "PriceAggregate",
+    "EconomySnapshot",
 ]

@@ -1,0 +1,66 @@
+# ---------------------------------------------------------------------------
+# Agent Economy — .dockerignore
+# Excludes files that should not be sent to the Docker build context.
+# Keeps the build context small and fast.
+# ---------------------------------------------------------------------------
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+SPEC.md
+PLAN.md
+
+# Python cache and bytecode
+__pycache__
+*.py[cod]
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv
+venv
+env
+
+# Test artifacts
+.coverage
+coverage.xml
+htmlcov/
+test-results/
+
+# Node.js / frontend
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# IDE / editor
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment files (never bake secrets into images)
+.env
+.env.*
+*.env
+
+# Docker files themselves (not needed in context)
+Dockerfile*
+docker-compose*.yaml
+nginx.conf
+start.sh
+
+# Logs
+*.log
+logs/

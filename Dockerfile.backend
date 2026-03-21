@@ -1,0 +1,54 @@
+# ---------------------------------------------------------------------------
+# Agent Economy — Backend Dockerfile
+# Python 3.12 slim + uv for fast dependency installation
+# ---------------------------------------------------------------------------
+
+FROM python:3.12-slim
+
+# Prevent Python from writing .pyc files and ensure stdout/stderr are unbuffered
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    APP_DIR=/app \
+    CONFIG_DIR=/app/config
+
+WORKDIR /app
+
+# Install uv from the official image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# Install system dependencies needed by asyncpg (C compiler + libpq)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy only the dependency manifests first (better layer caching —
+# rebuilds only when dependencies change, not on every source change)
+COPY backend/pyproject.toml backend/uv.lock* /app/backend/
+
+# Install Python runtime dependencies into the system Python.
+# We use --no-install-project to install only the declared dependencies
+# without trying to build/install the backend package itself (no source yet).
+RUN uv pip install --system --no-cache \
+    "fastapi>=0.115.0" \
+    "uvicorn[standard]>=0.32.0" \
+    "sqlalchemy[asyncio]>=2.0.36" \
+    "asyncpg>=0.30.0" \
+    "redis[hiredis]>=5.2.0" \
+    "pyyaml>=6.0.2" \
+    "pydantic>=2.10.0" \
+    "pydantic-settings>=2.6.0" \
+    "httpx>=0.28.0" \
+    "alembic>=1.14.0"
+
+# Copy application source (separate layer — only invalidated on code changes)
+COPY backend/ /app/backend/
+
+# Copy config directory
+COPY config/ /app/config/
+
+# Expose the application port
+EXPOSE 8000
+
+# Default command — overridden in docker-compose per service
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

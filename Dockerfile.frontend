@@ -1,0 +1,30 @@
+# ---------------------------------------------------------------------------
+# Agent Economy — Frontend Dockerfile
+# Multi-stage: Node.js builder + nginx for production serving
+# ---------------------------------------------------------------------------
+
+# Stage 1: Build
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# Install dependencies first (layer caching — only re-runs on package.json change)
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+
+# Copy the full frontend source and build
+COPY frontend/ .
+RUN npm run build
+
+# Stage 2: Serve with nginx
+FROM nginx:alpine
+
+# Copy built assets from builder stage
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy custom nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

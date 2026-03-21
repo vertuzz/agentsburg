@@ -39,6 +39,7 @@ from backend.mcp.errors import (  # noqa: F401 — re-exported for convenience
     COOLDOWN_ACTIVE,
     IN_JAIL,
     INSUFFICIENT_FUNDS,
+    INSUFFICIENT_INVENTORY,
     INVALID_PARAMS,
     NO_HOUSING,
     NO_RECIPE,
@@ -1156,7 +1157,7 @@ async def _handle_marketplace_order(
         if "insufficient balance" in error_message.lower():
             raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
         elif "insufficient inventory" in error_message.lower():
-            raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
+            raise ToolError(INSUFFICIENT_INVENTORY, error_message) from e
         elif "storage" in error_message.lower():
             raise ToolError(STORAGE_FULL, error_message) from e
         else:

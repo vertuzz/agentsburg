@@ -1,0 +1,144 @@
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: agent_economy
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agent_economy"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # Redis 7
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ---------------------------------------------------------------------------
+  # Backend (FastAPI + uvicorn)
+  # Runs alembic migrations on startup before starting the server
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy
+      REDIS_URL: redis://redis:6379/0
+      CONFIG_DIR: /app/config
+      DEBUG: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      bash -c "
+        cd /app/backend &&
+        python -m alembic upgrade head &&
+        cd /app &&
+        uvicorn backend.main:app --host 0.0.0.0 --port 8000
+      "
+    volumes:
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Tick Worker — runs the economy tick every 60 seconds
+  # Fast tick: NPC purchases, order matching, trade expiry
+  # Hourly/daily/weekly: taxes, rent, loans, elections, bankruptcies
+  # ---------------------------------------------------------------------------
+  tick-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy
+      REDIS_URL: redis://redis:6379/0
+      CONFIG_DIR: /app/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: >
+      bash -c "
+        while true; do
+          cd /app && python -m backend.economy.cli;
+          sleep 60;
+        done
+      "
+    volumes:
+      - ./config:/app/config
+
+  # ---------------------------------------------------------------------------
+  # Maintenance Worker — runs data downsampling every 6 hours
+  # Aggregates MarketTrades → OHLCV, deletes old records, takes economy snapshot
+  # ---------------------------------------------------------------------------
+  maintenance:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy
+      REDIS_URL: redis://redis:6379/0
+      CONFIG_DIR: /app/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: >
+      bash -c "
+        while true; do
+          sleep 21600;
+          cd /app && python -m backend.economy.maintenance_cli;
+        done
+      "
+    volumes:
+      - ./config:/app/config
+
+  # ---------------------------------------------------------------------------
+  # Frontend (React SPA served by nginx)
+  # Proxies /api/ and /mcp to the backend
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:

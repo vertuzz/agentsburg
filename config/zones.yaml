@@ -1,0 +1,123 @@
+# zones.yaml — Zone definitions
+#
+# Fields:
+#   slug                    — unique zone identifier
+#   name                    — display name
+#   base_rent_per_hour      — housing cost in currency units per hour
+#   foot_traffic_multiplier — scales NPC demand in this zone (1.0 = baseline)
+#   demand_multiplier       — additional demand scaling (stacks with foot traffic)
+#   allowed_business_types  — list of permitted business types (null/empty = all allowed)
+#   preferred_business_types — types that receive a mild benefit in this zone (future use)
+#   description             — flavor text
+#
+# Rent is deducted from agent balance every slow tick (hourly).
+# A homeless agent pays no rent but suffers efficiency and legal penalties.
+#
+# Zone design rationale:
+#   - downtown: premium high-traffic hub; great for retail, expensive to operate
+#   - suburbs: balanced residential zone; most businesses work here
+#   - industrial: cheap real estate, low foot traffic; ideal for production/extraction
+#   - waterfront: fishing/trade hub; moderate cost, above-average demand
+#   - outskirts: dirt cheap; extreme poverty or cost-cutting operations
+
+zones:
+
+  - slug: downtown
+    name: Downtown
+    base_rent_per_hour: 50
+    foot_traffic_multiplier: 1.5
+    demand_multiplier: 1.0
+    allowed_business_types: null  # all types allowed
+    preferred_business_types:
+      - bakery
+      - textile_shop
+      - jeweler
+      - apothecary
+      - general_store
+    description: >
+      The city center. High foot traffic means high NPC sales, but rent is steep.
+      Best for finished-goods retail and luxury boutiques. Survival here without
+      a profitable storefront is very difficult.
+
+  - slug: suburbs
+    name: Suburbs
+    base_rent_per_hour: 25
+    foot_traffic_multiplier: 1.0
+    demand_multiplier: 1.0
+    allowed_business_types: null  # all types allowed
+    preferred_business_types:
+      - bakery
+      - brewery
+      - workshop
+      - general_store
+    description: >
+      Residential neighborhoods. Moderate rent, moderate demand. The safest
+      starting zone — agents can survive gathering and basic production here
+      without going broke. A good location for bakeries and general stores.
+
+  - slug: industrial
+    name: Industrial District
+    base_rent_per_hour: 15
+    foot_traffic_multiplier: 0.5
+    demand_multiplier: 0.8
+    allowed_business_types:
+      - smithy
+      - lumber_mill
+      - mill
+      - kiln
+      - tannery
+      - glassworks
+      - workshop
+      - brewery
+      - farm
+      - mine
+      - general_store  # for workers to buy supplies
+    preferred_business_types:
+      - smithy
+      - lumber_mill
+      - mill
+      - kiln
+    description: >
+      Factory district with low rent and low consumer foot traffic. NPCs rarely
+      shop here. Great for production and extraction operations that sell output
+      to other businesses rather than directly to consumers. Input/output
+      businesses thrive here; pure retail struggles.
+
+  - slug: waterfront
+    name: Waterfront
+    base_rent_per_hour: 30
+    foot_traffic_multiplier: 1.2
+    demand_multiplier: 1.0
+    allowed_business_types:
+      - fishing_operation
+      - workshop
+      - brewery
+      - bakery
+      - general_store
+      - glassworks
+      - textile_shop
+      - tannery
+    preferred_business_types:
+      - fishing_operation
+      - brewery
+    description: >
+      Harbor district. Fishing is only available here (the sea). Moderate rent,
+      above-average consumer foot traffic from sailors and merchants. Good for
+      fish-based products, brewing, and nautical supply. The waterfront general
+      store is a natural trading post.
+
+  - slug: outskirts
+    name: Outskirts
+    base_rent_per_hour: 8
+    foot_traffic_multiplier: 0.3
+    demand_multiplier: 0.8
+    allowed_business_types: null  # all types allowed
+    preferred_business_types:
+      - farm
+      - mine
+    description: >
+      Rural edges of the city. Almost no passing trade — NPCs barely come here.
+      Rent is trivially cheap. Ideal for farming and mining operations that
+      produce raw goods to sell to industrial buyers rather than end consumers.
+      New agents can survive here on minimal gathering income while they build
+      capital, but growth is slow without a trade route inward.

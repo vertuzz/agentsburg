@@ -1,0 +1,236 @@
+# economy.yaml — Global economic parameters
+#
+# These are the core tuning knobs for the simulation.
+# Change these to adjust economic difficulty, pacing, and balance.
+# Container restart required for changes to take effect.
+#
+# KEY BALANCE TARGETS:
+#   1. A new agent gathering berries (fastest gather, 25s cooldown, value ~2-3)
+#      earns ~4-5 units/min raw. Survival costs ~5/hr food + zone rent.
+#      Outskirts rent = 8/hr → total ~13/hr = ~0.22/min.
+#      Gathering berries 2.4/min → margin is very thin. Must sell above base_value.
+#      This is intentional: gathering is the floor, not a comfortable life.
+#   2. A worker employed at a bakery earning 30/work call, calling work every 45s,
+#      earns 40/min → ~2400/hr. Survival costs 5 + 25 (suburbs) = 30/hr.
+#      Employment is far more profitable than raw gathering. Rewards cooperation.
+#   3. A business owner running a bakery with 1 NPC worker + storefront sales
+#      should net 200-400/hr profit (after rent, NPC wages, input costs).
+#      This is the target for "doing well" in the economy.
+
+# ─────────────────────────────────────────────
+# SURVIVAL
+# ─────────────────────────────────────────────
+
+survival_cost_per_hour: 5
+# Food is abstracted: every slow tick (hourly), this amount is deducted from
+# each agent's balance. It's non-negotiable — even homeless agents pay this.
+# Calibrated so a gatherer working 50% of the time barely breaks even in outskirts.
+
+# ─────────────────────────────────────────────
+# GATHERING
+# ─────────────────────────────────────────────
+
+base_gathering_cooldown: 30
+# Fallback cooldown for gatherable goods that don't specify their own.
+# Actual cooldowns per good are in goods.yaml gather_cooldown_seconds.
+
+gather_quantity_per_call: 1
+# Every gather() call produces exactly 1 unit of the resource.
+# This keeps the economy from being flooded by a single active gatherer.
+
+# ─────────────────────────────────────────────
+# PRODUCTION
+# ─────────────────────────────────────────────
+
+base_production_cooldown: 60
+# Fallback cooldown if a recipe doesn't specify its own.
+# Actual per-recipe cooldowns are in recipes.yaml.
+
+commute_penalty_multiplier: 1.5
+# If an agent's housing_zone differs from the business zone they work in,
+# their work() cooldown is multiplied by this value.
+# E.g., a 60s cooldown becomes 90s for out-of-zone workers.
+# Incentivizes agents to live near where they work.
+
+# ─────────────────────────────────────────────
+# STORAGE
+# ─────────────────────────────────────────────
+
+agent_storage_capacity: 100
+# Total storage units an agent can carry.
+# storage_size from goods.yaml determines how many storage units each good uses.
+# E.g., 100 capacity ÷ size-2 lumber = 50 lumber max in personal inventory.
+
+business_storage_capacity: 500
+# Total storage units a business inventory can hold.
+# Larger businesses can stockpile more, but must keep buying inputs.
+
+# ─────────────────────────────────────────────
+# BUSINESS REGISTRATION
+# ─────────────────────────────────────────────
+
+business_registration_cost: 200
+# Flat fee to register a new business. Scales with licensing_cost_modifier
+# from the current government template.
+# Under free_market (1.0x): 200. Under authoritarian (2.0x): 400.
+# Calibrated so it takes a new worker ~1-2 hours of wages to save up.
+
+# ─────────────────────────────────────────────
+# TRADING & ESCROW
+# ─────────────────────────────────────────────
+
+trade_escrow_timeout_seconds: 3600
+# If a direct trade proposal is not responded to within 1 hour,
+# escrowed items are returned to the proposer automatically.
+
+marketplace_order_max_quantity: 1000
+# Maximum units in a single marketplace order. Prevents a single agent
+# from dominating the entire order book with one order.
+
+# ─────────────────────────────────────────────
+# BANKRUPTCY
+# ─────────────────────────────────────────────
+
+bankruptcy_liquidation_discount: 0.5
+# When an agent goes bankrupt, all inventory is liquidated at this fraction
+# of base_value. Proceeds go to cover debts (loans first, then fines).
+# 50% discount makes bankruptcy painful — you lose half your asset value.
+# Inventory is sold to the bank (as market maker of last resort).
+
+bankruptcy_debt_threshold: -50
+# An agent's balance must fall below this (negative) threshold AND they must
+# be unable to service debts for bankruptcy to trigger automatically.
+# Gives agents a small buffer to recover from a bad tick before liquidation.
+
+# ─────────────────────────────────────────────
+# HOUSING & EFFICIENCY PENALTIES
+# ─────────────────────────────────────────────
+
+housing_homeless_efficiency_penalty: 0.5
+# Homeless agents produce at 50% efficiency (work() takes 2x as long).
+# Also: homeless agents cannot register new businesses.
+
+jail_efficiency_penalty: 0.3
+# Jailed agents' NPC workers operate at 30% of normal efficiency.
+# The agent themselves cannot call strategic tools (register_business,
+# marketplace_order, etc.) while jailed.
+
+housing_relocation_cost: 50
+# Flat cost to move from one zone to another.
+# Deliberate friction to prevent zone-hopping to avoid rent.
+
+# ─────────────────────────────────────────────
+# GOVERNANCE
+# ─────────────────────────────────────────────
+
+voting_eligibility_age_seconds: 1209600
+# Agents must have existed for at least 2 weeks (14 × 86400 = 1,209,600s)
+# before they can vote. Prevents Sybil attacks via rapid account creation.
+
+election_interval_seconds: 604800
+# Elections are tallied and applied once per week (7 × 86400 = 604,800s).
+# Votes cast anytime during the week are counted at the tally.
+# After tally, votes are reset; agents must re-vote.
+
+# ─────────────────────────────────────────────
+# TICK SCHEDULE
+# ─────────────────────────────────────────────
+
+fast_tick_interval: 60
+# Fast tick runs every 60 seconds.
+# Processes: NPC storefront purchases, marketplace order matching,
+# trade escrow expiry.
+
+slow_tick_interval: 3600
+# Slow tick runs every 3600 seconds (hourly).
+# Processes: rent, survival costs, taxes, loan payments,
+# deposit interest, random audits, NPC business decisions,
+# bankruptcy processing.
+
+daily_tick_interval: 86400
+# Daily tick runs once per day.
+# Processes: price history downsampling, economy snapshots.
+
+weekly_tick_interval: 604800
+# Weekly tick runs once per week.
+# Processes: election tallying, government template updates.
+
+# ─────────────────────────────────────────────
+# BANKING
+# ─────────────────────────────────────────────
+
+initial_bank_reserves: 100000
+# Central bank starts with this many currency units in reserve.
+# This is the seed money supply for the entire economy.
+# NPCs are granted loans from this reserve to buy initial inventory.
+# With fractional reserve, total credit capacity can be much larger
+# than the reserve itself.
+
+base_loan_interest_rate: 0.05
+# Annual equivalent interest rate on loans.
+# Actual per-installment rate computed from this + government modifier + repayment period.
+# Under free_market (0.8x): effective ~4%. Under authoritarian (1.5x): ~7.5%.
+
+max_loan_multiplier: 5
+# Maximum loan amount = agent net_worth × max_loan_multiplier.
+# A new agent with 0 net worth cannot take a loan until they have some assets.
+# Prevents infinite leverage on day 1.
+
+deposit_interest_rate: 0.02
+# Annual equivalent deposit interest rate.
+# Paid per slow tick (hourly). Per-tick rate = deposit_interest_rate ÷ 8760.
+# Incentivizes holding savings in the bank rather than hoarding cash.
+
+min_deposit_for_interest: 10
+# Minimum deposit balance to earn interest. Prevents micro-deposit farming.
+
+# ─────────────────────────────────────────────
+# NPC WORKERS
+# ─────────────────────────────────────────────
+
+npc_worker_efficiency: 0.5
+# NPC workers produce at 50% of a real agent's rate.
+# A recipe with 60s cooldown takes NPC workers 120s to complete.
+# This makes hiring real agents strictly preferable when available.
+
+npc_worker_wage_multiplier: 2.0
+# NPC workers are paid 2x the posted job wage.
+# Combined with 50% efficiency: NPCs cost 4x per unit produced vs real agents.
+# This creates a meaningful incentive to recruit real agents.
+
+npc_worker_max_per_business: 5
+# Maximum NPC workers a single business can hire.
+# Prevents unlimited NPC automation making agent workers irrelevant.
+
+# ─────────────────────────────────────────────
+# CRIME & ENFORCEMENT
+# ─────────────────────────────────────────────
+
+tax_audit_period_seconds: 3600
+# Audits look back over this period of transactions.
+# Income tracked: marketplace sales, storefront NPC sales.
+# Off-book: direct trades (trade() calls) — these don't appear in tax records.
+
+violation_escalation_threshold: 3
+# Number of prior violations before jail time is applied.
+# First 2 violations: fine only. Third+ violation: fine + jail.
+
+# ─────────────────────────────────────────────
+# PRICE HISTORY RETENTION
+# ─────────────────────────────────────────────
+
+price_history_retention_fast_ticks: 1440
+# Keep per-minute price data for 24 hours (1440 minutes/day).
+
+price_history_retention_hourly_ticks: 720
+# Keep hourly price data for 30 days (720 hours/month).
+# Older data is aggregated to daily candles.
+
+# ─────────────────────────────────────────────
+# WAGES (informational defaults)
+# ─────────────────────────────────────────────
+
+default_wage_per_work_call: 30
+# Suggested default wage when a business posts a job.
+# Employers can set any wage they like — this is just the pre-filled default.
+# At 60s production cycle, this is 30/min = 1800/hr, well above survival costs.

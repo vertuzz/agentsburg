@@ -1,0 +1,350 @@
+# bootstrap.yaml — Initial NPC businesses seeded at economy launch
+#
+# These businesses exist from day one so new agents join a functioning economy.
+# They cover all major production chain tiers: raw extraction → intermediates → finished goods.
+# Over time, player-owned businesses should outcompete these NPCs (lower prices,
+# more stock, active management). NPCs are the floor, not the ceiling.
+#
+# Fields per business:
+#   name            — display name
+#   type            — business type (matches zone allowed_business_types in zones.yaml)
+#   zone            — zone slug where the business operates
+#   is_npc          — always true for bootstrap entries
+#   initial_balance — starting balance (funded from bank reserve as NPC loan)
+#   produces        — goods auto-produced each slow tick (hourly)
+#                     recipe is used if set; otherwise NPC generates goods directly
+#   storefront      — initial inventory and sell prices per good
+#
+# Pricing rationale:
+#   - NPC prices are set ~15-35% above production cost (fair market anchor)
+#   - Player agents who undercut NPCs by 10%+ will capture the majority of NPC demand
+#   - NPC businesses close if revenue < costs for 3 consecutive slow ticks
+#
+# initial_balance seeds working capital for each NPC business.
+# Total NPC loan disbursements at launch: ~38,000 currency units.
+# Bank starts with 100,000 reserves — comfortably covers bootstrap lending.
+#
+# Summary of NPC businesses:
+#   Tier 1 (raw):          3 farms, 2 mines, 1 logging camp, 1 fishing operation
+#   Tier 2 (intermediate): 1 flour mill, 1 lumber mill, 1 smithy, 1 textile works
+#   Tier 3 (finished):     1 bakery, 1 tool forge, 1 textile shop, 1 general store
+
+initial_bank_reserves: 100000
+
+npc_businesses:
+
+  # ═══════════════════════════════════════════
+  # TIER 1 — RAW EXTRACTION
+  # ═══════════════════════════════════════════
+
+  - name: "Green Pastures Farm"
+    type: farm
+    zone: outskirts
+    is_npc: true
+    initial_balance: 1500
+    description: "Sprawling outskirts farm growing wheat and herbs."
+    produces:
+      - good: wheat
+        quantity_per_slow_tick: 80
+      - good: herbs
+        quantity_per_slow_tick: 40
+    storefront:
+      - good: wheat
+        initial_stock: 200
+        price: 4
+      - good: herbs
+        initial_stock: 100
+        price: 4
+
+  - name: "Harvest Hill Farm"
+    type: farm
+    zone: outskirts
+    is_npc: true
+    initial_balance: 1200
+    description: "Berry and cotton farm on the outskirts."
+    produces:
+      - good: berries
+        quantity_per_slow_tick: 100
+      - good: cotton
+        quantity_per_slow_tick: 60
+    storefront:
+      - good: berries
+        initial_stock: 250
+        price: 3
+      - good: cotton
+        initial_stock: 150
+        price: 4
+
+  - name: "Riverbend Farm"
+    type: farm
+    zone: industrial
+    is_npc: true
+    initial_balance: 1000
+    description: "Industrial zone farm near the river. Grows wheat and clay."
+    produces:
+      - good: wheat
+        quantity_per_slow_tick: 60
+      - good: clay
+        quantity_per_slow_tick: 50
+    storefront:
+      - good: wheat
+        initial_stock: 150
+        price: 4
+      - good: clay
+        initial_stock: 120
+        price: 3
+
+  - name: "Ironrock Mine"
+    type: mine
+    zone: industrial
+    is_npc: true
+    initial_balance: 2000
+    description: "Primary iron ore and stone extraction. Supplies the smithy."
+    produces:
+      - good: iron_ore
+        quantity_per_slow_tick: 50
+      - good: stone
+        quantity_per_slow_tick: 80
+    storefront:
+      - good: iron_ore
+        initial_stock: 100
+        price: 6
+      - good: stone
+        initial_stock: 200
+        price: 3
+
+  - name: "Copperhill Mine"
+    type: mine
+    zone: industrial
+    is_npc: true
+    initial_balance: 2000
+    description: "Copper ore and sand quarry. Feeds glassworks and the jeweler."
+    produces:
+      - good: copper_ore
+        quantity_per_slow_tick: 35
+      - good: sand
+        quantity_per_slow_tick: 120
+    storefront:
+      - good: copper_ore
+        initial_stock: 80
+        price: 7
+      - good: sand
+        initial_stock: 300
+        price: 2
+
+  - name: "Deepwood Logging Camp"
+    type: farm
+    zone: outskirts
+    is_npc: true
+    initial_balance: 1500
+    description: "Timber operation harvesting raw wood for the lumber mill."
+    produces:
+      - good: wood
+        quantity_per_slow_tick: 100
+    storefront:
+      - good: wood
+        initial_stock: 300
+        price: 4
+
+  - name: "Harbor Fishing Co."
+    type: fishing_operation
+    zone: waterfront
+    is_npc: true
+    initial_balance: 1000
+    description: "Small fishing fleet. Only source of fish in the economy."
+    produces:
+      - good: fish
+        quantity_per_slow_tick: 60
+    storefront:
+      - good: fish
+        initial_stock: 150
+        price: 5
+
+  # ═══════════════════════════════════════════
+  # TIER 2 — INTERMEDIATE PROCESSING
+  # ═══════════════════════════════════════════
+
+  - name: "Millstone Flour Mill"
+    type: mill
+    zone: industrial
+    is_npc: true
+    initial_balance: 2500
+    description: "Converts wheat into flour. Key link in the bread supply chain."
+    produces:
+      - good: flour
+        quantity_per_slow_tick: 50
+        recipe: mill_flour
+    storefront:
+      - good: flour
+        initial_stock: 120
+        price: 9
+        # Input cost: 3 wheat (4 ea) = 12 → 2 flour output = 6/unit cost
+        # Selling at 9 → 50% margin. Industrial zone has low NPC demand,
+        # so this mill sells mostly to bakeries, not consumers.
+
+  - name: "Thornwood Lumber Mill"
+    type: lumber_mill
+    zone: industrial
+    is_npc: true
+    initial_balance: 2500
+    description: "Saws raw wood into planks. Supplies workshops and construction."
+    produces:
+      - good: lumber
+        quantity_per_slow_tick: 50
+        recipe: saw_lumber
+    storefront:
+      - good: lumber
+        initial_stock: 150
+        price: 12
+        # Input cost: 3 wood (4 ea) = 12 → 2 lumber output = 6/unit cost
+        # Selling at 12 → 100% margin. Lumber is widely used as input.
+
+  - name: "Redforge Smithy"
+    type: smithy
+    zone: industrial
+    is_npc: true
+    initial_balance: 3000
+    description: "Industrial smithy smelting iron and copper ingots."
+    produces:
+      - good: iron_ingots
+        quantity_per_slow_tick: 30
+        recipe: smelt_iron
+      - good: copper_ingots
+        quantity_per_slow_tick: 15
+        recipe: smelt_copper
+    storefront:
+      - good: iron_ingots
+        initial_stock: 80
+        price: 20
+        # Input cost: 3 iron_ore (6 ea) = 18 → 2 ingots = 9/unit
+        # Selling at 20 → 122% margin. Volume is medium.
+      - good: copper_ingots
+        initial_stock: 40
+        price: 25
+        # Input cost: 3 copper_ore (7 ea) = 21 → 2 ingots = 10.5/unit
+        # Selling at 25 → 138% margin. Low volume, high value.
+
+  - name: "City Textile Works"
+    type: textile_shop
+    zone: industrial
+    is_npc: true
+    initial_balance: 2000
+    description: "Weaves raw cotton into fabric. Supplies the clothing shop."
+    produces:
+      - good: fabric
+        quantity_per_slow_tick: 40
+        recipe: weave_fabric
+      - good: rope
+        quantity_per_slow_tick: 30
+        recipe: braid_rope
+    storefront:
+      - good: fabric
+        initial_stock: 100
+        price: 13
+        # Input cost: 3 cotton (4 ea) = 12 → 2 fabric = 6/unit
+        # Selling at 13 → 117% margin.
+      - good: rope
+        initial_stock: 80
+        price: 11
+        # Input cost: 2 cotton (4 ea) = 8 → 3 rope = 2.67/unit
+        # Selling at 11 → 312% margin. Rope is cheap to produce but essential.
+
+  # ═══════════════════════════════════════════
+  # TIER 3 — FINISHED GOODS
+  # ═══════════════════════════════════════════
+
+  - name: "Golden Crust Bakery"
+    type: bakery
+    zone: suburbs
+    is_npc: true
+    initial_balance: 2000
+    description: "Suburban bakery supplying bread. Key food source for agents."
+    produces:
+      - good: bread
+        quantity_per_slow_tick: 60
+        recipe: bake_bread
+    storefront:
+      - good: bread
+        initial_stock: 180
+        price: 24
+        # Input cost: 2 flour (9 ea = 18) + 1 berries (3) = 21 per 3 loaves = 7/loaf
+        # Selling at 24 per 3 (8/loaf) → 14% margin per loaf.
+        # High volume compensates for low per-unit margin. This is correct for bread.
+
+  - name: "Ironwright Tool Forge"
+    type: smithy
+    zone: industrial
+    is_npc: true
+    initial_balance: 3000
+    description: "Specialized tool production. Hammers, saws, picks."
+    produces:
+      - good: tools
+        quantity_per_slow_tick: 20
+        recipe: forge_tools
+    storefront:
+      - good: tools
+        initial_stock: 60
+        price: 50
+        # Input cost: 2 iron_ingots (20 ea = 40) + 1 lumber (12) = 52 per 2 tools = 26/tool
+        # Selling at 50 → 92% margin. Tools are durable goods with steady demand.
+
+  - name: "Weavers & Co. Clothing"
+    type: textile_shop
+    zone: downtown
+    is_npc: true
+    initial_balance: 2500
+    description: "Downtown clothing shop. High foot traffic, premium prices."
+    produces:
+      - good: clothing
+        quantity_per_slow_tick: 20
+        recipe: sew_clothing
+    storefront:
+      - good: clothing
+        initial_stock: 60
+        price: 42
+        # Input cost: 3 fabric (13 ea = 39) + 1 rope (11) = 50 per 2 clothing = 25/unit
+        # Selling at 42 → 68% margin. Downtown premium justified.
+
+  - name: "The Trading Post"
+    type: general_store
+    zone: suburbs
+    is_npc: true
+    initial_balance: 5000
+    description: >
+      Suburban general store stocking a variety of finished and intermediate goods.
+      Provides market liquidity — new agents can always buy basic supplies here.
+      Prices are slightly above specialist producers; undercut them to win customers.
+    produces: []
+    # General store restocks by purchasing from the marketplace each slow tick
+    # (implemented in npc_businesses.py simulation logic).
+    storefront:
+      - good: bread
+        initial_stock: 100
+        price: 26
+      - good: tools
+        initial_stock: 30
+        price: 54
+      - good: clothing
+        initial_stock: 40
+        price: 45
+      - good: pottery
+        initial_stock: 20
+        price: 40
+      - good: rope
+        initial_stock: 50
+        price: 12
+      - good: lumber
+        initial_stock: 80
+        price: 13
+      - good: flour
+        initial_stock: 60
+        price: 10
+      - good: iron_ingots
+        initial_stock: 40
+        price: 22
+      - good: fabric
+        initial_stock: 50
+        price: 14
+      - good: berries
+        initial_stock: 80
+        price: 4

@@ -1,0 +1,106 @@
+# government.yaml — Government templates
+#
+# Fields:
+#   slug                        — unique template identifier
+#   name                        — display name
+#   tax_rate                    — fraction of marketplace income taxed each slow tick (0–1)
+#   enforcement_probability     — probability any given agent is audited per slow tick (0–1)
+#   interest_rate_modifier      — multiplier on base_loan_interest_rate from economy.yaml
+#   reserve_ratio               — minimum fraction of deposits bank must hold (fractional reserve)
+#   licensing_cost_modifier     — multiplier on business_registration_cost from economy.yaml
+#   production_cooldown_modifier — multiplier on all production cooldowns (>1 = slower)
+#   rent_modifier               — multiplier on base_rent_per_hour from zones.yaml
+#   fine_multiplier             — how many times the evaded amount is the fine (e.g. 2.0 = double)
+#   max_jail_seconds            — maximum jail sentence for repeat offenders
+#   description
+#
+# Design rationale:
+#   - free_market: easy entry, low taxes, low enforcement → high crime opportunity,
+#     fast economy, wealth inequality grows quickly
+#   - social_democracy: balanced; moderate friction; crime less profitable due to
+#     medium enforcement; slower but more stable
+#   - authoritarian: bureaucratic drag slows everything; very high enforcement
+#     makes crime dangerous; expensive to start businesses; hoards bank reserves
+#   - libertarian: minimal state; extreme low taxes and friction; banking is risky
+#     (very low reserve ratio); fastest production; tiny fines make crime almost
+#     unpunished but there's almost no audit risk either
+
+templates:
+
+  - slug: free_market
+    name: Free Market
+    tax_rate: 0.05
+    enforcement_probability: 0.10
+    interest_rate_modifier: 0.80
+    reserve_ratio: 0.10
+    licensing_cost_modifier: 1.0
+    production_cooldown_modifier: 0.90
+    rent_modifier: 1.0
+    fine_multiplier: 1.5
+    max_jail_seconds: 3600        # 1 hour max
+    description: >
+      Light-touch government. Low taxes encourage commerce; low enforcement means
+      tax evasion is tempting and largely unpunished. Cheap loans (low interest)
+      and low reserve requirements allow aggressive lending. Businesses start
+      fast with no extra licensing fees. Production runs slightly faster.
+      Wealth inequality will emerge quickly. Favored by entrepreneurs and
+      speculators. Crime pays — but just barely.
+
+  - slug: social_democracy
+    name: Social Democracy
+    tax_rate: 0.15
+    enforcement_probability: 0.30
+    interest_rate_modifier: 1.0
+    reserve_ratio: 0.20
+    licensing_cost_modifier: 1.2
+    production_cooldown_modifier: 1.0
+    rent_modifier: 1.1
+    fine_multiplier: 2.0
+    max_jail_seconds: 14400       # 4 hours max
+    description: >
+      Balanced governance. Moderate taxes fund enforcement, making crime
+      moderately risky. Normal loan rates and reserve ratios keep the money
+      supply stable. Slightly higher licensing costs reduce fly-by-night
+      businesses. Production runs at baseline speed. Rent is modestly elevated
+      across all zones. The middle ground between growth and stability.
+
+  - slug: authoritarian
+    name: Authoritarian
+    tax_rate: 0.25
+    enforcement_probability: 0.60
+    interest_rate_modifier: 1.50
+    reserve_ratio: 0.40
+    licensing_cost_modifier: 2.0
+    production_cooldown_modifier: 1.30
+    rent_modifier: 1.3
+    fine_multiplier: 3.0
+    max_jail_seconds: 86400       # 24 hours max
+    description: >
+      Heavy state control. High taxes drain income. Aggressive enforcement makes
+      tax evasion very dangerous — 60% chance of audit per tick. Expensive loans
+      (high interest modifier) and large reserve requirements restrict credit and
+      money creation. High licensing costs discourage new business formation.
+      Production is slow (bureaucratic red tape). Rents are inflated across all
+      zones. Direct trades are almost certainly detected. Crime is rarely worth it.
+      Favored by agents who benefit from existing market position and want to
+      freeze out competitors.
+
+  - slug: libertarian
+    name: Libertarian
+    tax_rate: 0.02
+    enforcement_probability: 0.05
+    interest_rate_modifier: 0.60
+    reserve_ratio: 0.05
+    licensing_cost_modifier: 0.50
+    production_cooldown_modifier: 0.70
+    rent_modifier: 0.80
+    fine_multiplier: 1.0
+    max_jail_seconds: 1800        # 30 minutes max
+    description: >
+      Minimal state. Taxes are nearly zero; so is enforcement (5% audit chance).
+      Extremely cheap loans and minimal reserve requirements allow the bank to
+      expand credit aggressively — risk of inflation is real. Business registration
+      is half-price. Production cooldowns are dramatically reduced (30% faster).
+      Rents are cheap across all zones. Fines for crime are trivial. The economy
+      moves fast but is fragile: a credit crisis under libertarian rules can be
+      devastating. Favored by high-volume producers and speculators.

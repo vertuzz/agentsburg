@@ -1,0 +1,288 @@
+# goods.yaml — Catalog of all goods in the economy
+#
+# Fields:
+#   slug            — unique identifier (snake_case)
+#   name            — human-readable name
+#   tier            — 1=raw/gatherable, 2=intermediate, 3=finished
+#   storage_size    — units of storage this good occupies (1-5)
+#   base_value      — estimated fair market value (calibration anchor)
+#   gatherable      — true only for tier-1 basics (free floor extraction)
+#   gather_cooldown_seconds — per-agent cooldown for gathering this good
+#
+# Pricing rationale:
+#   - A gatherer working non-stop earns ~12 units/hr of their primary resource
+#   - Survival costs ~5/hr (food) + ~15-30/hr (rent depending on zone)
+#   - So gathering alone is marginally survivable; trade and production are needed to thrive
+
+goods:
+
+  # ─────────────────────────────────────────────
+  # TIER 1 — Raw / Gatherable
+  # ─────────────────────────────────────────────
+
+  - slug: wood
+    name: Wood
+    tier: 1
+    storage_size: 2
+    base_value: 3
+    gatherable: true
+    gather_cooldown_seconds: 30
+    description: "Basic lumber from nearby forests. Heavy, plentiful."
+
+  - slug: stone
+    name: Stone
+    tier: 1
+    storage_size: 3
+    base_value: 2
+    gatherable: true
+    gather_cooldown_seconds: 40
+    description: "Quarried rock. Dense and slow to gather."
+
+  - slug: berries
+    name: Berries
+    tier: 1
+    storage_size: 1
+    base_value: 2
+    gatherable: true
+    gather_cooldown_seconds: 25
+    description: "Wild berries. Fast to gather but low value. Can be sold or eaten."
+
+  - slug: clay
+    name: Clay
+    tier: 1
+    storage_size: 2
+    base_value: 2
+    gatherable: true
+    gather_cooldown_seconds: 35
+    description: "Wet clay from riverbanks. Moldable material."
+
+  - slug: iron_ore
+    name: Iron Ore
+    tier: 1
+    storage_size: 3
+    base_value: 5
+    gatherable: true
+    gather_cooldown_seconds: 60
+    description: "Raw iron ore. Hard to gather without tools; valuable."
+
+  - slug: herbs
+    name: Herbs
+    tier: 1
+    storage_size: 1
+    base_value: 3
+    gatherable: true
+    gather_cooldown_seconds: 30
+    description: "Medicinal and culinary herbs. Light but perishable."
+
+  - slug: cotton
+    name: Cotton
+    tier: 1
+    storage_size: 1
+    base_value: 3
+    gatherable: true
+    gather_cooldown_seconds: 35
+    description: "Raw cotton bolls. Soft and light."
+
+  - slug: wheat
+    name: Wheat
+    tier: 1
+    storage_size: 2
+    base_value: 3
+    gatherable: true
+    gather_cooldown_seconds: 40
+    description: "Grain crop. Staple of the food supply chain."
+
+  - slug: fish
+    name: Fish
+    tier: 1
+    storage_size: 1
+    base_value: 4
+    gatherable: true
+    gather_cooldown_seconds: 45
+    description: "Fresh catch. Only gatherable near waterfront zones."
+
+  - slug: sand
+    name: Sand
+    tier: 1
+    storage_size: 2
+    base_value: 1
+    gatherable: true
+    gather_cooldown_seconds: 20
+    description: "Fine sand for glassmaking. Very cheap, very plentiful."
+
+  - slug: copper_ore
+    name: Copper Ore
+    tier: 1
+    storage_size: 3
+    base_value: 6
+    gatherable: true
+    gather_cooldown_seconds: 55
+    description: "Raw copper ore. Rarer than iron, used in jewelry."
+
+  # ─────────────────────────────────────────────
+  # TIER 2 — Intermediate Goods
+  # ─────────────────────────────────────────────
+
+  - slug: lumber
+    name: Lumber
+    tier: 2
+    storage_size: 3
+    base_value: 10
+    gatherable: false
+    description: "Milled timber planks. Input for furniture, weapons, construction."
+
+  - slug: bricks
+    name: Bricks
+    tier: 2
+    storage_size: 3
+    base_value: 8
+    gatherable: false
+    description: "Fired clay and stone bricks. Construction staple."
+
+  - slug: iron_ingots
+    name: Iron Ingots
+    tier: 2
+    storage_size: 2
+    base_value: 18
+    gatherable: false
+    description: "Smelted iron bars. Input for tools, weapons, and jewelry."
+
+  - slug: flour
+    name: Flour
+    tier: 2
+    storage_size: 1
+    base_value: 8
+    gatherable: false
+    description: "Milled wheat flour. Primary input for bread."
+
+  - slug: fabric
+    name: Fabric
+    tier: 2
+    storage_size: 1
+    base_value: 12
+    gatherable: false
+    description: "Woven cotton cloth. Input for clothing and rope."
+
+  - slug: copper_ingots
+    name: Copper Ingots
+    tier: 2
+    storage_size: 2
+    base_value: 22
+    gatherable: false
+    description: "Smelted copper bars. Higher value, used in jewelry."
+
+  - slug: glass
+    name: Glass
+    tier: 2
+    storage_size: 2
+    base_value: 14
+    gatherable: false
+    description: "Blown sand glass. Used in buildings and pottery."
+
+  - slug: leather
+    name: Leather
+    tier: 2
+    storage_size: 2
+    base_value: 16
+    gatherable: false
+    description: "Tanned hides. Used in clothing and equipment."
+
+  - slug: herbs_dried
+    name: Dried Herbs
+    tier: 2
+    storage_size: 1
+    base_value: 9
+    gatherable: false
+    description: "Processed and dried herbs. More stable, used in medicine and pottery glaze."
+
+  - slug: rope
+    name: Rope
+    tier: 2
+    storage_size: 2
+    base_value: 10
+    gatherable: false
+    description: "Braided cotton rope. Used in construction and fishing."
+
+  # ─────────────────────────────────────────────
+  # TIER 3 — Finished Goods
+  # ─────────────────────────────────────────────
+
+  - slug: bread
+    name: Bread
+    tier: 3
+    storage_size: 1
+    base_value: 20
+    gatherable: false
+    description: "Baked loaves. Essential food staple. High NPC demand."
+
+  - slug: furniture
+    name: Furniture
+    tier: 3
+    storage_size: 5
+    base_value: 55
+    gatherable: false
+    description: "Tables, chairs, beds. High value, bulky storage."
+
+  - slug: tools
+    name: Tools
+    tier: 3
+    storage_size: 2
+    base_value: 45
+    gatherable: false
+    description: "Hammers, saws, picks. Required for advanced production."
+
+  - slug: clothing
+    name: Clothing
+    tier: 3
+    storage_size: 2
+    base_value: 38
+    gatherable: false
+    description: "Garments and textiles. High NPC demand. Essential good."
+
+  - slug: pottery
+    name: Pottery
+    tier: 3
+    storage_size: 3
+    base_value: 35
+    gatherable: false
+    description: "Clay pots and jars. Storage containers and decorative goods."
+
+  - slug: medicine
+    name: Medicine
+    tier: 3
+    storage_size: 1
+    base_value: 60
+    gatherable: false
+    description: "Herbal remedies. High value, relatively low NPC volume but inelastic demand."
+
+  - slug: jewelry
+    name: Jewelry
+    tier: 3
+    storage_size: 1
+    base_value: 90
+    gatherable: false
+    description: "Copper and iron ornaments. Luxury good. Low demand, very high margin."
+
+  - slug: weapons
+    name: Weapons
+    tier: 3
+    storage_size: 3
+    base_value: 70
+    gatherable: false
+    description: "Blades and tools of war. Medium demand, high margin."
+
+  - slug: beer
+    name: Beer
+    tier: 3
+    storage_size: 2
+    base_value: 28
+    gatherable: false
+    description: "Fermented wheat and herb brew. Popular but elastic demand."
+
+  - slug: housing_materials
+    name: Housing Materials
+    tier: 3
+    storage_size: 5
+    base_value: 120
+    gatherable: false
+    description: "Prepped lumber, bricks, and glass for construction. Very bulky, very valuable."

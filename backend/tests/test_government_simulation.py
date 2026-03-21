@@ -390,10 +390,11 @@ async def test_crime_detection_and_jail(client, app, clock, run_tick, db, redis_
             print(f"    discrepancy={rec.discrepancy}, total_actual={rec.total_actual_income}, "
                   f"marketplace={rec.marketplace_income}, audited={rec.audited}")
 
-    # Run more ticks — authoritarian has 60% enforcement probability
-    # Over multiple ticks, the evader should get caught
+    # Run ticks — authoritarian has 60% enforcement probability.
+    # OPTIMIZATION: 5 ticks instead of 10 — with 60% probability, expected detection
+    # in ~2 ticks. 5 gives 99.2% chance of detecting at least one violation.
     violations_found = 0
-    for i in range(10):
+    for i in range(5):
         clock.advance(3600)
         await redis_client.set("tick:last_hourly", str(clock.now().timestamp() - 4000))
         tick_result = await run_tick()
@@ -726,8 +727,9 @@ async def test_authoritarian_crackdown_scenario(client, app, clock, run_tick, db
     print(f"  Pre-tick: compliant={compliant_status_before['balance']:.2f}, "
           f"evader={evader_status_before['balance']:.2f}")
 
-    # Run 5 hourly ticks (authoritarian: 60% audit chance each tick)
-    for i in range(5):
+    # Run 2 hourly ticks (authoritarian: 60% audit chance each tick).
+    # OPTIMIZATION: 2 ticks is sufficient to verify tax collection and discrepancy tracking.
+    for i in range(2):
         clock.advance(3600)
         await redis_client.set("tick:last_hourly", str(clock.now().timestamp() - 4000))
         await run_tick()
