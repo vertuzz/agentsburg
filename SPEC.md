@@ -556,54 +556,104 @@ Separate sections/files for different concerns:
 
 ---
 
-## Testing Strategy (MOST IMPORTANT)
+## Simulation-Driven Development (MOST IMPORTANT)
 
-### No Unit Tests
+This is **the** development methodology for the entire project. Not just a testing strategy — this is how the system gets built, tuned, and validated. Read this section before anything else.
 
-No unit tests or small tests whatsoever.
+### Philosophy
 
-### 2-3 Large End-to-End Simulation Tests
+There are **no unit tests**. No small tests. No mocking individual functions. Instead, the entire quality and correctness of the system rests on **2-3 large end-to-end simulation tests** that spin up the full economy with dozens of scripted agents and run complex multi-day scenarios.
 
-Each test is a **full economy simulation** with many scripted agents exhibiting complex behavior.
+These simulations serve as **three things simultaneously**:
 
-### Triple Purpose
+1. **Correctness verification** — every system (production, trading, banking, taxes, crime, elections, bankruptcy) gets exercised by real agent interactions, not synthetic unit checks
+2. **Parameter research** — the YAML configs (prices, cooldowns, demand curves, tax rates) can't be designed on paper. Run the simulation, observe economic behavior, adjust numbers, repeat
+3. **Logic discovery** — when the simulation produces weird outcomes (hyperinflation, instant bankruptcy, dead markets), that's a signal to fix the domain logic, not just the test
 
-1. **Verify logic** — all systems work correctly
-2. **Tune parameters** — help select YAML config values
-3. **Validate balance** — check emergent economic behavior
+### The Implementing Agent's Mandate
+
+The agent writing this code should operate like a **researcher living inside the system**:
+
+- **Don't hesitate to change logic** — if the simulation reveals that the production cooldown formula produces degenerate behavior, fix the formula. Don't file a bug, don't ask permission, just fix it.
+- **Tune YAML configs autonomously** — if bread costs too much and nobody buys it, adjust `npc_demand.yaml` or `recipes.yaml` until the economy feels alive. The configs are hypotheses, not requirements.
+- **Be autonomous in decision-making** — treat unexpected simulation outcomes as data, not failures. Investigate, form a hypothesis, change code or config, re-run. This loop IS the development process.
+- **Think like an agent that will live in this economy** — when designing interactions, ask "would this make sense if I were an AI agent trying to survive here?" If something feels exploitable, broken, or dead-end, it probably is.
+
+### Build Features → Simulate → Fix → Repeat
+
+This is NOT waterfall where you build everything, then test at the end. The simulation infrastructure is built **early** (Phase 2 in the plan). Every subsequent phase expands the simulation:
+
+- Phase 2 done → run simulation: agents gather, pay rent, go bankrupt. Does survival feel right?
+- Phase 3 done → expand simulation: agents start businesses, produce goods. Does the production chain flow?
+- Phase 4 done → expand simulation: agents trade on marketplace. Do prices converge? Are there arbitrage loops?
+- Phase 5 done → expand simulation: agents take loans. Does fractional reserve create healthy money supply or hyperinflation?
+- Phase 6 done → expand simulation: elections change policy, audits catch criminals. Does crime pay at the right rate?
+- Phase 7 done → expand simulation: NPCs fill gaps. Does the NPC economy gracefully give way to agent economy?
+
+At each expansion, the implementing agent should feel free to go back and fix earlier phases if the simulation reveals problems.
 
 ### Test Architecture
 
-- **In-process** — tests call backend domain logic directly (no HTTP/MCP overhead)
-- **Mockable clock** — injectable clock abstraction for deterministic time control
-- All time-dependent behavior reads from mock clock
-- Tick processing triggered when test advances time past boundaries
+- **Full-stack through the real API** — tests use `httpx.AsyncClient` to send real HTTP requests to the real `POST /mcp` endpoint with real JSON-RPC payloads, real Bearer token auth, real response parsing. The test agents interact with the system **exactly** the same way a real AI agent would. No shortcuts, no direct domain calls, no bypassing auth or protocol layers. If the test passes, a real agent doing the same calls will get the same results. This is non-negotiable.
+- **FastAPI TestClient** — the app is mounted in-process via `httpx.ASGITransport` (no actual network), but the full middleware stack, routing, auth, and protocol parsing all execute. Fast enough for simulation, real enough to trust.
+- **Mockable clock** — injectable clock abstraction for deterministic time control. The only thing that's mocked. All time-dependent behavior reads from this clock.
+- Tick processing triggered when test advances time past boundaries (calls the same tick CLI entry point)
 - Runs in seconds/minutes, not real-time
+- **Scripted agent behaviors** — each test agent is a helper function that calls MCP tools via HTTP: `await agent.call("work")`, `await agent.call("gather", {"resource": "wheat"})`. Hardcoded strategies, not AI. The point is predictable inputs through the real protocol producing analyzable outputs.
+- **One shared helper**: a thin `TestAgent` class that wraps `httpx.AsyncClient` + action_token and provides `agent.call(tool_name, params)` → sends JSON-RPC to `/mcp` → returns parsed result. This is the ONLY abstraction. Everything under it is the real system.
 
-### Distinct Scenarios
+### Scenario 1: Free Market Boom
 
-1. **"Free Market Boom"** — many businesses competing, rapid growth, marketplace dynamics
-2. **"Authoritarian Crackdown"** — heavy regulation, high enforcement, crime dynamics
-3. **"Economic Collapse & Recovery"** — mass bankruptcy, NPC economy stepping in, rebuilding
+Full economy with 20+ scripted agents pursuing different strategies:
+- **Gatherers**: gather raw resources, sell on marketplace
+- **Manufacturers**: buy materials, produce intermediates/finished goods, sell
+- **Retailers**: buy finished goods, set up storefronts in high-traffic zones
+- **Speculators**: buy low, sell high
+- **Workers**: get employed, save money, eventually start own business
 
-### Assertions
+Run ~30 simulated days under free market government. Assert:
+- Money supply conservation holds at every checkpoint
+- No negative inventory anywhere
+- Market prices stabilize within a reasonable range
+- Agent businesses gradually outcompete NPC businesses
+- Wealth inequality emerges naturally (Gini > 0)
+- GDP grows over time
 
-- **Hard invariants**: money supply conservation, no negative inventory, bankruptcy correctness, election integrity
-- **Expected outcomes**: scripted agent actions produce predictable results
+### Scenario 2: Authoritarian Crackdown
 
-### Reports & Metrics
+Start with free market, transition to authoritarian via voting:
+- **Tax evaders**: use direct trades to dodge taxes
+- **Compliant businesses**: play by the rules
+- **Political agents**: vote strategically
 
-- GDP over time
+Assert: elections work, tax rates increase, audits catch evaders, fines/jail applied correctly, economic activity slows under heavy regulation.
+
+### Scenario 3: Economic Collapse & Recovery
+
+Establish thriving economy, then trigger collapse (mass defaults):
+- Agents take loans then stop working
+- Verify bankruptcy liquidation, NPC economy ramps up to fill gaps
+- New agents can still join and survive (gathering floor works)
+- Economy recovers over time
+
+### Hard Invariants (checked continuously)
+
+- `sum(all balances) + bank_reserves + escrow_locked = initial_supply + loans_created - loans_repaid`
+- No inventory item has negative quantity
+- Bankruptcy correctly zeroes debt and increments count
+- Elections respect 2-week eligibility and produce correct winners
+
+### Output
+
+Each simulation run produces a report (CSV/JSON) with metrics over time:
+- GDP, money supply, employment rate
+- Per-good price curves
 - Wealth distribution (Gini coefficient)
-- Market prices history
-- Employment rates
-- Government transition effects
 - NPC vs agent market share
-- Output as data files/logs for human review
+- Government policy timeline
+- Violation/enforcement rates
 
-### Workflow
-
-Run simulation → review economic behavior → adjust YAML parameters → repeat
+These reports are the primary tool for evaluating whether the economy "works" — not pass/fail assertions alone.
 
 ---
 
@@ -630,7 +680,7 @@ Run simulation → review economic behavior → adjust YAML parameters → repea
 7. **Don't overcomplicate** — good architecture without premature optimization
 8. **Indefinite persistence** — world runs forever, history accumulates
 9. **Community-governed** — rules evolve through open-source PRs
-10. **Testing IS the product** — simulation tests are the primary quality mechanism
+10. **Simulation IS the development process** — build, simulate, observe, fix, tune, repeat. The implementing agent must be autonomous: fix logic, adjust configs, iterate without asking. Think like an agent living in the economy.
 
 ---
 
