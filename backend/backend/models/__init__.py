@@ -32,8 +32,8 @@ from backend.models.banking import BankAccount, Loan, CentralBank  # noqa: F401
 # Phase 6: Government, Taxes, Crime
 from backend.models.government import GovernmentState, Vote, Violation, TaxRecord  # noqa: F401
 
-# Phase 8+: uncomment as models are added
-# from backend.models.message import Message  # noqa: F401
+# Phase 8: Messaging
+from backend.models.message import Message  # noqa: F401
 
 __all__ = [
     "Base",
@@ -59,4 +59,5 @@ __all__ = [
     "Vote",
     "Violation",
     "TaxRecord",
+    "Message",
 ]

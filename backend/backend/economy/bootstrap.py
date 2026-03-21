@@ -9,12 +9,13 @@ Phase 1: seed_zones — populates the zones table from zones.yaml
 Phase 2: seed_goods — populates the goods table from goods.yaml
 Phase 3: seed_recipes — populates the recipes table from recipes.yaml
 Phase 5: seed_central_bank — creates the CentralBank singleton
-Later phases will add bootstrap_npc_businesses, etc.
+Phase 7: seed_npc_businesses — creates initial NPC businesses from bootstrap.yaml
 """
 
 from __future__ import annotations
 
 import logging
+import secrets
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -298,3 +299,161 @@ async def seed_government(db: AsyncSession, settings: "Settings") -> None:
             "GovernmentState already exists (template: %s)",
             state.current_template_slug,
         )
+
+
+async def seed_npc_businesses(db: AsyncSession, settings: "Settings") -> None:
+    """
+    Create initial NPC businesses from bootstrap.yaml, if they don't exist yet.
+
+    This is idempotent — if a business with the same name already exists, it
+    is skipped. On restart, existing NPC businesses are preserved.
+
+    For each NPC business config:
+      1. Create an Agent for the NPC business owner (named e.g. "NPC_Farm_01")
+      2. Create the Business (is_npc=True)
+      3. Set StorefrontPrices for each item in storefront config
+      4. Add initial inventory
+      5. Give initial_balance (deducted from CentralBank reserves)
+
+    Args:
+        db:       Active async database session (will be flushed but not committed).
+        settings: Application settings with bootstrap config.
+    """
+    from backend.models.agent import Agent
+    from backend.models.banking import CentralBank
+    from backend.models.business import Business, StorefrontPrice
+    from backend.models.inventory import InventoryItem
+    from backend.models.transaction import Transaction
+
+    bootstrap_cfg = settings.bootstrap
+    npc_biz_configs = bootstrap_cfg.get("npc_businesses", [])
+
+    if not npc_biz_configs:
+        logger.warning("No NPC businesses in bootstrap.yaml — skipping NPC seeding")
+        return
+
+    # Load CentralBank
+    bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1))
+    central_bank = bank_result.scalar_one_or_none()
+
+    # Load zones into a dict by slug
+    zones_result = await db.execute(select(Zone))
+    zones_by_slug = {z.slug: z for z in zones_result.scalars().all()}
+
+    created_count = 0
+    skipped_count = 0
+
+    for i, biz_config in enumerate(npc_biz_configs):
+        biz_name = biz_config.get("name")
+        if not biz_name:
+            logger.warning("NPC business config missing 'name', skipping: %r", biz_config)
+            continue
+
+        # Check if a business with this name already exists
+        existing_biz = await db.execute(
+            select(Business).where(Business.name == biz_name)
+        )
+        if existing_biz.scalar_one_or_none() is not None:
+            skipped_count += 1
+            logger.debug("NPC business %r already exists — skipping", biz_name)
+            continue
+
+        zone_slug = biz_config.get("zone", "industrial")
+        zone = zones_by_slug.get(zone_slug)
+        if zone is None:
+            logger.warning(
+                "NPC business %r references unknown zone %r — skipping",
+                biz_name, zone_slug,
+            )
+            continue
+
+        biz_type = biz_config.get("type", "workshop")
+        initial_balance = Decimal(str(biz_config.get("initial_balance", 1000)))
+
+        # Create NPC agent owner
+        # Name format: "NPC_<type>_<seq>" (truncated to 64 chars)
+        npc_name_base = f"NPC_{biz_type.replace('_', '').capitalize()}_{i+1:02d}"
+        # Ensure uniqueness with a random suffix
+        npc_agent_name = f"{npc_name_base}_{secrets.token_hex(3)}"[:64]
+
+        npc_agent = Agent(
+            name=npc_agent_name,
+            action_token=f"npc_{secrets.token_urlsafe(32)}",
+            view_token=f"npc_{secrets.token_urlsafe(32)}",
+            balance=float(initial_balance),
+        )
+        db.add(npc_agent)
+        await db.flush()  # Get npc_agent.id
+
+        # Create the business
+        business = Business(
+            owner_id=npc_agent.id,
+            name=biz_name,
+            type_slug=biz_type,
+            zone_id=zone.id,
+            storage_capacity=500,
+            is_npc=True,
+        )
+        db.add(business)
+        await db.flush()  # Get business.id
+
+        # Set storefront prices and initial inventory
+        storefront_items = biz_config.get("storefront", [])
+        for sf_item in storefront_items:
+            good_slug = sf_item.get("good")
+            price = sf_item.get("price")
+            initial_stock = int(sf_item.get("initial_stock", 0))
+
+            if not good_slug or price is None:
+                continue
+
+            # Create storefront price
+            sp = StorefrontPrice(
+                business_id=business.id,
+                good_slug=good_slug,
+                price=float(price),
+            )
+            db.add(sp)
+
+            # Add initial inventory
+            if initial_stock > 0:
+                inv = InventoryItem(
+                    owner_type="business",
+                    owner_id=business.id,
+                    good_slug=good_slug,
+                    quantity=initial_stock,
+                )
+                db.add(inv)
+
+        # Deduct initial balance from CentralBank reserves (NPC loan)
+        if central_bank is not None and initial_balance > 0:
+            current_reserves = Decimal(str(central_bank.reserves))
+            if current_reserves >= initial_balance:
+                central_bank.reserves = current_reserves - initial_balance
+
+                # Record as loan disbursement
+                txn = Transaction(
+                    type="loan_disbursement",
+                    from_agent_id=None,
+                    to_agent_id=npc_agent.id,
+                    amount=float(initial_balance),
+                    metadata_json={
+                        "reason": "npc_bootstrap",
+                        "business_name": biz_name,
+                    },
+                )
+                db.add(txn)
+            else:
+                logger.warning(
+                    "Insufficient bank reserves for NPC business %r (need %.2f, have %.2f)",
+                    biz_name, float(initial_balance), float(current_reserves),
+                )
+
+        await db.flush()
+        created_count += 1
+        logger.info("Created NPC business: %r (zone: %s, type: %s)", biz_name, zone_slug, biz_type)
+
+    logger.info(
+        "NPC business seeding complete: %d created, %d skipped (already exist)",
+        created_count, skipped_count,
+    )

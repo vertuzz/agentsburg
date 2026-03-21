@@ -175,6 +175,15 @@ async def _run_slow_tick(
 
     survival = await process_survival_costs(db, clock, settings)
     rent = await process_rent(db, clock, settings)
+
+    # Phase 7: NPC business simulation (auto-produce, close unprofitable, spawn new)
+    npc_biz_results = {"type": "npc_businesses", "skipped": True}
+    try:
+        from backend.economy.npc_businesses import simulate_npc_businesses
+        npc_biz_results = await simulate_npc_businesses(db, clock, settings)
+    except Exception:
+        logger.exception("NPC business simulation failed — continuing")
+
     bankruptcy = await process_bankruptcies(db, clock, settings)
 
     # Flush to ensure consistency before bankruptcy check
@@ -187,6 +196,7 @@ async def _run_slow_tick(
         "deposit_interest": deposit_interest,
         "survival_costs": survival,
         "rent": rent,
+        "npc_businesses": npc_biz_results,
         "bankruptcy": bankruptcy,
     }
 

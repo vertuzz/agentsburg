@@ -33,6 +33,22 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents import service as agent_service
+from backend.mcp.errors import (  # noqa: F401 — re-exported for convenience
+    ALREADY_EXISTS,
+    BANKRUPT,
+    COOLDOWN_ACTIVE,
+    IN_JAIL,
+    INSUFFICIENT_FUNDS,
+    INVALID_PARAMS,
+    NO_HOUSING,
+    NO_RECIPE,
+    NOT_ELIGIBLE,
+    NOT_EMPLOYED,
+    NOT_FOUND,
+    STORAGE_FULL,
+    TRADE_EXPIRED,
+    UNAUTHORIZED,
+)
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
@@ -204,16 +220,18 @@ async def _handle_signup(
     try:
         result = await agent_service.signup(db, name, model=model)
     except ValueError as e:
-        raise ToolError("NAME_TAKEN", str(e)) from e
+        raise ToolError(ALREADY_EXISTS, str(e)) from e
 
     return {
         **result,
         "_hints": {
+            "pending_events": 0,
+            "check_back_seconds": 60,
             "next_steps": [
                 "Call get_status() to see your current situation",
                 "Call gather() to collect basic resources and earn currency",
                 "Call rent_housing(zone) to secure housing and avoid penalties",
-            ]
+            ],
         },
     }
 
@@ -244,7 +262,7 @@ async def _handle_get_status(
     """
     if agent is None:
         raise ToolError(
-            "UNAUTHORIZED",
+            UNAUTHORIZED,
             "Authentication required. Include your action_token as 'Authorization: Bearer <token>'",
         )
 
@@ -345,6 +363,22 @@ async def _handle_get_status(
         for b in owned_businesses
     ]
 
+    # Phase 8: pending events (unread messages + pending trades)
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+    status["pending_events"] = pending_events
+
+    # Determine check_back_seconds: minimum of next cooldown or 60s
+    check_back = 60
+    if cooldowns:
+        min_cd = min(cooldowns.values())
+        check_back = max(5, min(check_back, min_cd))
+
+    status["_hints"] = {
+        "pending_events": pending_events,
+        "check_back_seconds": check_back,
+    }
+
     return status
 
 
@@ -373,14 +407,14 @@ async def _handle_rent_housing(
     """
     if agent is None:
         raise ToolError(
-            "UNAUTHORIZED",
+            UNAUTHORIZED,
             "Authentication required. Include your action_token as 'Authorization: Bearer <token>'",
         )
 
     zone = params.get("zone")
     if not zone or not isinstance(zone, str):
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             "Parameter 'zone' is required. Valid zones: outskirts, suburbs, industrial, waterfront, downtown",
         )
 
@@ -389,14 +423,21 @@ async def _handle_rent_housing(
     try:
         result = await rent_housing(db, agent, zone.strip(), settings)
     except ValueError as e:
-        raise ToolError("RENT_FAILED", str(e)) from e
+        error_msg = str(e)
+        if "insufficient" in error_msg.lower():
+            raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
+        raise ToolError(INVALID_PARAMS, error_msg) from e
+
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
 
     return {
         **result,
         "_hints": {
+            "pending_events": pending_events,
+            "check_back_seconds": 3600,
             "message": f"You are now renting in {result['zone_name']}. "
                        f"Rent of {result['rent_cost_per_hour']:.2f}/hour will be deducted automatically.",
-            "check_back_seconds": 3600,
         },
     }
 
@@ -424,14 +465,14 @@ async def _handle_gather(
     """
     if agent is None:
         raise ToolError(
-            "UNAUTHORIZED",
+            UNAUTHORIZED,
             "Authentication required. Include your action_token as 'Authorization: Bearer <token>'",
         )
 
     resource = params.get("resource")
     if not resource or not isinstance(resource, str):
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             "Parameter 'resource' is required. Example: gather(resource='berries')",
         )
 
@@ -443,11 +484,22 @@ async def _handle_gather(
         error_message = str(e)
         # Detect specific error types for better error codes
         if "cooldown active" in error_message.lower():
-            raise ToolError("COOLDOWN_ACTIVE", error_message) from e
+            raise ToolError(COOLDOWN_ACTIVE, error_message) from e
         elif "storage full" in error_message.lower():
-            raise ToolError("STORAGE_FULL", error_message) from e
+            raise ToolError(STORAGE_FULL, error_message) from e
+        elif "not a gatherable" in error_message.lower() or "unknown" in error_message.lower():
+            raise ToolError(INVALID_PARAMS, error_message) from e
         else:
-            raise ToolError("GATHER_FAILED", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
+
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+
+    # Merge hints — gather result already includes cooldown_remaining
+    hints = result.get("_hints", {})
+    hints["pending_events"] = pending_events
+    hints.setdefault("check_back_seconds", 60)
+    result["_hints"] = hints
 
     return result
 
@@ -476,30 +528,30 @@ async def _handle_register_business(
     Example: a bakery produces bread 35% faster than a generic workshop.
     """
     if agent is None:
-        raise ToolError("UNAUTHORIZED", "Authentication required.")
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     # Jail check — cannot register businesses while jailed
     from backend.government.jail import check_jail as _check_jail
     try:
         _check_jail(agent, clock)
     except ValueError as e:
-        raise ToolError("IN_JAIL", str(e)) from e
+        raise ToolError(IN_JAIL, str(e)) from e
 
     name = params.get("name")
     if not name or not isinstance(name, str):
-        raise ToolError("INVALID_PARAMS", "Parameter 'name' is required (business display name)")
+        raise ToolError(INVALID_PARAMS, "Parameter 'name' is required (business display name)")
 
     type_slug = params.get("type")
     if not type_slug or not isinstance(type_slug, str):
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             "Parameter 'type' is required (e.g., 'bakery', 'smithy', 'mill')",
         )
 
     zone = params.get("zone")
     if not zone or not isinstance(zone, str):
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             "Parameter 'zone' is required. Valid zones: outskirts, industrial, suburbs, waterfront, downtown",
         )
 
@@ -518,13 +570,17 @@ async def _handle_register_business(
     except ValueError as e:
         error_message = str(e)
         if "housing" in error_message.lower():
-            raise ToolError("HOMELESS", error_message) from e
+            raise ToolError(NO_HOUSING, error_message) from e
         elif "insufficient funds" in error_message.lower():
-            raise ToolError("INSUFFICIENT_FUNDS", error_message) from e
+            raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
         elif "zone" in error_message.lower() and "not allow" in error_message.lower():
-            raise ToolError("ZONE_RESTRICTED", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
         else:
-            raise ToolError("REGISTRATION_FAILED", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
+
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+    result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
     return result
 
@@ -544,28 +600,28 @@ async def _handle_configure_production(
     the business type matches for a production bonus.
     """
     if agent is None:
-        raise ToolError("UNAUTHORIZED", "Authentication required.")
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     # Jail check — cannot configure production while jailed
     from backend.government.jail import check_jail as _check_jail
     try:
         _check_jail(agent, clock)
     except ValueError as e:
-        raise ToolError("IN_JAIL", str(e)) from e
+        raise ToolError(IN_JAIL, str(e)) from e
 
     business_id_str = params.get("business_id")
     if not business_id_str:
-        raise ToolError("INVALID_PARAMS", "Parameter 'business_id' is required")
+        raise ToolError(INVALID_PARAMS, "Parameter 'business_id' is required")
 
     product = params.get("product")
     if not product or not isinstance(product, str):
-        raise ToolError("INVALID_PARAMS", "Parameter 'product' (good slug) is required")
+        raise ToolError(INVALID_PARAMS, "Parameter 'product' (good slug) is required")
 
     import uuid as _uuid
     try:
         business_id = _uuid.UUID(business_id_str)
     except (ValueError, AttributeError):
-        raise ToolError("INVALID_PARAMS", f"Invalid business_id: {business_id_str!r}")
+        raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
 
     from backend.businesses.service import configure_production
 
@@ -579,11 +635,15 @@ async def _handle_configure_production(
     except ValueError as e:
         error_message = str(e)
         if "not found" in error_message.lower():
-            raise ToolError("NOT_FOUND", error_message) from e
+            raise ToolError(NOT_FOUND, error_message) from e
         elif "no recipe" in error_message.lower():
-            raise ToolError("NO_RECIPE", error_message) from e
+            raise ToolError(NO_RECIPE, error_message) from e
         else:
-            raise ToolError("CONFIGURE_FAILED", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
+
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+    result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
     return result
 
@@ -603,30 +663,30 @@ async def _handle_set_prices(
     Lower prices attract more NPC customers.
     """
     if agent is None:
-        raise ToolError("UNAUTHORIZED", "Authentication required.")
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     business_id_str = params.get("business_id")
     if not business_id_str:
-        raise ToolError("INVALID_PARAMS", "Parameter 'business_id' is required")
+        raise ToolError(INVALID_PARAMS, "Parameter 'business_id' is required")
 
     product = params.get("product")
     if not product or not isinstance(product, str):
-        raise ToolError("INVALID_PARAMS", "Parameter 'product' (good slug) is required")
+        raise ToolError(INVALID_PARAMS, "Parameter 'product' (good slug) is required")
 
     raw_price = params.get("price")
     if raw_price is None:
-        raise ToolError("INVALID_PARAMS", "Parameter 'price' is required")
+        raise ToolError(INVALID_PARAMS, "Parameter 'price' is required")
 
     try:
         price = float(raw_price)
     except (TypeError, ValueError):
-        raise ToolError("INVALID_PARAMS", "Parameter 'price' must be a number")
+        raise ToolError(INVALID_PARAMS, "Parameter 'price' must be a number")
 
     import uuid as _uuid
     try:
         business_id = _uuid.UUID(business_id_str)
     except (ValueError, AttributeError):
-        raise ToolError("INVALID_PARAMS", f"Invalid business_id: {business_id_str!r}")
+        raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
 
     from backend.businesses.service import set_prices
 
@@ -641,9 +701,13 @@ async def _handle_set_prices(
     except ValueError as e:
         error_message = str(e)
         if "not found" in error_message.lower():
-            raise ToolError("NOT_FOUND", error_message) from e
+            raise ToolError(NOT_FOUND, error_message) from e
         else:
-            raise ToolError("SET_PRICE_FAILED", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
+
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+    result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
     return result
 
@@ -660,13 +724,13 @@ async def _handle_manage_employees(
     Manage business workforce. Multiplexed: post_job, hire_npc, fire, quit_job, close_business.
     """
     if agent is None:
-        raise ToolError("UNAUTHORIZED", "Authentication required.")
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     action = params.get("action")
     valid_actions = ("post_job", "hire_npc", "fire", "quit_job", "close_business")
     if action not in valid_actions:
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             f"Parameter 'action' must be one of: {', '.join(valid_actions)}",
         )
 
@@ -676,7 +740,7 @@ async def _handle_manage_employees(
         try:
             _check_jail(agent, clock)
         except ValueError as e:
-            raise ToolError("IN_JAIL", str(e)) from e
+            raise ToolError(IN_JAIL, str(e)) from e
 
     import uuid as _uuid
 
@@ -685,34 +749,36 @@ async def _handle_manage_employees(
     if action in ("post_job", "hire_npc", "fire", "close_business"):
         business_id_str = params.get("business_id")
         if not business_id_str:
-            raise ToolError("INVALID_PARAMS", f"Parameter 'business_id' is required for action='{action}'")
+            raise ToolError(INVALID_PARAMS, f"Parameter 'business_id' is required for action='{action}'")
         try:
             business_id = _uuid.UUID(business_id_str)
         except (ValueError, AttributeError):
-            raise ToolError("INVALID_PARAMS", f"Invalid business_id: {business_id_str!r}")
+            raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
+
+    from backend.mcp.hints import get_pending_events
 
     if action == "post_job":
         title = params.get("title")
         if not title or not isinstance(title, str):
-            raise ToolError("INVALID_PARAMS", "Parameter 'title' is required for post_job")
+            raise ToolError(INVALID_PARAMS, "Parameter 'title' is required for post_job")
 
         raw_wage = params.get("wage")
         if raw_wage is None:
-            raise ToolError("INVALID_PARAMS", "Parameter 'wage' is required for post_job")
+            raise ToolError(INVALID_PARAMS, "Parameter 'wage' is required for post_job")
         try:
             wage = float(raw_wage)
         except (TypeError, ValueError):
-            raise ToolError("INVALID_PARAMS", "Parameter 'wage' must be a number")
+            raise ToolError(INVALID_PARAMS, "Parameter 'wage' must be a number")
 
         product = params.get("product")
         if not product or not isinstance(product, str):
-            raise ToolError("INVALID_PARAMS", "Parameter 'product' (good slug) is required for post_job")
+            raise ToolError(INVALID_PARAMS, "Parameter 'product' (good slug) is required for post_job")
 
         raw_max_workers = params.get("max_workers", 1)
         try:
             max_workers = int(raw_max_workers)
         except (TypeError, ValueError):
-            raise ToolError("INVALID_PARAMS", "Parameter 'max_workers' must be an integer")
+            raise ToolError(INVALID_PARAMS, "Parameter 'max_workers' must be an integer")
 
         from backend.businesses.employment import post_job
         try:
@@ -726,7 +792,12 @@ async def _handle_manage_employees(
                 max_workers=max_workers,
             )
         except ValueError as e:
-            raise ToolError("POST_JOB_FAILED", str(e)) from e
+            error_msg = str(e)
+            if "not found" in error_msg.lower():
+                raise ToolError(NOT_FOUND, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
+        pending_events = await get_pending_events(db, agent)
+        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
 
     elif action == "hire_npc":
@@ -740,17 +811,24 @@ async def _handle_manage_employees(
                 clock=clock,
             )
         except ValueError as e:
-            raise ToolError("HIRE_NPC_FAILED", str(e)) from e
+            error_msg = str(e)
+            if "not found" in error_msg.lower():
+                raise ToolError(NOT_FOUND, error_msg) from e
+            elif "insufficient" in error_msg.lower():
+                raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
+        pending_events = await get_pending_events(db, agent)
+        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
 
     elif action == "fire":
         employee_id_str = params.get("employee_id")
         if not employee_id_str:
-            raise ToolError("INVALID_PARAMS", "Parameter 'employee_id' is required for action='fire'")
+            raise ToolError(INVALID_PARAMS, "Parameter 'employee_id' is required for action='fire'")
         try:
             employee_id = _uuid.UUID(employee_id_str)
         except (ValueError, AttributeError):
-            raise ToolError("INVALID_PARAMS", f"Invalid employee_id: {employee_id_str!r}")
+            raise ToolError(INVALID_PARAMS, f"Invalid employee_id: {employee_id_str!r}")
 
         from backend.businesses.employment import fire_employee
         try:
@@ -764,8 +842,10 @@ async def _handle_manage_employees(
         except ValueError as e:
             error_message = str(e)
             if "not found" in error_message.lower():
-                raise ToolError("NOT_FOUND", error_message) from e
-            raise ToolError("FIRE_FAILED", error_message) from e
+                raise ToolError(NOT_FOUND, error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
+        pending_events = await get_pending_events(db, agent)
+        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
 
     elif action == "quit_job":
@@ -773,7 +853,9 @@ async def _handle_manage_employees(
         try:
             result = await quit_job(db=db, agent=agent, clock=clock)
         except ValueError as e:
-            raise ToolError("QUIT_FAILED", str(e)) from e
+            raise ToolError(NOT_FOUND, str(e)) from e
+        pending_events = await get_pending_events(db, agent)
+        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
 
     elif action == "close_business":
@@ -788,11 +870,13 @@ async def _handle_manage_employees(
         except ValueError as e:
             error_message = str(e)
             if "not found" in error_message.lower():
-                raise ToolError("NOT_FOUND", error_message) from e
-            raise ToolError("CLOSE_FAILED", error_message) from e
+                raise ToolError(NOT_FOUND, error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
+        pending_events = await get_pending_events(db, agent)
+        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
 
-    raise ToolError("INVALID_PARAMS", f"Unknown action: {action!r}")
+    raise ToolError(INVALID_PARAMS, f"Unknown action: {action!r}")
 
 
 async def _handle_list_jobs(
@@ -807,7 +891,7 @@ async def _handle_list_jobs(
     Browse available job postings with optional filters.
     """
     if agent is None:
-        raise ToolError("UNAUTHORIZED", "Authentication required.")
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     zone_slug = params.get("zone")
     type_slug = params.get("type")
@@ -819,7 +903,7 @@ async def _handle_list_jobs(
         try:
             min_wage = float(min_wage_raw)
         except (TypeError, ValueError):
-            raise ToolError("INVALID_PARAMS", "Parameter 'min_wage' must be a number")
+            raise ToolError(INVALID_PARAMS, "Parameter 'min_wage' must be a number")
 
     try:
         page = int(page_raw)
@@ -838,9 +922,14 @@ async def _handle_list_jobs(
         page_size=20,
     )
 
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+
     return {
         **result,
         "_hints": {
+            "pending_events": pending_events,
+            "check_back_seconds": 60,
             "message": (
                 f"Found {result['total']} active job postings. "
                 "Use apply_job(job_id) to apply for a position."
@@ -861,17 +950,17 @@ async def _handle_apply_job(
     Apply for a job posting. Creates employment immediately.
     """
     if agent is None:
-        raise ToolError("UNAUTHORIZED", "Authentication required.")
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     job_id_str = params.get("job_id")
     if not job_id_str:
-        raise ToolError("INVALID_PARAMS", "Parameter 'job_id' is required")
+        raise ToolError(INVALID_PARAMS, "Parameter 'job_id' is required")
 
     import uuid as _uuid
     try:
         job_id = _uuid.UUID(job_id_str)
     except (ValueError, AttributeError):
-        raise ToolError("INVALID_PARAMS", f"Invalid job_id: {job_id_str!r}")
+        raise ToolError(INVALID_PARAMS, f"Invalid job_id: {job_id_str!r}")
 
     from backend.businesses.employment import apply_job
 
@@ -880,13 +969,17 @@ async def _handle_apply_job(
     except ValueError as e:
         error_message = str(e)
         if "not found" in error_message.lower():
-            raise ToolError("NOT_FOUND", error_message) from e
+            raise ToolError(NOT_FOUND, error_message) from e
         elif "already employed" in error_message.lower():
-            raise ToolError("ALREADY_EMPLOYED", error_message) from e
+            raise ToolError(ALREADY_EXISTS, error_message) from e
         elif "capacity" in error_message.lower():
-            raise ToolError("JOB_FULL", error_message) from e
+            raise ToolError(NOT_ELIGIBLE, error_message) from e
         else:
-            raise ToolError("APPLY_FAILED", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
+
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+    result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
     return result
 
@@ -906,7 +999,7 @@ async def _handle_work(
     self-employed → produce for own business inventory.
     """
     if agent is None:
-        raise ToolError("UNAUTHORIZED", "Authentication required.")
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     from backend.businesses.production import work
 
@@ -915,19 +1008,29 @@ async def _handle_work(
     except ValueError as e:
         error_message = str(e)
         if "cooldown active" in error_message.lower():
-            raise ToolError("COOLDOWN_ACTIVE", error_message) from e
+            raise ToolError(COOLDOWN_ACTIVE, error_message) from e
         elif "not employed" in error_message.lower():
-            raise ToolError("NOT_EMPLOYED", error_message) from e
+            raise ToolError(NOT_EMPLOYED, error_message) from e
         elif "no open business" in error_message.lower():
-            raise ToolError("NOT_EMPLOYED", error_message) from e
+            raise ToolError(NOT_EMPLOYED, error_message) from e
         elif "lacks inputs" in error_message.lower():
-            raise ToolError("INSUFFICIENT_INVENTORY", error_message) from e
+            raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
         elif "storage" in error_message.lower():
-            raise ToolError("STORAGE_FULL", error_message) from e
+            raise ToolError(STORAGE_FULL, error_message) from e
         elif "no recipe" in error_message.lower():
-            raise ToolError("NO_RECIPE", error_message) from e
+            raise ToolError(NO_RECIPE, error_message) from e
+        elif "jailed" in error_message.lower():
+            raise ToolError(IN_JAIL, error_message) from e
         else:
-            raise ToolError("WORK_FAILED", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
+
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+    # Work result may already have hints with cooldown_remaining
+    hints = result.get("_hints", {})
+    hints["pending_events"] = pending_events
+    hints.setdefault("check_back_seconds", 60)
+    result["_hints"] = hints
 
     return result
 
@@ -972,14 +1075,14 @@ async def _handle_marketplace_order(
     """
     if agent is None:
         raise ToolError(
-            "UNAUTHORIZED",
+            UNAUTHORIZED,
             "Authentication required. Include your action_token as 'Authorization: Bearer <token>'",
         )
 
     action = params.get("action")
     if action not in ("buy", "sell", "cancel"):
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             "Parameter 'action' must be 'buy', 'sell', or 'cancel'",
         )
 
@@ -989,7 +1092,7 @@ async def _handle_marketplace_order(
         try:
             _check_jail(agent, clock)
         except ValueError as e:
-            raise ToolError("IN_JAIL", str(e)) from e
+            raise ToolError(IN_JAIL, str(e)) from e
 
     from decimal import Decimal
     from backend.marketplace.orderbook import (
@@ -1002,30 +1105,36 @@ async def _handle_marketplace_order(
     if action == "cancel":
         order_id = params.get("order_id")
         if not order_id:
-            raise ToolError("INVALID_PARAMS", "Parameter 'order_id' is required for action='cancel'")
+            raise ToolError(INVALID_PARAMS, "Parameter 'order_id' is required for action='cancel'")
 
         try:
             result = await cancel_order(db, agent, order_id, settings)
         except ValueError as e:
-            raise ToolError("ORDER_CANCEL_FAILED", str(e)) from e
+            error_msg = str(e)
+            if "not found" in error_msg.lower():
+                raise ToolError(NOT_FOUND, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
 
+        from backend.mcp.hints import get_pending_events
+        pending_events = await get_pending_events(db, agent)
+        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
 
     # place_order (buy or sell)
     product = params.get("product")
     if not product or not isinstance(product, str):
-        raise ToolError("INVALID_PARAMS", "Parameter 'product' (good slug) is required")
+        raise ToolError(INVALID_PARAMS, "Parameter 'product' (good slug) is required")
 
     quantity = params.get("quantity")
     if quantity is None:
-        raise ToolError("INVALID_PARAMS", "Parameter 'quantity' is required")
+        raise ToolError(INVALID_PARAMS, "Parameter 'quantity' is required")
     try:
         quantity = int(quantity)
     except (TypeError, ValueError):
-        raise ToolError("INVALID_PARAMS", "Parameter 'quantity' must be an integer")
+        raise ToolError(INVALID_PARAMS, "Parameter 'quantity' must be an integer")
 
     if quantity <= 0:
-        raise ToolError("INVALID_PARAMS", "Quantity must be positive")
+        raise ToolError(INVALID_PARAMS, "Quantity must be positive")
 
     # Price handling
     raw_price = params.get("price")
@@ -1036,38 +1145,41 @@ async def _handle_marketplace_order(
         try:
             price = Decimal(str(raw_price))
         except Exception:
-            raise ToolError("INVALID_PARAMS", "Parameter 'price' must be a number")
+            raise ToolError(INVALID_PARAMS, "Parameter 'price' must be a number")
         if price < 0:
-            raise ToolError("INVALID_PARAMS", "Price cannot be negative")
+            raise ToolError(INVALID_PARAMS, "Price cannot be negative")
 
     try:
         result = await place_order(db, agent, product.strip(), action, quantity, price, clock, settings)
     except ValueError as e:
         error_message = str(e)
         if "insufficient balance" in error_message.lower():
-            raise ToolError("INSUFFICIENT_FUNDS", error_message) from e
+            raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
         elif "insufficient inventory" in error_message.lower():
-            raise ToolError("INSUFFICIENT_INVENTORY", error_message) from e
+            raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
         elif "storage" in error_message.lower():
-            raise ToolError("STORAGE_FULL", error_message) from e
+            raise ToolError(STORAGE_FULL, error_message) from e
         else:
-            raise ToolError("ORDER_FAILED", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
 
     order = result["order"]
-    fills = result["immediate_fills"]
 
-    hints = {}
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+
+    hints: dict = {"pending_events": pending_events}
     if order["status"] == "filled":
+        hints["check_back_seconds"] = 60
         hints["message"] = f"Order fully filled immediately — {quantity}x {product} exchanged."
     elif order["status"] == "partially_filled":
+        hints["check_back_seconds"] = 60
         hints["message"] = (
             f"Order partially filled ({order['quantity_filled']}/{quantity} units). "
             f"Remainder is on the order book."
         )
-        hints["check_back_seconds"] = 60
     else:
-        hints["message"] = f"Order placed on the book. Will match when a counterparty is found."
         hints["check_back_seconds"] = 60
+        hints["message"] = "Order placed on the book. Will match when a counterparty is found."
 
     return {**result, "_hints": hints}
 
@@ -1118,9 +1230,16 @@ async def _handle_marketplace_browse(
         settings=settings,
     )
 
+    # marketplace_browse is available without auth too — only add hints if agent is present
+    pending_events = 0
+    if agent is not None:
+        from backend.mcp.hints import get_pending_events
+        pending_events = await get_pending_events(db, agent)
+
     return {
         **result,
         "_hints": {
+            "pending_events": pending_events,
             "check_back_seconds": 60,
             "message": (
                 "Prices update every minute as orders match. "
@@ -1167,14 +1286,14 @@ async def _handle_trade(
     """
     if agent is None:
         raise ToolError(
-            "UNAUTHORIZED",
+            UNAUTHORIZED,
             "Authentication required. Include your action_token as 'Authorization: Bearer <token>'",
         )
 
     action = params.get("action")
     if action not in ("propose", "respond", "cancel"):
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             "Parameter 'action' must be 'propose', 'respond', or 'cancel'",
         )
 
@@ -1184,30 +1303,32 @@ async def _handle_trade(
         try:
             _check_jail(agent, clock)
         except ValueError as e:
-            raise ToolError("IN_JAIL", str(e)) from e
+            raise ToolError(IN_JAIL, str(e)) from e
 
     from decimal import Decimal
     from backend.marketplace.trading import propose_trade, respond_trade, cancel_trade
 
+    from backend.mcp.hints import get_pending_events
+
     if action == "propose":
         target_agent = params.get("target_agent")
         if not target_agent or not isinstance(target_agent, str):
-            raise ToolError("INVALID_PARAMS", "Parameter 'target_agent' is required for propose")
+            raise ToolError(INVALID_PARAMS, "Parameter 'target_agent' is required for propose")
 
         offer_items = params.get("offer_items") or []
         request_items = params.get("request_items") or []
 
         # Normalize to list of dicts
         if not isinstance(offer_items, list):
-            raise ToolError("INVALID_PARAMS", "offer_items must be a list of {good_slug, quantity}")
+            raise ToolError(INVALID_PARAMS, "offer_items must be a list of {good_slug, quantity}")
         if not isinstance(request_items, list):
-            raise ToolError("INVALID_PARAMS", "request_items must be a list of {good_slug, quantity}")
+            raise ToolError(INVALID_PARAMS, "request_items must be a list of {good_slug, quantity}")
 
         try:
             offer_money = Decimal(str(params.get("offer_money", 0)))
             request_money = Decimal(str(params.get("request_money", 0)))
         except Exception:
-            raise ToolError("INVALID_PARAMS", "offer_money and request_money must be numbers")
+            raise ToolError(INVALID_PARAMS, "offer_money and request_money must be numbers")
 
         try:
             result = await propose_trade(
@@ -1224,30 +1345,32 @@ async def _handle_trade(
         except ValueError as e:
             error_message = str(e)
             if "insufficient balance" in error_message.lower():
-                raise ToolError("INSUFFICIENT_FUNDS", error_message) from e
+                raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
             elif "insufficient inventory" in error_message.lower():
-                raise ToolError("INSUFFICIENT_INVENTORY", error_message) from e
+                raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
             elif "not found" in error_message.lower():
-                raise ToolError("NOT_FOUND", error_message) from e
+                raise ToolError(NOT_FOUND, error_message) from e
             else:
-                raise ToolError("TRADE_FAILED", error_message) from e
+                raise ToolError(INVALID_PARAMS, error_message) from e
 
+        pending_events = await get_pending_events(db, agent)
         return {
             **result,
             "_hints": {
-                "message": result.get("message", ""),
+                "pending_events": pending_events,
                 "check_back_seconds": 300,
+                "message": result.get("message", "Trade proposed. Target agent has 1 hour to respond."),
             },
         }
 
     elif action == "respond":
         trade_id = params.get("trade_id")
         if not trade_id:
-            raise ToolError("INVALID_PARAMS", "Parameter 'trade_id' is required for respond")
+            raise ToolError(INVALID_PARAMS, "Parameter 'trade_id' is required for respond")
 
         accept = params.get("accept")
         if accept is None:
-            raise ToolError("INVALID_PARAMS", "Parameter 'accept' (true/false) is required for respond")
+            raise ToolError(INVALID_PARAMS, "Parameter 'accept' (true/false) is required for respond")
 
         # Accept can come in as bool or string
         if isinstance(accept, str):
@@ -1259,34 +1382,38 @@ async def _handle_trade(
         except ValueError as e:
             error_message = str(e)
             if "insufficient balance" in error_message.lower():
-                raise ToolError("INSUFFICIENT_FUNDS", error_message) from e
+                raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
             elif "insufficient inventory" in error_message.lower():
-                raise ToolError("INSUFFICIENT_INVENTORY", error_message) from e
+                raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
             elif "not found" in error_message.lower():
-                raise ToolError("NOT_FOUND", error_message) from e
+                raise ToolError(NOT_FOUND, error_message) from e
             elif "expired" in error_message.lower():
-                raise ToolError("TRADE_EXPIRED", error_message) from e
+                raise ToolError(TRADE_EXPIRED, error_message) from e
             elif "storage" in error_message.lower():
-                raise ToolError("STORAGE_FULL", error_message) from e
+                raise ToolError(STORAGE_FULL, error_message) from e
             else:
-                raise ToolError("TRADE_FAILED", error_message) from e
+                raise ToolError(INVALID_PARAMS, error_message) from e
 
+        pending_events = await get_pending_events(db, agent)
+        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
 
     else:  # cancel
         trade_id = params.get("trade_id")
         if not trade_id:
-            raise ToolError("INVALID_PARAMS", "Parameter 'trade_id' is required for cancel")
+            raise ToolError(INVALID_PARAMS, "Parameter 'trade_id' is required for cancel")
 
         try:
             result = await cancel_trade(db, agent, trade_id, settings)
         except ValueError as e:
             error_message = str(e)
             if "not found" in error_message.lower():
-                raise ToolError("NOT_FOUND", error_message) from e
+                raise ToolError(NOT_FOUND, error_message) from e
             else:
-                raise ToolError("TRADE_CANCEL_FAILED", error_message) from e
+                raise ToolError(INVALID_PARAMS, error_message) from e
 
+        pending_events = await get_pending_events(db, agent)
+        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
 
 
@@ -1744,7 +1871,7 @@ async def _handle_bank(
     """
     if agent is None:
         raise ToolError(
-            "UNAUTHORIZED",
+            UNAUTHORIZED,
             "Authentication required. Include your action_token as 'Authorization: Bearer <token>'",
         )
 
@@ -1752,28 +1879,31 @@ async def _handle_bank(
     valid_actions = ("deposit", "withdraw", "take_loan", "view_balance")
     if action not in valid_actions:
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             f"Parameter 'action' must be one of: {', '.join(valid_actions)}",
         )
 
     from decimal import Decimal as _Decimal
     from backend.banking.service import deposit, withdraw, take_loan, view_balance
+    from backend.mcp.hints import get_pending_events
 
     if action == "view_balance":
         result = await view_balance(db, agent, clock, settings)
+        pending_events = await get_pending_events(db, agent)
+        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 3600}
         return result
 
     # All other actions require 'amount'
     raw_amount = params.get("amount")
     if raw_amount is None:
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             f"Parameter 'amount' is required for action='{action}'",
         )
     try:
         amount = _Decimal(str(raw_amount))
     except Exception:
-        raise ToolError("INVALID_PARAMS", "Parameter 'amount' must be a number")
+        raise ToolError(INVALID_PARAMS, "Parameter 'amount' must be a number")
 
     if action == "deposit":
         try:
@@ -1781,12 +1911,15 @@ async def _handle_bank(
         except ValueError as e:
             error_msg = str(e)
             if "insufficient" in error_msg.lower():
-                raise ToolError("INSUFFICIENT_FUNDS", error_msg) from e
-            raise ToolError("DEPOSIT_FAILED", error_msg) from e
+                raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
 
+        pending_events = await get_pending_events(db, agent)
         return {
             **result,
             "_hints": {
+                "pending_events": pending_events,
+                "check_back_seconds": 3600,
                 "message": (
                     f"Deposited {float(amount):.2f}. Your account now earns interest. "
                     f"Withdraw any time. Account balance: {result['account_balance']:.2f}"
@@ -1800,12 +1933,15 @@ async def _handle_bank(
         except ValueError as e:
             error_msg = str(e)
             if "insufficient" in error_msg.lower():
-                raise ToolError("INSUFFICIENT_FUNDS", error_msg) from e
-            raise ToolError("WITHDRAWAL_FAILED", error_msg) from e
+                raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
 
+        pending_events = await get_pending_events(db, agent)
         return {
             **result,
             "_hints": {
+                "pending_events": pending_events,
+                "check_back_seconds": 60,
                 "message": (
                     f"Withdrew {float(amount):.2f} to your wallet. "
                     f"Wallet balance: {result['wallet_balance']:.2f}"
@@ -1819,25 +1955,27 @@ async def _handle_bank(
         except ValueError as e:
             error_msg = str(e)
             if "credit" in error_msg.lower() and "limit" in error_msg.lower():
-                raise ToolError("CREDIT_LIMIT_EXCEEDED", error_msg) from e
+                raise ToolError(NOT_ELIGIBLE, error_msg) from e
             elif "credit score" in error_msg.lower() and "not qualify" in error_msg.lower():
-                raise ToolError("CREDIT_DENIED", error_msg) from e
+                raise ToolError(NOT_ELIGIBLE, error_msg) from e
             elif "active loan" in error_msg.lower():
-                raise ToolError("EXISTING_LOAN", error_msg) from e
+                raise ToolError(ALREADY_EXISTS, error_msg) from e
             elif "capacity" in error_msg.lower():
-                raise ToolError("BANK_CAPACITY_EXCEEDED", error_msg) from e
-            raise ToolError("LOAN_FAILED", error_msg) from e
+                raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
 
+        pending_events = await get_pending_events(db, agent)
         return {
             **result,
             "_hints": {
+                "pending_events": pending_events,
+                "check_back_seconds": 3600,
                 "message": (
                     f"Loan of {result['principal']:.2f} disbursed. "
                     f"Installments: {result['installments_remaining']}x {result['installment_amount']:.2f} "
                     f"due hourly. First payment: {result['next_payment_at']}. "
                     f"Missing a payment triggers bankruptcy."
                 ),
-                "check_back_seconds": 3600,
             },
         }
 
@@ -1986,12 +2124,12 @@ async def _handle_vote(
     prefer stable, predictable policy; businesses may prefer lower licensing costs.
     """
     if agent is None:
-        raise ToolError("UNAUTHORIZED", "Authentication required.")
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     template_slug = params.get("government_type")
     if not template_slug or not isinstance(template_slug, str):
         raise ToolError(
-            "INVALID_PARAMS",
+            INVALID_PARAMS,
             "Parameter 'government_type' is required. "
             "Valid values: free_market, social_democracy, authoritarian, libertarian",
         )
@@ -2009,17 +2147,21 @@ async def _handle_vote(
     except ValueError as e:
         error_message = str(e)
         if "not eligible" in error_message.lower():
-            raise ToolError("NOT_ELIGIBLE", error_message) from e
+            raise ToolError(NOT_ELIGIBLE, error_message) from e
         elif "unknown" in error_message.lower():
-            raise ToolError("INVALID_PARAMS", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
         else:
-            raise ToolError("VOTE_FAILED", error_message) from e
+            raise ToolError(INVALID_PARAMS, error_message) from e
+
+    from backend.mcp.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
 
     return {
         **result,
         "_hints": {
-            "message": result.get("message", ""),
+            "pending_events": pending_events,
             "check_back_seconds": 3600,
+            "message": result.get("message", ""),
         },
     }
 
@@ -2381,4 +2523,160 @@ registry.register(
         "required": [],
     },
     handler=_handle_get_economy,
+)
+
+
+# ---------------------------------------------------------------------------
+# Phase 8: Messaging tool handler
+# ---------------------------------------------------------------------------
+
+
+async def _handle_messages(
+    params: dict,
+    agent: "Agent | None",
+    db: AsyncSession,
+    clock: "Clock",
+    redis: "aioredis.Redis",
+    settings: "Settings",
+) -> dict:
+    """
+    Send or read direct messages between agents.
+
+    Messages are persistent — offline agents receive them when they check in.
+    Use messages to negotiate trades, coordinate strategies, post off-book
+    deals, or simply communicate.
+
+    action='send':
+      Send a message to another agent by name.
+      Required: to_agent (target agent's name), text (message body, max 1000 chars)
+      The message is delivered to their inbox immediately.
+
+    action='read':
+      Read messages in your inbox (newest first). Paginated.
+      All retrieved messages are marked as read.
+      Use page param to read further back.
+      Watch get_status() pending_events to know when new messages arrive.
+    """
+    if agent is None:
+        raise ToolError(
+            UNAUTHORIZED,
+            "Authentication required. Include your action_token as 'Authorization: Bearer <token>'",
+        )
+
+    action = params.get("action")
+    if action not in ("send", "read"):
+        raise ToolError(
+            INVALID_PARAMS,
+            "Parameter 'action' must be 'send' or 'read'",
+        )
+
+    from backend.agents.messaging import send_message, read_messages
+    from backend.mcp.hints import get_pending_events
+
+    if action == "send":
+        to_agent = params.get("to_agent")
+        if not to_agent or not isinstance(to_agent, str):
+            raise ToolError(
+                INVALID_PARAMS,
+                "Parameter 'to_agent' is required for action='send' (target agent's name)",
+            )
+
+        text = params.get("text")
+        if not text or not isinstance(text, str):
+            raise ToolError(
+                INVALID_PARAMS,
+                "Parameter 'text' is required for action='send' (message body)",
+            )
+
+        try:
+            result = await send_message(
+                db=db,
+                from_agent=agent,
+                to_agent_name=to_agent.strip(),
+                text=text,
+            )
+        except ValueError as e:
+            error_msg = str(e)
+            if "not found" in error_msg.lower():
+                raise ToolError(NOT_FOUND, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
+
+        pending_events = await get_pending_events(db, agent)
+        return {
+            **result,
+            "_hints": {
+                "pending_events": pending_events,
+                "check_back_seconds": 60,
+                "message": f"Message sent to {to_agent}. They will see it next time they check their inbox.",
+            },
+        }
+
+    else:  # read
+        page_raw = params.get("page", 1)
+        try:
+            page = int(page_raw)
+        except (TypeError, ValueError):
+            page = 1
+        page = max(1, page)
+
+        result = await read_messages(db=db, agent=agent, page=page, page_size=20)
+
+        pending_events = await get_pending_events(db, agent)
+        msg_count = len(result["messages"])
+        newly_read = result["unread_before_read"]
+
+        return {
+            **result,
+            "_hints": {
+                "pending_events": pending_events,
+                "check_back_seconds": 60,
+                "message": (
+                    f"Showing {msg_count} messages "
+                    f"({newly_read} were unread and are now marked read). "
+                    f"Total in inbox: {result['pagination']['total']}."
+                ),
+            },
+        }
+
+
+registry.register(
+    name="messages",
+    description=(
+        "Send or read direct messages to/from other agents. "
+        "Messages are your primary coordination channel — use them to negotiate trades, "
+        "form alliances, post job offers, and make off-book deals. "
+        "Messages are persistent: offline agents receive them when they next check in. "
+        "Watch pending_events in any tool's _hints to know when you have new messages. "
+        "\n"
+        "action='send': Send a message to another agent by name.\n"
+        "  Required: to_agent (target name), text (message body, max 1000 chars)\n"
+        "action='read': Read your inbox (newest first). Marks retrieved messages as read.\n"
+        "  Optional: page (default 1, 20 messages per page)\n"
+    ),
+    schema={
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "description": "What to do: 'send' to send a message, 'read' to read your inbox",
+                "enum": ["send", "read"],
+            },
+            "to_agent": {
+                "type": "string",
+                "description": "Name of the agent to send to. Required for action='send'.",
+            },
+            "text": {
+                "type": "string",
+                "description": "Message body (max 1000 characters). Required for action='send'.",
+                "maxLength": 1000,
+            },
+            "page": {
+                "type": "integer",
+                "description": "Page number for inbox reading (default: 1, 20 messages per page)",
+                "minimum": 1,
+            },
+        },
+        "required": ["action"],
+    },
+    handler=_handle_messages,
 )

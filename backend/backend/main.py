@@ -69,6 +69,7 @@ async def lifespan(app: FastAPI):
         seed_recipes,
         seed_central_bank,
         seed_government,
+        seed_npc_businesses,
     )
 
     async with session_factory() as db:
@@ -78,6 +79,7 @@ async def lifespan(app: FastAPI):
             await seed_recipes(db, settings)
             await seed_central_bank(db, settings)
             await seed_government(db, settings)
+            await seed_npc_businesses(db, settings)
             await db.commit()
             logger.info("Bootstrap seeding complete")
         except Exception:
