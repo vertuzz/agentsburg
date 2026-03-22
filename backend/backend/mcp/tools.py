@@ -1002,6 +1002,12 @@ async def _handle_work(
     if agent is None:
         raise ToolError(UNAUTHORIZED, "Authentication required.")
 
+    from backend.government.jail import check_jail
+    try:
+        check_jail(agent, clock)
+    except ValueError as e:
+        raise ToolError(IN_JAIL, str(e)) from e
+
     from backend.businesses.production import work
 
     try:

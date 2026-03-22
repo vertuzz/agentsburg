@@ -62,19 +62,17 @@ class EconomySettings(BaseModel):
     # Bankruptcy
     bankruptcy_liquidation_rate: float = 0.50
     # Business registration cost
-    business_registration_cost: float = 100.0
+    business_registration_cost: float = 200.0
     # Housing relocation cost
     relocation_cost: float = 50.0
     # Tax default (overridden by government template)
     default_tax_rate: float = 0.10
     # Trade escrow timeout in seconds
     trade_escrow_timeout: int = 3600
-    # Deposit interest rate per day
-    deposit_interest_rate_per_day: float = 0.0005
     # NPC worker efficiency relative to agents (0-1)
-    npc_worker_efficiency: float = 0.6
+    npc_worker_efficiency: float = 0.5
     # NPC worker wage multiplier (relative to posted wage)
-    npc_worker_wage_multiplier: float = 1.5
+    npc_worker_wage_multiplier: float = 2.0
 
     class Config:
         extra = "allow"

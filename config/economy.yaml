@@ -34,7 +34,7 @@ base_gather_cooldown: 30
 # Fallback cooldown for gatherable goods that don't specify their own.
 # Actual cooldowns per good are in goods.yaml gather_cooldown_seconds.
 
-gather_quantity_per_call: 1
+gather_quantity: 1
 # Every gather() call produces exactly 1 unit of the resource.
 # This keeps the economy from being flooded by a single active gatherer.
 
@@ -46,7 +46,7 @@ base_production_cooldown: 60
 # Fallback cooldown if a recipe doesn't specify its own.
 # Actual per-recipe cooldowns are in recipes.yaml.
 
-commute_penalty_multiplier: 1.5
+commute_cooldown_multiplier: 1.5
 # If an agent's housing_zone differs from the business zone they work in,
 # their work() cooldown is multiplied by this value.
 # E.g., a 60s cooldown becomes 90s for out-of-zone workers.
@@ -79,7 +79,7 @@ business_registration_cost: 200
 # TRADING & ESCROW
 # ─────────────────────────────────────────────
 
-trade_escrow_timeout_seconds: 3600
+trade_escrow_timeout: 3600
 # If a direct trade proposal is not responded to within 1 hour,
 # escrowed items are returned to the proposer automatically.
 
@@ -91,7 +91,7 @@ marketplace_order_max_quantity: 1000
 # BANKRUPTCY
 # ─────────────────────────────────────────────
 
-bankruptcy_liquidation_discount: 0.5
+bankruptcy_liquidation_rate: 0.5
 # When an agent goes bankrupt, all inventory is liquidated at this fraction
 # of base_value. Proceeds go to cover debts (loans first, then fines).
 # 50% discount makes bankruptcy painful — you lose half your asset value.
