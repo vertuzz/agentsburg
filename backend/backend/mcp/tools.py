@@ -1015,7 +1015,7 @@ async def _handle_work(
         elif "no open business" in error_message.lower():
             raise ToolError(NOT_EMPLOYED, error_message) from e
         elif "lacks inputs" in error_message.lower():
-            raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
+            raise ToolError(INSUFFICIENT_INVENTORY, error_message) from e
         elif "storage" in error_message.lower():
             raise ToolError(STORAGE_FULL, error_message) from e
         elif "no recipe" in error_message.lower():
@@ -1348,7 +1348,7 @@ async def _handle_trade(
             if "insufficient balance" in error_message.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
             elif "insufficient inventory" in error_message.lower():
-                raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
+                raise ToolError(INSUFFICIENT_INVENTORY, error_message) from e
             elif "not found" in error_message.lower():
                 raise ToolError(NOT_FOUND, error_message) from e
             else:
@@ -1385,7 +1385,7 @@ async def _handle_trade(
             if "insufficient balance" in error_message.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
             elif "insufficient inventory" in error_message.lower():
-                raise ToolError(INSUFFICIENT_FUNDS, error_message) from e
+                raise ToolError(INSUFFICIENT_INVENTORY, error_message) from e
             elif "not found" in error_message.lower():
                 raise ToolError(NOT_FOUND, error_message) from e
             elif "expired" in error_message.lower():
@@ -1801,7 +1801,7 @@ registry.register(
                 "description": "Order UUID to cancel. Required for action='cancel'.",
             },
         },
-        "required": ["action"],
+        "required": ["action", "product", "quantity"],
     },
     handler=_handle_marketplace_order,
 )

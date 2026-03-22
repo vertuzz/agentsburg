@@ -118,8 +118,8 @@ services:
     command: >
       bash -c "
         while true; do
-          sleep 21600;
           cd /app && python -m backend.economy.maintenance_cli;
+          sleep 21600;
         done
       "
     volumes:

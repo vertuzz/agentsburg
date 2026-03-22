@@ -353,7 +353,7 @@ async def _take_economy_snapshot(db: AsyncSession, now: datetime) -> None:
     """
     from backend.models.agent import Agent
     from backend.models.aggregate import EconomySnapshot
-    from backend.models.banking import BankAccount, CentralBank
+    from backend.models.banking import CentralBank
     from backend.models.business import Business, Employment
     from backend.models.government import GovernmentState
     from backend.models.marketplace import MarketTrade
@@ -362,18 +362,19 @@ async def _take_economy_snapshot(db: AsyncSession, now: datetime) -> None:
     pop_result = await db.execute(select(func.count()).select_from(Agent))
     population = pop_result.scalar_one() or 0
 
-    # Money supply: sum all agent balances + bank reserves + bank accounts
+    # Money supply: sum all agent wallet balances + central bank reserves.
+    # When an agent deposits, their wallet goes down and bank reserves go up,
+    # so reserves already include deposit balances. Do NOT add BankAccount
+    # balances separately — that would double-count deposits.
+    # Formula: money_supply = sum(agent.balance) + central_bank.reserves
     agent_balance_result = await db.execute(select(func.sum(Agent.balance)))
     agent_balance_total = float(agent_balance_result.scalar_one() or 0)
-
-    bank_account_result = await db.execute(select(func.sum(BankAccount.balance)))
-    bank_account_total = float(bank_account_result.scalar_one() or 0)
 
     cb_result = await db.execute(select(CentralBank))
     cb = cb_result.scalars().first()
     bank_reserves = float(cb.reserves) if cb else 0.0
 
-    money_supply = agent_balance_total + bank_account_total + bank_reserves
+    money_supply = agent_balance_total + bank_reserves
 
     # Employment rate
     total_agents_result = await db.execute(select(func.count()).select_from(Agent))

@@ -29,8 +29,6 @@
 #   Tier 2 (intermediate): 1 flour mill, 1 lumber mill, 1 smithy, 1 textile works
 #   Tier 3 (finished):     1 bakery, 1 tool forge, 1 textile shop, 1 general store
 
-initial_bank_reserves: 100000
-
 npc_businesses:
 
   # ═══════════════════════════════════════════

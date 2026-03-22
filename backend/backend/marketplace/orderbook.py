@@ -362,26 +362,10 @@ async def match_orders(
         )
         db.add(trade_record)
 
-        # --- Record transactions ---
-        # Buyer paid (funds were locked at placement, now settled at exec_price)
-        buyer_payment = exec_price * fill_qty
-        txn_buyer = Transaction(
-            type="marketplace",
-            from_agent_id=buyer.id,
-            to_agent_id=seller.id,
-            amount=buyer_payment,
-            metadata_json={
-                "good_slug": good_slug,
-                "quantity": fill_qty,
-                "price_per_unit": float(exec_price),
-                "side": "buy",
-                "order_id": str(buy_order.id),
-            },
-        )
-        db.add(txn_buyer)
-
-        # Seller received
-        txn_seller = Transaction(
+        # --- Record transaction ---
+        # One canonical transaction per fill: buyer pays seller.
+        # from=buyer, to=seller, amount=payment, type="marketplace"
+        txn = Transaction(
             type="marketplace",
             from_agent_id=buyer.id,
             to_agent_id=seller.id,
@@ -390,11 +374,11 @@ async def match_orders(
                 "good_slug": good_slug,
                 "quantity": fill_qty,
                 "price_per_unit": float(exec_price),
-                "side": "sell",
-                "order_id": str(sell_order.id),
+                "buy_order_id": str(buy_order.id),
+                "sell_order_id": str(sell_order.id),
             },
         )
-        db.add(txn_seller)
+        db.add(txn)
 
         # --- Update order quantities and statuses ---
         buy_order.quantity_filled += fill_qty

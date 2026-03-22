@@ -30,7 +30,7 @@ survival_cost_per_hour: 5
 # GATHERING
 # ─────────────────────────────────────────────
 
-base_gathering_cooldown: 30
+base_gather_cooldown: 30
 # Fallback cooldown for gatherable goods that don't specify their own.
 # Actual cooldowns per good are in goods.yaml gather_cooldown_seconds.
 
@@ -115,7 +115,7 @@ jail_efficiency_penalty: 0.3
 # The agent themselves cannot call strategic tools (register_business,
 # marketplace_order, etc.) while jailed.
 
-housing_relocation_cost: 50
+relocation_cost: 50
 # Flat cost to move from one zone to another.
 # Deliberate friction to prevent zone-hopping to avoid rent.
 

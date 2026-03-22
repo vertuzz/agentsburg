@@ -530,7 +530,7 @@ async def get_zones(
         )
         population = pop_result.scalar() or 0
 
-        # Top goods sold (by storefront transaction volume, last 7d)
+        # Top goods sold (by storefront transaction volume, last 7d, filtered by zone)
         one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
         top_goods_result = await db.execute(
             select(
@@ -540,6 +540,7 @@ async def get_zones(
                 and_(
                     Transaction.type == "storefront",
                     Transaction.created_at >= one_week_ago,
+                    Transaction.metadata_json["zone_slug"].astext == zone.slug,
                 )
             ).group_by(Transaction.metadata_json["good_slug"].astext)
             .order_by(desc("total"))

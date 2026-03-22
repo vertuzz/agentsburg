@@ -354,6 +354,7 @@ async def simulate_npc_businesses(
                 zone_id=spawn_zone.id,
                 storage_capacity=500,
                 is_npc=True,
+                default_recipe_slug=recipe.slug,
             )
             db.add(new_biz)
             await db.flush()
