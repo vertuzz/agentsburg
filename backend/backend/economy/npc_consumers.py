@@ -177,15 +177,22 @@ async def simulate_npc_purchases(
                 # No supply — demand vanishes, no carry-over
                 continue
 
-            # Calculate average price for demand elasticity
-            avg_price = sum(p for _, p, _ in selling_businesses) / len(selling_businesses)
+            # Apply price floor: treat prices below 30% of reference_price
+            # as ref_price * 0.3 for demand calculation (prevents predatory underpricing)
+            price_floor = reference_price * 0.3
+            floored_prices = [max(p, price_floor) for _, p, _ in selling_businesses]
+
+            # Calculate average price for demand elasticity (using floored prices)
+            avg_price = sum(floored_prices) / len(floored_prices)
             if avg_price <= 0:
                 avg_price = reference_price
 
             # Apply price elasticity to get effective demand
             # More than reference_price → demand drops; below → demand rises
+            # Cap amplification at 2.0x to prevent infinite demand from underpricing
             price_ratio = reference_price / avg_price
-            effective_demand = base_demand * (price_ratio ** elasticity)
+            amplification = min(price_ratio ** elasticity, 2.0)
+            effective_demand = base_demand * amplification
 
             # Scale by zone multipliers
             effective_demand *= foot_traffic * demand_multiplier
