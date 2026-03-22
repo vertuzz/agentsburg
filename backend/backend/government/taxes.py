@@ -101,20 +101,21 @@ async def collect_taxes(
     agents_result = await db.execute(select(Agent))
     agents = list(agents_result.scalars().all())
 
+    # --- Batch income summation (2 queries instead of 2*N) ---
+    # Pre-compute marketplace income and total income for ALL agents at once
+    marketplace_income_map = await _batch_sum_income(
+        db, MARKETPLACE_INCOME_TYPES, period_start, now
+    )
+    total_income_map = await _batch_sum_income(
+        db, TOTAL_INCOME_TYPES, period_start, now
+    )
+
     total_tax_collected = Decimal("0")
     records_created = 0
 
     for agent in agents:
-        # Sum marketplace income for this agent in the period
-        # (income = transactions where to_agent_id == agent.id AND type in MARKETPLACE_INCOME_TYPES)
-        marketplace_income = await _sum_agent_income(
-            db, agent.id, MARKETPLACE_INCOME_TYPES, period_start, now
-        )
-
-        # Sum total actual income (all income-generating txn types)
-        total_actual_income = await _sum_agent_income(
-            db, agent.id, TOTAL_INCOME_TYPES, period_start, now
-        )
+        marketplace_income = marketplace_income_map.get(agent.id, Decimal("0"))
+        total_actual_income = total_income_map.get(agent.id, Decimal("0"))
 
         discrepancy = max(Decimal("0"), total_actual_income - marketplace_income)
 
@@ -417,3 +418,36 @@ async def _sum_agent_income(
     )
     val = result.scalar_one()
     return Decimal(str(val)) if val else Decimal("0")
+
+
+async def _batch_sum_income(
+    db: AsyncSession,
+    income_types: frozenset,
+    period_start,
+    period_end,
+) -> dict:
+    """
+    Sum income for ALL agents in a single GROUP BY query.
+
+    Returns a dict mapping agent_id -> Decimal income total.
+    Agents with no income in the period are not included (default to 0).
+    """
+    from sqlalchemy import func as sqlfunc
+
+    result = await db.execute(
+        select(
+            Transaction.to_agent_id,
+            sqlfunc.coalesce(sqlfunc.sum(Transaction.amount), 0),
+        )
+        .where(
+            Transaction.to_agent_id.is_not(None),
+            Transaction.type.in_(list(income_types)),
+            Transaction.created_at >= period_start,
+            Transaction.created_at <= period_end,
+        )
+        .group_by(Transaction.to_agent_id)
+    )
+    return {
+        row[0]: Decimal(str(row[1])) if row[1] else Decimal("0")
+        for row in result.all()
+    }

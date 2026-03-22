@@ -29,8 +29,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class DatabaseSettings(BaseModel):
     url: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy"
-    pool_size: int = 10
-    max_overflow: int = 20
+    pool_size: int = 20
+    max_overflow: int = 40
     echo: bool = False
 
 
