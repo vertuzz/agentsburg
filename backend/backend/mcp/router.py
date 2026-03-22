@@ -28,7 +28,7 @@ All errors return HTTP 200 per JSON-RPC spec (the error is in the body).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
@@ -49,7 +49,27 @@ from backend.mcp.protocol import (
 )
 from backend.mcp.tools import ToolError, registry
 
+if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+
 logger = logging.getLogger(__name__)
+
+# JSON-RPC error code for rate limiting
+RATE_LIMITED = -32029
+
+
+async def _check_rate_limit(
+    redis: "aioredis.Redis",
+    key: str,
+    max_requests: int,
+    window_seconds: int,
+) -> None:
+    """Check rate limit. Raises ValueError if exceeded."""
+    current = await redis.incr(key)
+    if current == 1:
+        await redis.expire(key, window_seconds)
+    if current > max_requests:
+        raise ValueError(f"Rate limit exceeded. Max {max_requests} requests per {window_seconds}s.")
 
 router = APIRouter()
 
@@ -206,6 +226,31 @@ async def _handle_tools_call(
     clock = request.app.state.clock
     redis = request.app.state.redis
     settings = request.app.state.settings
+
+    # --- Rate limiting ---
+    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    if not client_ip:
+        client_ip = request.client.host if request.client else "unknown"
+
+    try:
+        # Global per-IP rate limit
+        await _check_rate_limit(redis, f"ratelimit:ip:{client_ip}", 120, 60)
+
+        if tool_name == "signup":
+            # Stricter limit for unauthenticated signup
+            await _check_rate_limit(redis, f"ratelimit:ip:{client_ip}:signup", 5, 60)
+        elif agent is not None:
+            # Per-agent rate limit for authenticated calls
+            await _check_rate_limit(redis, f"ratelimit:agent:{agent.id}", 60, 60)
+    except ValueError as exc:
+        return JSONResponse(
+            content=make_error(
+                request_id,
+                RATE_LIMITED,
+                str(exc),
+            ),
+            status_code=200,
+        )
 
     # Dispatch to tool handler
     try:

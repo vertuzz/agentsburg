@@ -27,6 +27,7 @@ Adding a new tool:
 from __future__ import annotations
 
 import json as _json
+import re
 from typing import TYPE_CHECKING, Any, Callable
 
 from sqlalchemy import select
@@ -213,6 +214,10 @@ async def _handle_signup(
         raise ToolError("INVALID_PARAMS", "Agent name must be at least 2 characters")
     if len(name) > 32:
         raise ToolError("INVALID_PARAMS", "Agent name must be at most 32 characters")
+    if any(c in name for c in "<>&") or any(ord(c) < 32 for c in name):
+        raise ToolError(INVALID_PARAMS, "Agent name contains invalid characters (no <, >, &, or control chars)")
+    if not re.match(r"^[\w\s\-\.\']+$", name):
+        raise ToolError(INVALID_PARAMS, "Agent name may only contain letters, numbers, spaces, hyphens, dots, and apostrophes")
 
     model = params.get("model") or None
     if model is not None and not isinstance(model, str):
@@ -477,6 +482,22 @@ async def _handle_gather(
             "Parameter 'resource' is required. Example: gather(resource='berries')",
         )
 
+    # Global gather cooldown (prevents interleaved gathering exploit)
+    global_cooldown_key = f"cooldown:gather_global:{agent.id}"
+    last_gather = await redis.get(global_cooldown_key)
+    if last_gather:
+        from datetime import datetime, timezone
+        try:
+            last_dt = datetime.fromisoformat(last_gather if isinstance(last_gather, str) else last_gather.decode())
+            if last_dt.tzinfo is None:
+                last_dt = last_dt.replace(tzinfo=timezone.utc)
+            now = clock.now()
+            if now < last_dt:
+                remaining = int((last_dt - now).total_seconds())
+                raise ToolError(COOLDOWN_ACTIVE, f"Global gather cooldown. Wait {remaining}s.")
+        except (ValueError, TypeError):
+            pass  # Corrupted key, allow
+
     from backend.agents.gathering import gather
 
     try:
@@ -492,6 +513,11 @@ async def _handle_gather(
             raise ToolError(INVALID_PARAMS, error_message) from e
         else:
             raise ToolError(INVALID_PARAMS, error_message) from e
+
+    # Set global gather cooldown after successful gather
+    from datetime import timedelta
+    global_expire = clock.now() + timedelta(seconds=5)
+    await redis.set(global_cooldown_key, global_expire.isoformat(), ex=30)
 
     from backend.mcp.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
@@ -541,6 +567,16 @@ async def _handle_register_business(
     name = params.get("name")
     if not name or not isinstance(name, str):
         raise ToolError(INVALID_PARAMS, "Parameter 'name' is required (business display name)")
+
+    name = name.strip()
+    if len(name) < 2:
+        raise ToolError(INVALID_PARAMS, "Business name must be at least 2 characters")
+    if len(name) > 64:
+        raise ToolError(INVALID_PARAMS, "Business name must be at most 64 characters")
+    if any(c in name for c in "<>&") or any(ord(c) < 32 for c in name):
+        raise ToolError(INVALID_PARAMS, "Business name contains invalid characters (no <, >, &, or control chars)")
+    if not re.match(r"^[\w\s\-\.\']+$", name):
+        raise ToolError(INVALID_PARAMS, "Business name may only contain letters, numbers, spaces, hyphens, dots, and apostrophes")
 
     type_slug = params.get("type")
     if not type_slug or not isinstance(type_slug, str):
@@ -683,6 +719,9 @@ async def _handle_set_prices(
     except (TypeError, ValueError):
         raise ToolError(INVALID_PARAMS, "Parameter 'price' must be a number")
 
+    if price <= 0:
+        raise ToolError(INVALID_PARAMS, "Parameter 'price' must be greater than 0")
+
     import uuid as _uuid
     try:
         business_id = _uuid.UUID(business_id_str)
@@ -770,6 +809,9 @@ async def _handle_manage_employees(
             wage = float(raw_wage)
         except (TypeError, ValueError):
             raise ToolError(INVALID_PARAMS, "Parameter 'wage' must be a number")
+
+        if wage <= 0:
+            raise ToolError(INVALID_PARAMS, "Parameter 'wage' must be greater than 0")
 
         product = params.get("product")
         if not product or not isinstance(product, str):
@@ -1155,6 +1197,8 @@ async def _handle_marketplace_order(
             raise ToolError(INVALID_PARAMS, "Parameter 'price' must be a number")
         if price < 0:
             raise ToolError(INVALID_PARAMS, "Price cannot be negative")
+        if price > 1_000_000:
+            raise ToolError(INVALID_PARAMS, "Price cannot exceed 1,000,000")
 
     try:
         result = await place_order(db, agent, product.strip(), action, quantity, price, clock, settings)
@@ -1911,6 +1955,9 @@ async def _handle_bank(
         amount = _Decimal(str(raw_amount))
     except Exception:
         raise ToolError(INVALID_PARAMS, "Parameter 'amount' must be a number")
+
+    if amount <= 0:
+        raise ToolError(INVALID_PARAMS, "Parameter 'amount' must be greater than 0")
 
     if action == "deposit":
         try:
