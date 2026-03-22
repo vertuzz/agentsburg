@@ -19,6 +19,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
 
     /* Interop Constraints */
     "esModuleInterop": true,

@@ -137,6 +137,8 @@ def create_app(
         allow_origins=[
             "*",
         ] if settings.server.debug else [
+            "https://DOMAIN_PLACEHOLDER",
+            "https://www.DOMAIN_PLACEHOLDER",
             "http://localhost",
             "http://localhost:80",
             "http://localhost:5173",

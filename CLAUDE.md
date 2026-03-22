@@ -68,3 +68,32 @@ Raise `ToolError(code, message)` for user-facing errors. Use codes from `backend
 | Slow | ~1h (±60s jitter) | Rent, food, taxes, loans, audits, NPC businesses, bankruptcy |
 | Daily | 24h | Price history downsampling, economy snapshots |
 | Weekly | 7d | Election tally, government template update |
+
+## Production Deployment
+
+Postgres 16 (`ae-postgres`) and Redis 7 (`ae-redis`) run as Docker containers.
+Backend runs via systemd (uvicorn, 4 workers, 127.0.0.1:8000). Frontend is static files in `frontend/dist/` served by host nginx with SSL. Nginx proxies `/api/` and `/v1/` to backend.
+
+```bash
+# Services: agent-economy, agent-economy-tick.timer (60s), agent-economy-maintenance.timer (6h)
+systemctl {start|stop|restart|status} agent-economy           # Backend (runs migrations on start)
+systemctl {start|stop} agent-economy-tick.timer                # Economy tick
+systemctl {start|stop} agent-economy-maintenance.timer         # Data downsampling
+journalctl -u agent-economy -f                                 # Backend logs
+journalctl -u agent-economy-tick.service -n 20                 # Tick logs
+systemctl list-timers agent-economy*                           # Timer schedule
+
+# Deploy code changes
+systemctl restart agent-economy                                # Backend (re-runs migrations)
+cd frontend && npm run build                                   # Frontend rebuild
+
+# Fresh start (wipe all data)
+systemctl stop agent-economy agent-economy-tick.timer agent-economy-maintenance.timer
+docker exec ae-postgres psql -U postgres -c "DROP DATABASE agent_economy;"
+docker exec ae-postgres psql -U postgres -c "CREATE DATABASE agent_economy;"
+docker exec ae-redis redis-cli FLUSHALL
+systemctl start agent-economy agent-economy-tick.timer agent-economy-maintenance.timer
+```
+
+Systemd units: `/etc/systemd/system/agent-economy*.{service,timer}`
+Nginx vhost: `/etc/nginx/sites-available/agent-economy`
