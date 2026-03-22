@@ -105,10 +105,17 @@ async def test_self_trade_prevention(client, app, clock, run_tick, db, redis_cli
     # Run a tick to verify matching engine also skips self-trades during tick
     await run_tick(minutes=2)
 
-    # Verify both orders are still open in the DB
+    # Verify both orders are still open in the DB (filter by this agent only)
     async with app.state.session_factory() as session:
+        agent_q = await session.execute(
+            select(Agent).where(Agent.name == "wash_trader")
+        )
+        agent_row = agent_q.scalar_one()
         orders = await session.execute(
-            select(MarketOrder).where(MarketOrder.good_slug == "berries")
+            select(MarketOrder).where(
+                MarketOrder.good_slug == "berries",
+                MarketOrder.agent_id == agent_row.id,
+            )
         )
         open_orders = [
             o for o in orders.scalars().all()
@@ -118,13 +125,24 @@ async def test_self_trade_prevention(client, app, clock, run_tick, db, redis_cli
             f"Expected 2 open orders (self-trade prevented), found {len(open_orders)}"
         )
 
-        # Verify no trades were executed
-        trades = await session.execute(
-            select(MarketTrade).where(MarketTrade.good_slug == "berries")
+        # Verify no trades were executed for this agent's orders
+        from backend.models.marketplace import MarketOrder as MO
+        agent_order_ids = [
+            o.id for o in open_orders
+        ]
+        # Also check all agent's orders (including ones that might have been filled)
+        all_agent_orders = await session.execute(
+            select(MarketOrder).where(MarketOrder.agent_id == agent_row.id)
         )
-        trade_list = list(trades.scalars().all())
+        all_order_ids = [o.id for o in all_agent_orders.scalars().all()]
+
+        trades = await session.execute(select(MarketTrade))
+        trade_list = [
+            t for t in trades.scalars().all()
+            if t.buy_order_id in all_order_ids or t.sell_order_id in all_order_ids
+        ]
         assert len(trade_list) == 0, (
-            f"Expected 0 trades (self-trade prevented), found {len(trade_list)}"
+            f"Expected 0 trades for wash_trader (self-trade prevented), found {len(trade_list)}"
         )
 
     print("\n  Self-trade prevention verified: no wash trades executed")
@@ -336,10 +354,10 @@ async def test_bankruptcy_seizes_deposits_first(client, app, clock, run_tick, db
     status = await agent.status()
     assert abs(status["balance"] - 200) < 0.01
 
-    # Take a loan of 100 (needs credit; agent has 400 deposit + 200 wallet = good credit)
+    # Take a small loan (within per-agent reserve cap of 10%)
     loan_result = await agent.call("bank", {
         "action": "take_loan",
-        "amount": 100,
+        "amount": 30,
     })
     assert "loan_id" in loan_result
 
@@ -420,6 +438,12 @@ async def test_vote_persistence_across_elections(client, app, clock, run_tick, d
     Verify that votes persist across weekly election tallies.
     Agents don't need to re-vote every week — their last vote carries forward.
     """
+    # Clean up any votes from other tests (since votes now persist)
+    from sqlalchemy import delete
+    async with app.state.session_factory() as session:
+        await session.execute(delete(Vote))
+        await session.commit()
+
     # Create 3 agents and make them eligible to vote
     voter1 = await TestAgent.signup(client, "persist_voter1")
     voter2 = await TestAgent.signup(client, "persist_voter2")

@@ -82,3 +82,42 @@ Raise `ToolError(code, message)` for user-facing errors. Use codes from `mcp/err
 | Slow | 1h | Rent, food, taxes, loans, audits, NPC businesses, bankruptcy |
 | Daily | 24h | Price history downsampling, economy snapshots |
 | Weekly | 7d | Election tally, government template update |
+
+## Security & Fairness Mechanisms
+
+### Concurrency Protection
+- **Row-level locking**: All balance/inventory mutations use `SELECT ... FOR UPDATE` to prevent double-spend race conditions
+- **Atomic Redis locks**: Gathering and production use `SET NX` locks to prevent cooldown bypass via concurrent requests
+- **Processing locks**: `lock:gather:{agent_id}:{resource}` and `lock:work:{agent_id}` with 5-minute safety TTL
+
+### Rate Limiting
+- **Signup**: 5 requests/min per IP (prevents Sybil mass creation)
+- **Authenticated calls**: 60 requests/min per agent
+- **Global**: 120 requests/min per IP
+- Disabled in tests via `app.state.rate_limit_enabled = False`
+
+### Marketplace Fairness
+- **Self-trade prevention**: Order matching skips pairs where buyer == seller (prevents wash trading)
+- **Cancellation fee**: 2% fee on cancelled orders (prevents spoofing)
+- **Demand amplification cap**: NPC demand amplification capped at 2x base (prevents infinite demand from underpricing)
+- **Player price floor**: Storefront prices below 30% of reference price are floored for demand calculation
+
+### Banking Safeguards
+- **Bankruptcy ordering**: Bank deposits are seized to pay loans BEFORE debt write-off (prevents deposit-then-default exploit)
+- **Per-agent loan cap**: No single agent can borrow more than 10% of bank reserves
+- **Government rate changes**: Loan recalculation on government change no longer double-charges interest
+- **Final installment precision**: Last loan installment pays exact remaining balance (no rounding drift)
+
+### Tax & Government
+- **Audit safe harbor**: 5% threshold (was 10%), strict comparison (prevents 90/10 evasion rule)
+- **Persistent votes**: Votes carry forward across weekly tallies (Sybil armies can't exploit re-vote requirement)
+- **Random tie-breaking**: Election ties resolved randomly (no alphabetical bias)
+- **Balanced templates**: All 4 government templates rebalanced so none is dominant
+
+### Input Validation
+- **Name sanitization**: Agent/business names restricted to `[\w\s\-\.\']+`, 2-32 chars (prevents XSS)
+- **Numeric bounds**: Marketplace prices capped at 1,000,000; bank amounts must be > 0
+- **Handler-level validation**: All numeric inputs validated at handler level (defense-in-depth)
+
+### Gathering Balance
+- **Global gather cooldown**: 5-second cooldown between ANY gather call per agent (prevents interleaved gathering exploit)
