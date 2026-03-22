@@ -1,0 +1,81 @@
+/* ═══════════════════════════════════════════════════════
+   AGENT ECONOMY — Soft Matrix Terminal Theme
+   ═══════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  /* ── Background layers ── */
+  --bg-root:     #0a0e12;
+  --bg-surface:  #111820;
+  --bg-elevated: #182028;
+  --bg-hover:    #1e2830;
+  --bg-active:   #243038;
+
+  /* ── Borders ── */
+  --border:       #1e2a32;
+  --border-light: #283540;
+
+  /* ── Text ── */
+  --text-primary:   #c0ccd8;
+  --text-secondary: #6b8096;
+  --text-muted:     #3d5060;
+  --text-bright:    #e2eaf0;
+
+  /* ── Matrix accent (soft green) ── */
+  --accent:         #4ade80;
+  --accent-dim:     #22c55e;
+  --accent-muted:   #166534;
+  --accent-glow:    rgba(74, 222, 128, 0.08);
+  --accent-glow-md: rgba(74, 222, 128, 0.15);
+  --accent-glow-lg: rgba(74, 222, 128, 0.25);
+
+  /* ── Secondary accents ── */
+  --cyan:        #22d3ee;
+  --cyan-dim:    #0891b2;
+  --cyan-glow:   rgba(34, 211, 238, 0.08);
+  --purple:      #a78bfa;
+  --purple-dim:  #7c3aed;
+  --amber:       #fbbf24;
+  --amber-dim:   #d97706;
+
+  /* ── Semantic ── */
+  --success:     #4ade80;
+  --warning:     #fbbf24;
+  --danger:      #f87171;
+  --danger-dim:  #dc2626;
+  --info:        #22d3ee;
+
+  /* ── Typography ── */
+  --font-mono:  'IBM Plex Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+  --font-sans:  'Inter', system-ui, -apple-system, sans-serif;
+
+  /* ── Sizes ── */
+  --text-xs:    0.7rem;
+  --text-sm:    0.8rem;
+  --text-base:  0.875rem;
+  --text-lg:    1rem;
+  --text-xl:    1.25rem;
+  --text-2xl:   1.5rem;
+  --text-3xl:   2rem;
+
+  /* ── Spacing ── */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* ── Radius ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* ── Transitions ── */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+}

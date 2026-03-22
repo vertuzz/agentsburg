@@ -1,324 +1,188 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { api, startPolling } from "../api/client";
-import type { MarketResponse } from "../types";
-import PriceChart from "../components/PriceChart";
+import { useParams, Link } from 'react-router-dom';
+import {
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  CartesianGrid, BarChart, Bar,
+} from 'recharts';
+import { useMarketGood } from '../api';
+import {
+  Loading, ErrorMsg, PageHeader, Section, Card, StatCard, Grid,
+  fmt, fmtInt, Badge, DetailGrid, KV,
+} from '../components/shared';
 
 export default function MarketDetail() {
   const { good } = useParams<{ good: string }>();
-  const [market, setMarket] = useState<MarketResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const { data, isLoading, error } = useMarketGood(good!);
 
-  const loadMarket = async () => {
-    if (!good) return;
-    try {
-      const data = await api.getMarket(good);
-      setMarket(data);
-      setLastUpdated(new Date());
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load market data");
-    }
-  };
+  if (isLoading) return <Loading text={`Loading ${good} market data`} />;
+  if (error) return <ErrorMsg message={(error as Error).message} />;
+  const d = data!;
 
-  useEffect(() => {
-    setMarket(null);
-    setError(null);
-    return startPolling(loadMarket, 15_000);
-  }, [good]);
-
-  if (error) {
-    return (
-      <div className="page">
-        <div className="container">
-          <div className="mb-2">
-            <Link to="/">← Back to Dashboard</Link>
-          </div>
-          <div className="error-box">{error}</div>
-        </div>
-      </div>
-    );
-  }
-
-  const stats = market?.stats_24h;
-  const orderBook = market?.order_book;
+  const priceData = d.price_history.map(p => ({
+    time: new Date(p.executed_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    price: p.price,
+    qty: p.quantity,
+  })).reverse();
 
   return (
-    <div className="page">
-      <div className="container">
-        <div className="flex items-center gap-2 mb-2">
-          <Link to="/" style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-            ← Dashboard
-          </Link>
-          <span style={{ color: "var(--border)" }}>/</span>
-          <span style={{ color: "var(--text-secondary)" }}>Markets</span>
-          <span style={{ color: "var(--border)" }}>/</span>
-          <span style={{ fontWeight: 600 }}>{good}</span>
-        </div>
+    <div className="animate-fade-in">
+      <PageHeader
+        title={d.good.name}
+        subtitle={`Tier ${d.good.tier} · Base value: ${fmt(d.good.base_value)} · ${d.good.is_gatherable ? 'Gatherable' : 'Crafted'}`}
+        right={<Link to="/market" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>← Back to market</Link>}
+      />
 
-        {/* Header */}
-        <div
-          className="flex justify-between items-center"
-          style={{ marginBottom: "1.5rem" }}
-        >
-          <div>
-            <h2>{market?.good.name ?? good}</h2>
-            <div style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
-              {market?.good.slug} · Tier {market?.good.tier ?? "—"}
-              {market?.good.gatherable && (
-                <span
-                  className="badge badge-green"
-                  style={{ marginLeft: "0.5rem" }}
-                >
-                  Gatherable
-                </span>
-              )}
-            </div>
-          </div>
-          {lastUpdated && (
-            <span style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              Updated {lastUpdated.toLocaleTimeString()}
-            </span>
-          )}
-        </div>
+      {/* ── 24h Stats ── */}
+      <Section title="24-Hour Statistics">
+        <Grid cols={5}>
+          <StatCard label="Volume" value={fmt(d.stats_24h.volume_value)} sub={`${fmtInt(d.stats_24h.volume_qty)} units`} />
+          <StatCard label="High" value={fmt(d.stats_24h.high)} color="var(--accent)" />
+          <StatCard label="Low" value={fmt(d.stats_24h.low)} color="var(--danger)" />
+          <StatCard label="Average" value={fmt(d.stats_24h.average)} color="var(--cyan)" />
+          <StatCard label="Spread" value={
+            d.order_book.best_buy != null && d.order_book.best_sell != null
+              ? fmt(d.order_book.best_sell - d.order_book.best_buy)
+              : '—'
+          } sub={`Bid: ${d.order_book.best_buy != null ? fmt(d.order_book.best_buy) : '—'} / Ask: ${d.order_book.best_sell != null ? fmt(d.order_book.best_sell) : '—'}`} />
+        </Grid>
+      </Section>
 
-        {/* 24h stats row */}
-        <div className="grid-4 mb-3">
-          <div className="stats-card">
-            <div className="stat-label">24h Volume (units)</div>
-            <div className="stat-value">
-              {stats ? stats.volume_qty.toLocaleString() : "—"}
-            </div>
-          </div>
-          <div className="stats-card">
-            <div className="stat-label">24h High</div>
-            <div className="stat-value" style={{ color: "var(--accent-green)" }}>
-              {stats?.high != null ? `$${stats.high.toFixed(2)}` : "—"}
-            </div>
-          </div>
-          <div className="stats-card">
-            <div className="stat-label">24h Low</div>
-            <div className="stat-value" style={{ color: "var(--accent-red)" }}>
-              {stats?.low != null ? `$${stats.low.toFixed(2)}` : "—"}
-            </div>
-          </div>
-          <div className="stats-card">
-            <div className="stat-label">24h Average</div>
-            <div className="stat-value">
-              {stats?.average != null ? `$${stats.average.toFixed(2)}` : "—"}
-            </div>
-            <div className="stat-sub">
-              ${stats?.volume_value.toFixed(2) ?? "0"} total value
-            </div>
-          </div>
-        </div>
+      {/* ── Price chart ── */}
+      {priceData.length > 0 && (
+        <Section title="Price History">
+          <Card>
+            <ResponsiveContainer width="100%" height={260}>
+              <AreaChart data={priceData}>
+                <defs>
+                  <linearGradient id="priceGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#4ade80" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#4ade80" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="time" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} domain={['dataMin', 'dataMax']} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Area type="stepAfter" dataKey="price" stroke="#4ade80" strokeWidth={2} fill="url(#priceGrad)" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Card>
+        </Section>
+      )}
 
-        {/* Price chart */}
-        <div className="mb-3">
-          {market ? (
-            <PriceChart
-              data={market.price_history}
-              title="Price History (last 100 trades)"
-              height={260}
-            />
-          ) : (
-            <div className="chart-wrapper">
-              <div className="loading-box">Loading chart…</div>
+      {/* ── Volume chart ── */}
+      {priceData.length > 0 && (
+        <Section title="Trade Volume">
+          <Card>
+            <ResponsiveContainer width="100%" height={120}>
+              <BarChart data={priceData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="time" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="qty" fill="#22d3ee" radius={[2, 2, 0, 0]} opacity={0.7} />
+              </BarChart>
+            </ResponsiveContainer>
+          </Card>
+        </Section>
+      )}
+
+      {/* ── Order Book ── */}
+      <Section title="Order Book">
+        <DetailGrid>
+          {/* Buy orders */}
+          <Card>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+              Buy Orders (Bids)
             </div>
-          )}
-        </div>
-
-        {/* Order book + recent trades */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: "1.5rem",
-          }}
-        >
-          {/* Order book */}
-          <div>
-            <div className="section-header">
-              <h3 className="section-title">Order Book</h3>
-              {orderBook && (
-                <div style={{ fontSize: "0.82rem", color: "var(--text-muted)" }}>
-                  Best bid:{" "}
-                  <span style={{ color: "var(--accent-green)" }}>
-                    {orderBook.best_buy != null
-                      ? `$${orderBook.best_buy.toFixed(2)}`
-                      : "—"}
-                  </span>
-                  {" · "}
-                  Best ask:{" "}
-                  <span style={{ color: "var(--accent-red)" }}>
-                    {orderBook.best_sell != null
-                      ? `$${orderBook.best_sell.toFixed(2)}`
-                      : "—"}
-                  </span>
-                </div>
-              )}
-            </div>
-            {orderBook ? (
-              <div className="card" style={{ padding: "0" }}>
-                {/* Buy side */}
-                <div style={{ padding: "0.75rem 1rem" }}>
-                  <div
-                    className="order-book-header buy"
-                    style={{ marginBottom: "0.5rem" }}
-                  >
-                    Bids (Buy Orders)
-                  </div>
-                  {orderBook.buy.length === 0 ? (
-                    <div
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "0.85rem",
-                        padding: "0.5rem 0",
-                      }}
-                    >
-                      No buy orders
-                    </div>
-                  ) : (
-                    <div>
-                      <div
-                        className="order-row"
-                        style={{
-                          fontSize: "0.72rem",
-                          color: "var(--text-muted)",
-                          marginBottom: "0.25rem",
-                        }}
-                      >
-                        <span>Price</span>
-                        <span className="text-right">Quantity</span>
-                      </div>
-                      {orderBook.buy.map((level, i) => (
-                        <div key={i} className="order-row">
-                          <span style={{ color: "var(--accent-green)" }}>
-                            ${level.price.toFixed(2)}
-                          </span>
-                          <span className="text-right">{level.quantity}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div
-                  style={{ borderTop: "1px solid var(--border)", height: 1 }}
-                />
-
-                {/* Sell side */}
-                <div style={{ padding: "0.75rem 1rem" }}>
-                  <div
-                    className="order-book-header sell"
-                    style={{ marginBottom: "0.5rem" }}
-                  >
-                    Asks (Sell Orders)
-                  </div>
-                  {orderBook.sell.length === 0 ? (
-                    <div
-                      style={{
-                        color: "var(--text-muted)",
-                        fontSize: "0.85rem",
-                        padding: "0.5rem 0",
-                      }}
-                    >
-                      No sell orders
-                    </div>
-                  ) : (
-                    <div>
-                      <div
-                        className="order-row"
-                        style={{
-                          fontSize: "0.72rem",
-                          color: "var(--text-muted)",
-                          marginBottom: "0.25rem",
-                        }}
-                      >
-                        <span>Price</span>
-                        <span className="text-right">Quantity</span>
-                      </div>
-                      {orderBook.sell.map((level, i) => (
-                        <div key={i} className="order-row">
-                          <span style={{ color: "var(--accent-red)" }}>
-                            ${level.price.toFixed(2)}
-                          </span>
-                          <span className="text-right">{level.quantity}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
+            {d.order_book.buy.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>No buy orders</div>
             ) : (
-              <div className="loading-box">Loading order book…</div>
-            )}
-          </div>
-
-          {/* Recent trades */}
-          <div>
-            <div className="section-header">
-              <h3 className="section-title">Recent Trades</h3>
-            </div>
-            {market ? (
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th className="text-right">Price</th>
-                      <th className="text-right">Qty</th>
-                      <th>Time</th>
+              <table>
+                <thead>
+                  <tr>
+                    <th style={obTh}>Price</th>
+                    <th style={{ ...obTh, textAlign: 'right' }}>Quantity</th>
+                    <th style={{ ...obTh, textAlign: 'right' }}>Orders</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.order_book.buy.map((level, i) => (
+                    <tr key={i}>
+                      <td style={{ ...obTd, color: 'var(--accent)' }}>{fmt(level.price)}</td>
+                      <td style={{ ...obTd, textAlign: 'right' }}>{fmtInt(level.quantity)}</td>
+                      <td style={{ ...obTd, textAlign: 'right', color: 'var(--text-muted)' }}>{level.order_count}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {[...market.price_history].reverse().slice(0, 30).map(
-                      (trade, i) => (
-                        <tr key={i}>
-                          <td
-                            className="text-right font-mono"
-                            style={{ color: "var(--accent-blue)" }}
-                          >
-                            ${trade.price.toFixed(2)}
-                          </td>
-                          <td className="text-right font-mono">
-                            {trade.quantity}
-                          </td>
-                          <td
-                            style={{
-                              fontSize: "0.8rem",
-                              color: "var(--text-muted)",
-                            }}
-                          >
-                            {new Date(trade.executed_at).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                              second: "2-digit",
-                            })}
-                          </td>
-                        </tr>
-                      ),
-                    )}
-                    {market.price_history.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={3}
-                          className="text-center"
-                          style={{ color: "var(--text-muted)", padding: "2rem" }}
-                        >
-                          No trades yet
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="loading-box">Loading trades…</div>
+                  ))}
+                </tbody>
+              </table>
             )}
-          </div>
-        </div>
-      </div>
+          </Card>
+
+          {/* Sell orders */}
+          <Card>
+            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--danger)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+              Sell Orders (Asks)
+            </div>
+            {d.order_book.sell.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>No sell orders</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th style={obTh}>Price</th>
+                    <th style={{ ...obTh, textAlign: 'right' }}>Quantity</th>
+                    <th style={{ ...obTh, textAlign: 'right' }}>Orders</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.order_book.sell.map((level, i) => (
+                    <tr key={i}>
+                      <td style={{ ...obTd, color: 'var(--danger)' }}>{fmt(level.price)}</td>
+                      <td style={{ ...obTd, textAlign: 'right' }}>{fmtInt(level.quantity)}</td>
+                      <td style={{ ...obTd, textAlign: 'right', color: 'var(--text-muted)' }}>{level.order_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </Card>
+        </DetailGrid>
+      </Section>
+
+      {/* ── Good properties ── */}
+      <Section title="Properties">
+        <Card style={{ maxWidth: 400 }}>
+          <KV label="Slug">{d.good.slug}</KV>
+          <KV label="Tier"><Badge color={d.good.tier === 1 ? 'var(--text-secondary)' : d.good.tier === 2 ? 'var(--cyan)' : 'var(--amber)'}>{d.good.tier}</Badge></KV>
+          <KV label="Base Value">{fmt(d.good.base_value)}</KV>
+          <KV label="Storage/Unit">{d.good.storage_per_unit}</KV>
+          <KV label="Gatherable">{d.good.is_gatherable ? 'Yes' : 'No'}</KV>
+        </Card>
+      </Section>
     </div>
   );
 }
+
+const tooltipStyle = {
+  background: 'var(--bg-elevated)',
+  border: '1px solid var(--border)',
+  borderRadius: 4,
+  fontSize: '0.75rem',
+  fontFamily: 'var(--font-mono)',
+};
+
+const obTh: React.CSSProperties = {
+  padding: '6px 0',
+  fontSize: 'var(--text-xs)',
+  fontWeight: 500,
+  color: 'var(--text-muted)',
+  borderBottom: '1px solid var(--border)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+};
+
+const obTd: React.CSSProperties = {
+  padding: '6px 0',
+  fontSize: 'var(--text-sm)',
+  borderBottom: '1px solid var(--border)',
+};

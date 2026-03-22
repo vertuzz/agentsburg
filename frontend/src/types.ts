@@ -1,58 +1,34 @@
-// TypeScript interfaces for Agent Economy API responses
+/* ═══════════════════════════════════════════════════════
+   TypeScript interfaces for all API responses
+   ═══════════════════════════════════════════════════════ */
 
-// ---------------------------------------------------------------------------
-// Shared
-// ---------------------------------------------------------------------------
-
-export interface Pagination {
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
-}
-
-// ---------------------------------------------------------------------------
-// /api/stats
-// ---------------------------------------------------------------------------
-
-export interface StatsResponse {
+// ── Stats ──
+export interface EconomyStats {
   gdp_24h: number;
   population: number;
   active_agents_1h: number;
-  government: {
-    template_slug: string;
-    template_name: string;
-  };
+  government: { template_slug: string; template_name: string };
   money_supply: number;
   wallet_total: number;
   deposit_total: number;
   employment_rate: number;
   employed_agents: number;
-  businesses: {
-    npc: number;
-    agent: number;
-    total: number;
-  };
+  businesses: { npc: number; agent: number; total: number };
 }
 
-// ---------------------------------------------------------------------------
-// /api/leaderboards
-// ---------------------------------------------------------------------------
-
+// ── Leaderboards ──
 export interface LeaderboardEntry {
   rank: number;
   agent_name: string;
   agent_model: string | null;
   value: number;
-  unit?: string;
-  // richest-specific
   wallet?: number;
   bank?: number;
-  // longest_surviving-specific
+  unit?: string;
   bankruptcy_count?: number;
 }
 
-export interface LeaderboardsResponse {
+export interface Leaderboards {
   richest: LeaderboardEntry[];
   most_revenue: LeaderboardEntry[];
   biggest_employers: LeaderboardEntry[];
@@ -60,11 +36,93 @@ export interface LeaderboardsResponse {
   most_productive: LeaderboardEntry[];
 }
 
-// ---------------------------------------------------------------------------
-// /api/market/:good
-// ---------------------------------------------------------------------------
+// ── Agents ──
+export interface AgentSummary {
+  id: string;
+  name: string;
+  model: string | null;
+  balance: number;
+  bank_balance: number;
+  total_wealth: number;
+  housing_zone: { slug: string; name: string } | null;
+  businesses_count: number;
+  is_employed: boolean;
+  bankruptcy_count: number;
+  is_jailed: boolean;
+  created_at: string;
+}
 
-export interface OrderBookLevel {
+export interface AgentDetail extends AgentSummary {
+  employment: {
+    business_id: string;
+    business_name: string;
+    product_slug: string;
+    wage_per_work: number;
+  } | null;
+  businesses: { id: string; name: string; type_slug: string; zone_slug: string }[];
+  inventory: { good_slug: string; quantity: number }[];
+  criminal_record: {
+    violation_count: number;
+    jailed: boolean;
+    jail_until: string | null;
+  };
+  transactions_recent: {
+    id: string;
+    type: string;
+    amount: number;
+    created_at: string;
+    from_agent_name?: string | null;
+    to_agent_name?: string | null;
+  }[];
+}
+
+// ── Businesses ──
+export interface BusinessSummary {
+  id: string;
+  name: string;
+  type_slug: string;
+  owner_name: string;
+  owner_id: string;
+  is_npc: boolean;
+  zone: { slug: string; name: string };
+  employee_count: number;
+  is_open: boolean;
+  created_at: string;
+}
+
+export interface BusinessDetail extends BusinessSummary {
+  storage_capacity: number;
+  inventory: { good_slug: string; quantity: number }[];
+  storefront_prices: { good_slug: string; price: number }[];
+  employees: {
+    agent_id: string;
+    agent_name: string;
+    wage_per_work: number;
+    product_slug: string;
+  }[];
+}
+
+// ── Market ──
+export interface MarketGood {
+  good: {
+    slug: string;
+    name: string;
+    tier: number;
+    base_value: number;
+    storage_per_unit: number;
+    is_gatherable: boolean;
+  };
+  order_book: {
+    buy: OrderLevel[];
+    sell: OrderLevel[];
+    best_buy: number | null;
+    best_sell: number | null;
+  };
+  price_history: PricePoint[];
+  stats_24h: MarketStats24h;
+}
+
+export interface OrderLevel {
   price: number;
   quantity: number;
   order_count: number;
@@ -79,67 +137,39 @@ export interface PricePoint {
 export interface MarketStats24h {
   volume_value: number;
   volume_qty: number;
-  high: number | null;
-  low: number | null;
-  average: number | null;
+  high: number;
+  low: number;
+  average: number;
 }
 
+// ── Goods ──
 export interface Good {
   slug: string;
   name: string;
   tier: number;
-  storage_size: number;
   base_value: number;
-  gatherable: boolean;
-  gather_cooldown_seconds: number | null;
+  storage_per_unit: number;
+  is_gatherable: boolean;
+  best_sell_price: number | null;
+  best_storefront_price: number | null;
+  last_trade_price: number | null;
 }
 
-export interface MarketResponse {
-  good: Good;
-  order_book: {
-    buy: OrderBookLevel[];
-    sell: OrderBookLevel[];
-    best_buy: number | null;
-    best_sell: number | null;
-  };
-  price_history: PricePoint[];
-  stats_24h: MarketStats24h;
-}
-
-// ---------------------------------------------------------------------------
-// /api/zones
-// ---------------------------------------------------------------------------
-
-export interface ZoneTopGood {
-  good_slug: string;
-  revenue: number;
-}
-
-export interface ZoneInfo {
+// ── Zones ──
+export interface Zone {
   id: string;
   slug: string;
   name: string;
   rent_cost: number;
   foot_traffic: number;
   demand_multiplier: number;
-  allowed_business_types: string[] | null;
-  businesses: {
-    npc: number;
-    agent: number;
-    total: number;
-  };
+  allowed_business_types: string[];
+  businesses: { npc: number; agent: number; total: number };
   population: number;
-  top_goods: ZoneTopGood[];
+  top_goods: { good_slug: string; revenue: number }[];
 }
 
-export interface ZonesResponse {
-  zones: ZoneInfo[];
-}
-
-// ---------------------------------------------------------------------------
-// /api/government
-// ---------------------------------------------------------------------------
-
+// ── Government ──
 export interface GovernmentTemplate {
   slug: string;
   name: string;
@@ -150,153 +180,71 @@ export interface GovernmentTemplate {
   vote_count: number;
 }
 
-export interface GovernmentResponse {
-  current_template: Record<string, unknown>;
+export interface GovernmentInfo {
+  current_template: {
+    slug: string;
+    name: string;
+    description: string;
+    tax_rate: number;
+    enforcement_probability: number;
+    interest_rate_modifier: number;
+  };
   templates: GovernmentTemplate[];
   vote_counts: Record<string, number>;
   total_votes: number;
   seconds_until_election: number;
   next_election_at: string | null;
   last_election_at: string | null;
-  election_history: Array<{
-    template: string;
-    template_name: string;
-    tallied_at: string;
-  }>;
+  election_history: unknown[];
 }
 
-// ---------------------------------------------------------------------------
-// /api/goods
-// ---------------------------------------------------------------------------
-
-export interface GoodWithPrices extends Good {
-  best_sell_price: number | null;
-  best_storefront_price: number | null;
-  last_trade_price: number | null;
-}
-
-export interface GoodsResponse {
-  goods: GoodWithPrices[];
-}
-
-// ---------------------------------------------------------------------------
-// /api/agent (private)
-// ---------------------------------------------------------------------------
-
-export interface InventoryItem {
-  good_slug: string;
-  quantity: number;
-}
-
-export interface AgentBusiness {
-  id: string;
-  name: string;
-  type_slug: string;
-  zone_id: string;
-}
-
-export interface AgentEmployment {
-  business_id: string;
-  business_name: string;
-  product_slug: string;
-  wage_per_work: number;
-  hired_at: string;
-}
-
-export interface CriminalRecord {
-  violation_count: number;
-  jailed: boolean;
-  jail_until: string | null;
-  jail_remaining_seconds: number | null;
-  recent_violations: Array<{
-    type: string;
-    fine_amount: number;
-    detected_at: string;
-    jail_until: string | null;
-  }>;
-}
-
-export interface AgentResponse {
-  id: string;
-  name: string;
-  model: string | null;
-  balance: number;
-  bank_balance: number;
-  total_wealth: number;
-  housing_zone: { id: string; slug: string; name: string } | null;
-  employment: AgentEmployment | null;
-  businesses: AgentBusiness[];
-  criminal_record: CriminalRecord;
-  inventory: InventoryItem[];
-  bankruptcy_count: number;
-  created_at: string;
-}
-
-// ---------------------------------------------------------------------------
-// /api/agent/transactions (private)
-// ---------------------------------------------------------------------------
-
+// ── Transactions ──
 export interface Transaction {
   id: string;
   type: string;
   amount: number;
-  from_agent_id: string | null;
-  to_agent_id: string | null;
-  direction: "in" | "out";
-  metadata: Record<string, unknown> | null;
+  from_agent_name: string | null;
+  to_agent_name: string | null;
+  metadata: Record<string, unknown>;
   created_at: string;
 }
 
-export interface TransactionsResponse {
-  transactions: Transaction[];
-  pagination: Pagination;
-}
-
-// ---------------------------------------------------------------------------
-// /api/agent/businesses (private)
-// ---------------------------------------------------------------------------
-
-export interface BusinessEmployee {
-  agent_id: string;
-  product_slug: string;
-  wage_per_work: number;
-  hired_at: string;
-}
-
-export interface BusinessDetail {
-  id: string;
-  name: string;
-  type_slug: string;
-  zone: { id: string; slug: string; name: string } | null;
-  storage_capacity: number;
-  is_open: boolean;
-  closed_at: string | null;
-  inventory: InventoryItem[];
-  storefront_prices: Array<{ good_slug: string; price: number }>;
-  employees: BusinessEmployee[];
-  revenue_7d: number;
+// ── Economy History ──
+export interface EconomySnapshot {
+  gdp: number;
+  money_supply: number;
+  population: number;
+  employment_rate: number;
+  active_businesses: number;
+  government_type: string;
+  avg_bread_price: number | null;
+  gini_coefficient: number | null;
   created_at: string;
 }
 
-export interface BusinessesResponse {
-  businesses: BusinessDetail[];
+// ── Model Stats ──
+export interface ModelStats {
+  model: string;
+  agent_count: number;
+  total_wealth: number;
+  avg_wealth: number;
+  median_wealth: number;
+  max_wealth: number;
+  min_wealth: number;
+  total_bankruptcies: number;
+  bankruptcy_rate: number;
+  employed_count: number;
+  employment_rate: number;
+  businesses_owned: number;
+  jailed_count: number;
+  avg_age_hours: number;
+  top_agent: { id: string; name: string; total_wealth: number };
 }
 
-// ---------------------------------------------------------------------------
-// /api/agent/messages (private)
-// ---------------------------------------------------------------------------
-
-export interface MessageItem {
-  id: string;
-  from_agent_id: string;
-  from_agent_name: string;
-  text: string;
-  read: boolean;
-  created_at: string;
-}
-
-export interface MessagesResponse {
-  messages: MessageItem[];
-  unread_count: number;
-  pagination: Pagination;
+// ── Pagination ──
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
 }

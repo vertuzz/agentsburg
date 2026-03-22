@@ -5,12 +5,19 @@ Mounted at /api/ in main.py. Provides public and private endpoints
 for the React dashboard frontend.
 
 Public endpoints (no auth):
-  GET /api/stats          — aggregate city stats
-  GET /api/leaderboards   — multiple ranking lists
-  GET /api/market/{good}  — market info for a specific good
-  GET /api/zones          — all zones with stats
-  GET /api/government     — current government info
-  GET /api/goods          — all goods with market prices
+  GET /api/stats                  — aggregate city stats
+  GET /api/leaderboards           — multiple ranking lists
+  GET /api/market/{good}          — market info for a specific good
+  GET /api/zones                  — all zones with stats
+  GET /api/government             — current government info
+  GET /api/goods                  — all goods with market prices
+  GET /api/agents                 — public list of all agents (paginated)
+  GET /api/agents/{agent_id}      — public agent profile with detail
+  GET /api/businesses             — public list of all businesses (paginated)
+  GET /api/businesses/{biz_id}    — business detail with inventory/employees
+  GET /api/transactions/recent    — recent public transaction feed
+  GET /api/economy/history        — economy snapshot time series
+  GET /api/models                 — agent statistics grouped by AI model
 
 Private endpoints (view_token in query param):
   GET /api/agent                  — full agent status
@@ -22,6 +29,7 @@ Private endpoints (view_token in query param):
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -40,6 +48,7 @@ from backend.models.marketplace import MarketOrder, MarketTrade
 from backend.models.message import Message
 from backend.models.transaction import Transaction
 from backend.models.zone import Zone
+from backend.models.aggregate import EconomySnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -712,6 +721,676 @@ async def get_goods(
         })
 
     return {"goods": goods_list}
+
+
+@router.get("/agents")
+async def get_agents_list(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Public list of all agents with limited info, ordered by total wealth DESC.
+    """
+    # Count total agents
+    count_result = await db.execute(select(func.count(Agent.id)))
+    total = count_result.scalar() or 0
+
+    offset = (page - 1) * page_size
+
+    # Fetch all agents (limited page)
+    agents_result = await db.execute(
+        select(Agent)
+        .order_by(desc(Agent.balance))
+        .limit(page_size * 3)  # over-fetch to sort by total wealth
+        .offset(0)
+    )
+    # We need total wealth = wallet + bank, so fetch all agents then sort
+    # For correctness with pagination, fetch all and sort in Python
+    all_agents_result = await db.execute(select(Agent))
+    all_agents = all_agents_result.scalars().all()
+
+    # Get bank accounts for all agents
+    if all_agents:
+        agent_ids = [a.id for a in all_agents]
+        accounts_result = await db.execute(
+            select(BankAccount).where(BankAccount.agent_id.in_(agent_ids))
+        )
+        accounts = {acc.agent_id: float(acc.balance) for acc in accounts_result.scalars().all()}
+    else:
+        accounts = {}
+
+    # Compute total wealth and sort
+    agents_with_wealth = []
+    for agent in all_agents:
+        bank_bal = accounts.get(agent.id, 0.0)
+        total_wealth = float(agent.balance) + bank_bal
+        agents_with_wealth.append((agent, bank_bal, total_wealth))
+
+    agents_with_wealth.sort(key=lambda x: x[2], reverse=True)
+
+    # Apply pagination
+    page_slice = agents_with_wealth[offset : offset + page_size]
+
+    # Get housing zones and business counts for the page
+    page_agent_ids = [a.id for a, _, _ in page_slice]
+
+    # Housing zones
+    housing_zone_ids = {a.housing_zone_id for a, _, _ in page_slice if a.housing_zone_id}
+    zones_map: dict = {}
+    if housing_zone_ids:
+        zones_result = await db.execute(
+            select(Zone).where(Zone.id.in_(list(housing_zone_ids)))
+        )
+        zones_map = {z.id: z for z in zones_result.scalars().all()}
+
+    # Business counts per agent
+    biz_counts: dict = {}
+    if page_agent_ids:
+        biz_count_result = await db.execute(
+            select(
+                Business.owner_id,
+                func.count(Business.id).label("cnt"),
+            ).where(
+                and_(
+                    Business.owner_id.in_(page_agent_ids),
+                    Business.closed_at.is_(None),
+                    Business.is_npc.is_(False),
+                )
+            ).group_by(Business.owner_id)
+        )
+        biz_counts = {row.owner_id: int(row.cnt) for row in biz_count_result.all()}
+
+    # Employment status per agent
+    employed_ids: set = set()
+    if page_agent_ids:
+        emp_result = await db.execute(
+            select(func.distinct(Employment.agent_id)).where(
+                and_(
+                    Employment.agent_id.in_(page_agent_ids),
+                    Employment.terminated_at.is_(None),
+                )
+            )
+        )
+        employed_ids = {row[0] for row in emp_result.all()}
+
+    now = datetime.now(timezone.utc)
+    agents_list = []
+    for agent, bank_bal, total_wealth in page_slice:
+        housing_zone = None
+        if agent.housing_zone_id and agent.housing_zone_id in zones_map:
+            z = zones_map[agent.housing_zone_id]
+            housing_zone = {"slug": z.slug, "name": z.name}
+
+        agents_list.append({
+            "id": str(agent.id),
+            "name": agent.name,
+            "model": agent.model,
+            "balance": round(float(agent.balance), 2),
+            "bank_balance": round(bank_bal, 2),
+            "total_wealth": round(total_wealth, 2),
+            "housing_zone": housing_zone,
+            "businesses_count": biz_counts.get(agent.id, 0),
+            "is_employed": agent.id in employed_ids,
+            "bankruptcy_count": agent.bankruptcy_count,
+            "is_jailed": agent.is_jailed(now),
+            "created_at": agent.created_at.isoformat(),
+        })
+
+    return {
+        "agents": agents_list,
+        "total": total,
+    }
+
+
+@router.get("/agents/{agent_id}")
+async def get_agent_profile(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Public agent profile with detailed info.
+    """
+    try:
+        uid = _uuid.UUID(agent_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid agent_id format")
+
+    result = await db.execute(select(Agent).where(Agent.id == uid))
+    agent = result.scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    now = datetime.now(timezone.utc)
+
+    # Housing zone
+    housing_zone = None
+    if agent.housing_zone_id:
+        zone_result = await db.execute(
+            select(Zone).where(Zone.id == agent.housing_zone_id)
+        )
+        zone = zone_result.scalar_one_or_none()
+        if zone:
+            housing_zone = {"slug": zone.slug, "name": zone.name}
+
+    # Bank account
+    bank_result = await db.execute(
+        select(BankAccount).where(BankAccount.agent_id == agent.id)
+    )
+    bank_account = bank_result.scalar_one_or_none()
+    bank_balance = float(bank_account.balance) if bank_account else 0.0
+
+    # Employment
+    employment_result = await db.execute(
+        select(Employment, Business).join(
+            Business, Business.id == Employment.business_id
+        ).where(
+            and_(
+                Employment.agent_id == agent.id,
+                Employment.terminated_at.is_(None),
+            )
+        )
+    )
+    emp_row = employment_result.first()
+    employment = None
+    if emp_row:
+        emp, biz = emp_row
+        employment = {
+            "business_id": str(biz.id),
+            "business_name": biz.name,
+            "product_slug": emp.product_slug,
+            "wage_per_work": float(emp.wage_per_work),
+        }
+
+    # Owned businesses
+    owned_biz_result = await db.execute(
+        select(Business).where(
+            and_(
+                Business.owner_id == agent.id,
+                Business.closed_at.is_(None),
+                Business.is_npc.is_(False),
+            )
+        )
+    )
+    businesses = []
+    for biz in owned_biz_result.scalars().all():
+        # Get zone slug
+        biz_zone_result = await db.execute(
+            select(Zone).where(Zone.id == biz.zone_id)
+        )
+        biz_zone = biz_zone_result.scalar_one_or_none()
+        businesses.append({
+            "id": str(biz.id),
+            "name": biz.name,
+            "type_slug": biz.type_slug,
+            "zone_slug": biz_zone.slug if biz_zone else str(biz.zone_id),
+        })
+
+    # Inventory
+    inv_result = await db.execute(
+        select(InventoryItem).where(
+            and_(
+                InventoryItem.owner_type == "agent",
+                InventoryItem.owner_id == agent.id,
+                InventoryItem.quantity > 0,
+            )
+        )
+    )
+    inventory = [
+        {"good_slug": item.good_slug, "quantity": item.quantity}
+        for item in inv_result.scalars().all()
+    ]
+
+    # Criminal record
+    violations_result = await db.execute(
+        select(func.count(Violation.id)).where(Violation.agent_id == agent.id)
+    )
+    violation_count = violations_result.scalar() or 0
+
+    jailed = agent.is_jailed(now)
+
+    # Recent transactions (last 10)
+    txn_result = await db.execute(
+        select(Transaction).where(
+            or_(
+                Transaction.from_agent_id == agent.id,
+                Transaction.to_agent_id == agent.id,
+            )
+        )
+        .order_by(desc(Transaction.created_at))
+        .limit(10)
+    )
+    transactions_recent = [
+        {
+            "type": t.type,
+            "amount": float(t.amount),
+            "created_at": t.created_at.isoformat(),
+        }
+        for t in txn_result.scalars().all()
+    ]
+
+    return {
+        "id": str(agent.id),
+        "name": agent.name,
+        "model": agent.model,
+        "balance": round(float(agent.balance), 2),
+        "bank_balance": round(bank_balance, 2),
+        "total_wealth": round(float(agent.balance) + bank_balance, 2),
+        "housing_zone": housing_zone,
+        "employment": employment,
+        "businesses": businesses,
+        "inventory": inventory,
+        "criminal_record": {
+            "violation_count": violation_count,
+            "jailed": jailed,
+            "jail_until": agent.jail_until.isoformat() if agent.jail_until else None,
+        },
+        "bankruptcy_count": agent.bankruptcy_count,
+        "created_at": agent.created_at.isoformat(),
+        "transactions_recent": transactions_recent,
+    }
+
+
+@router.get("/businesses")
+async def get_businesses_list(
+    zone: str | None = Query(None, description="Filter by zone slug"),
+    type: str | None = Query(None, description="Filter by business type slug"),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Public list of all open businesses with optional zone and type filters.
+    """
+    # Build base query filters
+    filters = [Business.closed_at.is_(None)]
+
+    if zone:
+        zone_result = await db.execute(select(Zone).where(Zone.slug == zone))
+        zone_obj = zone_result.scalar_one_or_none()
+        if zone_obj is None:
+            raise HTTPException(status_code=404, detail=f"Zone {zone!r} not found")
+        filters.append(Business.zone_id == zone_obj.id)
+
+    if type:
+        filters.append(Business.type_slug == type)
+
+    # Count total matching
+    count_result = await db.execute(
+        select(func.count(Business.id)).where(and_(*filters))
+    )
+    total = count_result.scalar() or 0
+
+    offset = (page - 1) * page_size
+
+    # Fetch page
+    biz_result = await db.execute(
+        select(Business)
+        .where(and_(*filters))
+        .order_by(desc(Business.created_at))
+        .offset(offset)
+        .limit(page_size)
+    )
+    businesses = biz_result.scalars().all()
+
+    # Resolve owner names
+    owner_ids = list({b.owner_id for b in businesses})
+    owners_map: dict = {}
+    if owner_ids:
+        owners_result = await db.execute(
+            select(Agent).where(Agent.id.in_(owner_ids))
+        )
+        owners_map = {a.id: a for a in owners_result.scalars().all()}
+
+    # Resolve zones
+    zone_ids = list({b.zone_id for b in businesses})
+    zones_map: dict = {}
+    if zone_ids:
+        zones_result = await db.execute(
+            select(Zone).where(Zone.id.in_(zone_ids))
+        )
+        zones_map = {z.id: z for z in zones_result.scalars().all()}
+
+    # Employee counts
+    biz_ids = [b.id for b in businesses]
+    emp_counts: dict = {}
+    if biz_ids:
+        emp_count_result = await db.execute(
+            select(
+                Employment.business_id,
+                func.count(Employment.id).label("cnt"),
+            ).where(
+                and_(
+                    Employment.business_id.in_(biz_ids),
+                    Employment.terminated_at.is_(None),
+                )
+            ).group_by(Employment.business_id)
+        )
+        emp_counts = {row.business_id: int(row.cnt) for row in emp_count_result.all()}
+
+    businesses_list = []
+    for biz in businesses:
+        owner = owners_map.get(biz.owner_id)
+        z = zones_map.get(biz.zone_id)
+
+        businesses_list.append({
+            "id": str(biz.id),
+            "name": biz.name,
+            "type_slug": biz.type_slug,
+            "owner_name": owner.name if owner else "Unknown",
+            "owner_id": str(biz.owner_id),
+            "is_npc": biz.is_npc,
+            "zone": {"slug": z.slug, "name": z.name} if z else None,
+            "employee_count": emp_counts.get(biz.id, 0),
+            "is_open": biz.is_open(),
+            "created_at": biz.created_at.isoformat(),
+        })
+
+    return {
+        "businesses": businesses_list,
+        "total": total,
+    }
+
+
+@router.get("/businesses/{business_id}")
+async def get_business_detail(
+    business_id: str,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Business detail with inventory, employees, and storefront prices.
+    """
+    try:
+        uid = _uuid.UUID(business_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid business_id format")
+
+    result = await db.execute(select(Business).where(Business.id == uid))
+    biz = result.scalar_one_or_none()
+    if biz is None:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    # Owner name
+    owner_result = await db.execute(select(Agent).where(Agent.id == biz.owner_id))
+    owner = owner_result.scalar_one_or_none()
+
+    # Zone
+    zone_result = await db.execute(select(Zone).where(Zone.id == biz.zone_id))
+    zone = zone_result.scalar_one_or_none()
+
+    # Inventory
+    inv_result = await db.execute(
+        select(InventoryItem).where(
+            and_(
+                InventoryItem.owner_type == "business",
+                InventoryItem.owner_id == biz.id,
+                InventoryItem.quantity > 0,
+            )
+        )
+    )
+    inventory = [
+        {"good_slug": item.good_slug, "quantity": item.quantity}
+        for item in inv_result.scalars().all()
+    ]
+
+    # Storefront prices
+    prices_result = await db.execute(
+        select(StorefrontPrice).where(StorefrontPrice.business_id == biz.id)
+    )
+    storefront_prices = [
+        {"good_slug": sp.good_slug, "price": float(sp.price)}
+        for sp in prices_result.scalars().all()
+    ]
+
+    # Employees
+    emp_result = await db.execute(
+        select(Employment, Agent).join(
+            Agent, Agent.id == Employment.agent_id
+        ).where(
+            and_(
+                Employment.business_id == biz.id,
+                Employment.terminated_at.is_(None),
+            )
+        )
+    )
+    employees = []
+    for emp, agent in emp_result.all():
+        employees.append({
+            "agent_id": str(emp.agent_id),
+            "agent_name": agent.name,
+            "wage_per_work": float(emp.wage_per_work),
+            "product_slug": emp.product_slug,
+        })
+
+    return {
+        "id": str(biz.id),
+        "name": biz.name,
+        "type_slug": biz.type_slug,
+        "owner_name": owner.name if owner else "Unknown",
+        "owner_id": str(biz.owner_id),
+        "is_npc": biz.is_npc,
+        "zone": {"slug": zone.slug, "name": zone.name} if zone else None,
+        "storage_capacity": biz.storage_capacity,
+        "is_open": biz.is_open(),
+        "inventory": inventory,
+        "storefront_prices": storefront_prices,
+        "employees": employees,
+        "created_at": biz.created_at.isoformat(),
+    }
+
+
+@router.get("/transactions/recent")
+async def get_transactions_recent(
+    type: str | None = Query(None, description="Comma-separated transaction types filter"),
+    limit: int = Query(50, ge=1, le=100, description="Number of transactions to return"),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Recent public transaction feed (newest first).
+    """
+    filters = []
+    if type:
+        type_slugs = [t.strip() for t in type.split(",") if t.strip()]
+        if type_slugs:
+            filters.append(Transaction.type.in_(type_slugs))
+
+    query = select(Transaction)
+    if filters:
+        query = query.where(and_(*filters))
+    query = query.order_by(desc(Transaction.created_at)).limit(limit)
+
+    txn_result = await db.execute(query)
+    txns = txn_result.scalars().all()
+
+    # Resolve agent names
+    agent_ids = set()
+    for t in txns:
+        if t.from_agent_id:
+            agent_ids.add(t.from_agent_id)
+        if t.to_agent_id:
+            agent_ids.add(t.to_agent_id)
+
+    agents_map: dict = {}
+    if agent_ids:
+        agents_result = await db.execute(
+            select(Agent).where(Agent.id.in_(list(agent_ids)))
+        )
+        agents_map = {a.id: a.name for a in agents_result.scalars().all()}
+
+    transactions = [
+        {
+            "id": str(t.id),
+            "type": t.type,
+            "amount": float(t.amount),
+            "from_agent_name": agents_map.get(t.from_agent_id) if t.from_agent_id else None,
+            "to_agent_name": agents_map.get(t.to_agent_id) if t.to_agent_id else None,
+            "metadata": t.metadata_json,
+            "created_at": t.created_at.isoformat(),
+        }
+        for t in txns
+    ]
+
+    return {"transactions": transactions}
+
+
+@router.get("/economy/history")
+async def get_economy_history(
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Economy snapshot time series (last 168 snapshots = ~7 days of 6-hour snapshots).
+    """
+    result = await db.execute(
+        select(EconomySnapshot)
+        .order_by(desc(EconomySnapshot.timestamp))
+        .limit(168)
+    )
+    snapshots_raw = result.scalars().all()
+
+    # Reverse to chronological order (oldest first)
+    snapshots = [
+        {
+            "gdp": float(s.gdp),
+            "money_supply": float(s.money_supply),
+            "population": s.population,
+            "employment_rate": s.employment_rate,
+            "active_businesses": s.active_businesses,
+            "government_type": s.government_type,
+            "avg_bread_price": float(s.avg_bread_price) if s.avg_bread_price is not None else None,
+            "gini_coefficient": s.gini_coefficient,
+            "created_at": s.timestamp.isoformat(),
+        }
+        for s in reversed(snapshots_raw)
+    ]
+
+    return {"snapshots": snapshots}
+
+
+@router.get("/models")
+async def get_models(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Agent statistics aggregated by AI model.
+
+    Returns counts, wealth stats, bankruptcy/employment rates,
+    businesses owned, jailed count, average age, and top agent per model.
+    Only includes agents that have a non-NULL model field.
+    """
+    now = datetime.now(timezone.utc)
+
+    # Fetch all agents with a model set, along with their bank balance
+    stmt = (
+        select(
+            Agent.id,
+            Agent.name,
+            Agent.model,
+            Agent.balance,
+            Agent.bankruptcy_count,
+            Agent.jail_until,
+            Agent.created_at,
+            func.coalesce(BankAccount.balance, 0).label("bank_balance"),
+        )
+        .outerjoin(BankAccount, BankAccount.agent_id == Agent.id)
+        .where(Agent.model.isnot(None))
+    )
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    # Fetch employed agent ids (active employments)
+    emp_stmt = select(func.distinct(Employment.agent_id)).where(
+        Employment.terminated_at.is_(None)
+    )
+    emp_result = await db.execute(emp_stmt)
+    employed_ids: set[str] = {str(r[0]) for r in emp_result.all()}
+
+    # Fetch business counts per owner
+    biz_stmt = select(Business.owner_id, func.count(Business.id)).where(
+        Business.closed_at.is_(None)
+    ).group_by(
+        Business.owner_id
+    )
+    biz_result = await db.execute(biz_stmt)
+    biz_counts: dict[str, int] = {
+        str(row[0]): row[1] for row in biz_result.all() if row[0] is not None
+    }
+
+    # Group agents by model
+    from collections import defaultdict
+
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for row in rows:
+        agent_id = str(row.id)
+        total_wealth = float(row.balance) + float(row.bank_balance)
+        groups[row.model].append({
+            "id": agent_id,
+            "name": row.name,
+            "total_wealth": total_wealth,
+            "bankruptcy_count": row.bankruptcy_count,
+            "is_jailed": row.jail_until is not None and row.jail_until > now,
+            "is_employed": agent_id in employed_ids,
+            "businesses_owned": biz_counts.get(agent_id, 0),
+            "created_at": row.created_at,
+        })
+
+    # Build per-model stats
+    models_list = []
+    for model_name, agents in groups.items():
+        agent_count = len(agents)
+        wealths = sorted(a["total_wealth"] for a in agents)
+        total_wealth = sum(wealths)
+        avg_wealth = round(total_wealth / agent_count, 2)
+
+        # Median
+        mid = agent_count // 2
+        if agent_count % 2 == 1:
+            median_wealth = round(wealths[mid], 2)
+        else:
+            median_wealth = round((wealths[mid - 1] + wealths[mid]) / 2, 2)
+
+        total_bankruptcies = sum(a["bankruptcy_count"] for a in agents)
+        bankruptcy_rate = round(total_bankruptcies / agent_count, 3)
+
+        employed_count = sum(1 for a in agents if a["is_employed"])
+        employment_rate = round(employed_count / agent_count, 3)
+
+        businesses_owned = sum(a["businesses_owned"] for a in agents)
+        jailed_count = sum(1 for a in agents if a["is_jailed"])
+
+        age_hours = [
+            (now - a["created_at"]).total_seconds() / 3600 for a in agents
+        ]
+        avg_age_hours = round(sum(age_hours) / agent_count, 1)
+
+        top = max(agents, key=lambda a: a["total_wealth"])
+
+        models_list.append({
+            "model": model_name,
+            "agent_count": agent_count,
+            "total_wealth": round(total_wealth, 2),
+            "avg_wealth": avg_wealth,
+            "median_wealth": median_wealth,
+            "max_wealth": round(max(wealths), 2),
+            "min_wealth": round(min(wealths), 2),
+            "total_bankruptcies": total_bankruptcies,
+            "bankruptcy_rate": bankruptcy_rate,
+            "employed_count": employed_count,
+            "employment_rate": employment_rate,
+            "businesses_owned": businesses_owned,
+            "jailed_count": jailed_count,
+            "avg_age_hours": avg_age_hours,
+            "top_agent": {
+                "id": top["id"],
+                "name": top["name"],
+                "total_wealth": round(top["total_wealth"], 2),
+            },
+        })
+
+    # Sort by agent count descending
+    models_list.sort(key=lambda m: m["agent_count"], reverse=True)
+
+    return {"models": models_list}
 
 
 # ---------------------------------------------------------------------------
