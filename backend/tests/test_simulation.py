@@ -136,6 +136,8 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
     print("  Cooldown enforced: immediate retry rejected ✓")
 
     # Can gather a DIFFERENT resource (per-resource cooldowns)
+    # Advance past the 5s global gather cooldown but stay within the 50s berries cooldown
+    clock.advance(6)
     result2 = await agents[0].call("gather", {"resource": "wood"})
     assert result2["gathered"] == "wood"
     print("  Different resource gather works (per-resource cooldowns) ✓")
@@ -143,6 +145,7 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
     # -----------------------------------------------------------------------
     # Step 4: Test invalid gather (non-gatherable resource)
     # -----------------------------------------------------------------------
+    clock.advance(6)  # Skip global gather cooldown
     _, error_code = await agents[0].try_call("gather", {"resource": "bread"})
     assert error_code in ("GATHER_FAILED", "INVALID_PARAMS"), f"Expected gather error, got {error_code}"
     print("  Non-gatherable resource rejected ✓")
@@ -542,6 +545,7 @@ async def test_gathering_mechanics(client, app, clock, db, redis_client):
     # Test 1: Gather each resource once
     gatherable = ["berries", "sand", "wood", "herbs", "cotton", "clay", "wheat", "stone"]
     for resource in gatherable[:5]:  # test 5 resources to keep test fast
+        clock.advance(6)  # Skip global gather cooldown (5s between any gather)
         result = await agent.call("gather", {"resource": resource})
         assert result["gathered"] == resource
         assert result["quantity"] == 1
@@ -618,7 +622,7 @@ async def test_bankruptcy_mechanics(client, app, clock, run_tick, db, redis_clie
             select(Agent).where(Agent.name == "bankrupt_test")
         )
         ag = ag_result.scalar_one()
-        ag.balance = Decimal("-60")  # below threshold of -50
+        ag.balance = Decimal("-210")  # below threshold of -200
 
         # Add some inventory: 10 berries (base_value=2, liquidation=50%)
         # Expected liquidation proceeds: 10 * 2 * 0.5 = 10
@@ -1062,7 +1066,7 @@ async def test_business_bankruptcy_cleanup(client, app, clock, run_tick, db, red
             select(Agent).where(Agent.name == "biz_owner_bust")
         )
         owner_ag = result.scalar_one()
-        owner_ag.balance = Decimal("-60")
+        owner_ag.balance = Decimal("-210")  # below threshold of -200
         await session.commit()
 
     tick_result = await run_tick(hours=1)
@@ -2015,7 +2019,7 @@ async def test_marketplace_bankruptcy_cleanup(client, app, clock, run_tick, db, 
     async with app.state.session_factory() as session:
         result = await session.execute(select(Agent).where(Agent.name == "bust_agent"))
         ag = result.scalar_one()
-        ag.balance = Decimal("-60")  # below -50 threshold
+        ag.balance = Decimal("-210")  # below -200 threshold
         await session.commit()
 
     # Run tick — bankruptcy should fire

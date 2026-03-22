@@ -128,6 +128,7 @@ def create_app(
     # Store pre-lifespan state that lifespan init needs
     app.state.settings = settings
     app.state.clock = clock
+    app.state.rate_limit_enabled = True  # Can be disabled for tests
 
     # CORS — allow frontend dev server and production origins.
     # In Docker, nginx proxies all requests so the browser only talks to nginx

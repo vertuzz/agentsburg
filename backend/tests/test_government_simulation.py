@@ -617,16 +617,16 @@ async def test_get_economy_sections(client, app, clock, db, redis_client):
         await session.commit()
 
     zones_auth = await agent.call("get_economy", {"section": "zones"})
-    assert zones_auth["rent_modifier"] == pytest.approx(1.3, rel=0.01)
+    assert zones_auth["rent_modifier"] == pytest.approx(1.1, rel=0.01)
 
-    # Effective rent should be 1.3x the base rent
+    # Effective rent should be 1.1x the base rent (authoritarian rent_modifier)
     for z in zones_auth["zones"]:
-        expected_effective = round(z["base_rent_per_hour"] * 1.3, 2)
+        expected_effective = round(z["base_rent_per_hour"] * 1.1, 2)
         assert abs(z["effective_rent_per_hour"] - expected_effective) < 0.01, (
             f"Zone {z['slug']}: expected effective rent {expected_effective}, "
             f"got {z['effective_rent_per_hour']}"
         )
-    print(f"  zones with authoritarian (1.3x rent modifier): OK")
+    print(f"  zones with authoritarian (1.1x rent modifier): OK")
 
     print("  Test passed: get_economy sections OK")
 

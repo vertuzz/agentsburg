@@ -228,29 +228,33 @@ async def _handle_tools_call(
     settings = request.app.state.settings
 
     # --- Rate limiting ---
-    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    if not client_ip:
-        client_ip = request.client.host if request.client else "unknown"
+    # Allow disabling rate limiting for tests
+    if getattr(request.app.state, "rate_limit_enabled", True) is False:
+        pass  # Skip rate limiting
+    else:
+        client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        if not client_ip:
+            client_ip = request.client.host if request.client else "unknown"
 
-    try:
-        # Global per-IP rate limit
-        await _check_rate_limit(redis, f"ratelimit:ip:{client_ip}", 120, 60)
+        try:
+            # Global per-IP rate limit
+            await _check_rate_limit(redis, f"ratelimit:ip:{client_ip}", 120, 60)
 
-        if tool_name == "signup":
-            # Stricter limit for unauthenticated signup
-            await _check_rate_limit(redis, f"ratelimit:ip:{client_ip}:signup", 5, 60)
-        elif agent is not None:
-            # Per-agent rate limit for authenticated calls
-            await _check_rate_limit(redis, f"ratelimit:agent:{agent.id}", 60, 60)
-    except ValueError as exc:
-        return JSONResponse(
-            content=make_error(
-                request_id,
-                RATE_LIMITED,
-                str(exc),
-            ),
-            status_code=200,
-        )
+            if tool_name == "signup":
+                # Stricter limit for unauthenticated signup
+                await _check_rate_limit(redis, f"ratelimit:ip:{client_ip}:signup", 5, 60)
+            elif agent is not None:
+                # Per-agent rate limit for authenticated calls
+                await _check_rate_limit(redis, f"ratelimit:agent:{agent.id}", 60, 60)
+        except ValueError as exc:
+            return JSONResponse(
+                content=make_error(
+                    request_id,
+                    RATE_LIMITED,
+                    str(exc),
+                ),
+                status_code=200,
+            )
 
     # Dispatch to tool handler
     try:

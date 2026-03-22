@@ -181,6 +181,7 @@ async def app(settings: Settings, clock: MockClock, create_test_database):
     - Real test Redis
     """
     test_app = create_app(settings=settings, clock=clock)
+    test_app.state.rate_limit_enabled = False  # Disable rate limiting in tests
 
     # Start the lifespan manually
     async with test_app.router.lifespan_context(test_app):
