@@ -48,59 +48,59 @@ templates:
 
   - slug: social_democracy
     name: Social Democracy
-    tax_rate: 0.15
-    enforcement_probability: 0.30
+    tax_rate: 0.12
+    enforcement_probability: 0.25
     interest_rate_modifier: 1.0
     reserve_ratio: 0.20
     licensing_cost_modifier: 1.2
-    production_cooldown_modifier: 1.0
-    rent_modifier: 1.1
+    production_cooldown_modifier: 0.85
+    rent_modifier: 0.90
     fine_multiplier: 2.0
     max_jail_seconds: 14400       # 4 hours max
     description: >
-      Balanced governance. Moderate taxes fund enforcement, making crime
-      moderately risky. Normal loan rates and reserve ratios keep the money
-      supply stable. Slightly higher licensing costs reduce fly-by-night
-      businesses. Production runs at baseline speed. Rent is modestly elevated
-      across all zones. The middle ground between growth and stability.
+      Balanced governance. Moderate taxes fund public infrastructure, giving a
+      production bonus and subsidized housing. Crime is moderately risky due to
+      enforcement. Normal loan rates and reserve ratios keep the money supply
+      stable. Slightly higher licensing costs reduce fly-by-night businesses.
+      The middle ground between growth and stability — agents benefit from
+      collective investment.
 
   - slug: authoritarian
     name: Authoritarian
-    tax_rate: 0.25
-    enforcement_probability: 0.60
+    tax_rate: 0.20
+    enforcement_probability: 0.40
     interest_rate_modifier: 1.50
     reserve_ratio: 0.40
     licensing_cost_modifier: 2.0
-    production_cooldown_modifier: 1.30
-    rent_modifier: 1.3
-    fine_multiplier: 3.0
+    production_cooldown_modifier: 1.00
+    rent_modifier: 1.10
+    fine_multiplier: 2.5
     max_jail_seconds: 86400       # 24 hours max
     description: >
       Heavy state control. High taxes drain income. Aggressive enforcement makes
-      tax evasion very dangerous — 60% chance of audit per tick. Expensive loans
+      tax evasion very dangerous — 40% chance of audit per tick. Expensive loans
       (high interest modifier) and large reserve requirements restrict credit and
       money creation. High licensing costs discourage new business formation.
-      Production is slow (bureaucratic red tape). Rents are inflated across all
-      zones. Direct trades are almost certainly detected. Crime is rarely worth it.
-      Favored by agents who benefit from existing market position and want to
-      freeze out competitors.
+      Central planning offsets bureaucratic drag so production runs at baseline.
+      Rents are modestly elevated. Crime is rarely worth it. Favored by agents
+      who benefit from existing market position and want to freeze out competitors.
 
   - slug: libertarian
     name: Libertarian
-    tax_rate: 0.02
-    enforcement_probability: 0.05
+    tax_rate: 0.03
+    enforcement_probability: 0.08
     interest_rate_modifier: 0.60
-    reserve_ratio: 0.05
-    licensing_cost_modifier: 0.50
-    production_cooldown_modifier: 0.70
-    rent_modifier: 0.80
+    reserve_ratio: 0.10
+    licensing_cost_modifier: 0.60
+    production_cooldown_modifier: 0.85
+    rent_modifier: 0.90
     fine_multiplier: 1.0
     max_jail_seconds: 1800        # 30 minutes max
     description: >
-      Minimal state. Taxes are nearly zero; so is enforcement (5% audit chance).
-      Extremely cheap loans and minimal reserve requirements allow the bank to
-      expand credit aggressively — risk of inflation is real. Business registration
-      is half-price. Production cooldowns are dramatically reduced (30% faster).
-      Rents are cheap across all zones. Fines for crime are trivial. The economy
-      moves fast but is fragile: a credit crisis under libertarian rules can be
-      devastating. Favored by high-volume producers and speculators.
+      Minimal state. Taxes are very low; enforcement is light (8% audit chance).
+      Cheap loans and modest reserve requirements allow the bank to expand credit
+      — risk of inflation is real but safer banking limits systemic risk. Business
+      registration is heavily discounted. Production cooldowns are reduced (15%
+      faster). Rents are discounted across all zones. Fines for crime are trivial.
+      The economy moves fast but is fragile. Favored by high-volume producers
+      and speculators.

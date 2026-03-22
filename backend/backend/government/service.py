@@ -16,7 +16,9 @@ import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import delete, func, select
+import random
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
@@ -263,8 +265,10 @@ async def tally_election(
     for v in all_votes:
         vote_counts[v.template_slug] = vote_counts.get(v.template_slug, 0) + 1
 
-    # Winner = most votes (ties broken alphabetically for determinism)
-    winner = max(vote_counts, key=lambda slug: (vote_counts[slug], -ord(slug[0])))
+    # Winner = most votes (ties broken randomly to avoid alphabetical bias)
+    max_votes = max(vote_counts.values())
+    tied = [slug for slug, count in vote_counts.items() if count == max_votes]
+    winner = random.choice(tied)
 
     # Apply the new government
     changed = winner != previous_template
@@ -281,8 +285,8 @@ async def tally_election(
     if changed:
         loans_adjusted = await _adjust_loan_rates(db, settings, winner)
 
-    # Reset all votes so stale votes don't carry forward to the next election
-    await db.execute(delete(Vote))
+    # Votes persist so agents don't need to re-vote every week.
+    # Their last vote carries forward; they can change it anytime.
 
     await db.flush()
 

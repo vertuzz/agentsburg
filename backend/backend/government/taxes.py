@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 
 # Fraction of total_actual_income that constitutes a "significant" discrepancy.
 # Below this threshold, no audit action is taken (small rounding differences).
-DISCREPANCY_THRESHOLD_FRACTION = 0.10
+DISCREPANCY_THRESHOLD_FRACTION = 0.05
 
 # Transaction types that count as "marketplace" income (visible to tax authority)
 MARKETPLACE_INCOME_TYPES = frozenset({"marketplace", "storefront"})
@@ -291,7 +291,7 @@ async def run_audits(
 
         # Threshold: discrepancy must be > 10% of total income to be actionable
         threshold = total_income * Decimal(str(DISCREPANCY_THRESHOLD_FRACTION))
-        if discrepancy <= threshold:
+        if discrepancy < threshold:
             continue
 
         # Significant discrepancy found — calculate fine
