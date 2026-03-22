@@ -8,9 +8,10 @@ default -50), the bankruptcy system triggers:
 2. Cancel employment (Phase 3)
 3. Close businesses (Phase 3)
 4. Cancel active orders/trades (Phase 4)
-5. If balance still negative after liquidation, zero it out
-6. Increment bankruptcy_count
-7. Create a bankruptcy_liquidation transaction record
+5. Seize bank deposits to pay down active loans, write off remainder (Phase 5)
+6. If balance still negative after liquidation, zero it out
+7. Increment bankruptcy_count
+8. Create a bankruptcy_liquidation transaction record
 
 The agent keeps their identity, tokens, and history. They start over
 with nothing but their name and a scarred credit record.
@@ -33,7 +34,6 @@ from backend.models.transaction import Transaction
 # Phase 5: banking integration
 try:
     from backend.banking.service import (
-        default_agent_loans,
         close_bank_account_for_bankruptcy,
     )
     _BANKING_AVAILABLE = True
@@ -184,11 +184,10 @@ async def process_bankruptcies(
         except ImportError:
             pass  # Phase 4 not yet implemented
 
-        # --- Phase 5: Default all active loans ---
+        # --- Phase 5: Seize deposits to pay loans, then write off remainder ---
+        # IMPORTANT: deposits are seized FIRST to pay down loans before any
+        # debt write-off, preventing the exploit: loan → deposit → default → recover.
         if _BANKING_AVAILABLE:
-            await default_agent_loans(db, agent, clock)
-            # Close bank account and recover balance to wallet
-            # (helps cover debts before zeroing out)
             await close_bank_account_for_bankruptcy(db, agent, clock)
 
         # --- Step 5: Zero out remaining negative balance ---

@@ -345,11 +345,11 @@ async def _adjust_loan_rates(
         if loan.installments_remaining <= 0:
             continue
 
-        # Recalculate installment based on remaining balance + new rate
+        # remaining_balance already includes interest from the original loan,
+        # so just redistribute it over the remaining installments without
+        # adding new interest (which would double-charge).
         remaining = Decimal(str(loan.remaining_balance))
-        interest_on_remaining = remaining * Decimal(str(new_rate))
-        total_due = remaining + interest_on_remaining
-        new_installment = total_due / loan.installments_remaining
+        new_installment = remaining / loan.installments_remaining
 
         loan.interest_rate = new_rate
         loan.installment_amount = new_installment

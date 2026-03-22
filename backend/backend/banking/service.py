@@ -75,15 +75,19 @@ def _round_money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-async def _get_or_create_account(db: AsyncSession, agent: Agent) -> BankAccount:
+async def _get_or_create_account(
+    db: AsyncSession, agent: Agent, *, lock: bool = False
+) -> BankAccount:
     """
     Fetch the agent's bank account, creating it if it doesn't exist.
 
     Returns the BankAccount ORM object (potentially unflushed on first creation).
+    When lock=True, acquires FOR UPDATE row lock to prevent concurrent mutations.
     """
-    result = await db.execute(
-        select(BankAccount).where(BankAccount.agent_id == agent.id)
-    )
+    stmt = select(BankAccount).where(BankAccount.agent_id == agent.id)
+    if lock:
+        stmt = stmt.with_for_update()
+    result = await db.execute(stmt)
     account = result.scalar_one_or_none()
 
     if account is None:
@@ -95,13 +99,17 @@ async def _get_or_create_account(db: AsyncSession, agent: Agent) -> BankAccount:
     return account
 
 
-async def _get_central_bank(db: AsyncSession) -> CentralBank:
+async def _get_central_bank(db: AsyncSession, *, lock: bool = False) -> CentralBank:
     """
     Fetch the CentralBank singleton.
 
     Raises RuntimeError if not found (bootstrap must run first).
+    When lock=True, acquires FOR UPDATE row lock to prevent concurrent mutations.
     """
-    result = await db.execute(select(CentralBank).where(CentralBank.id == 1))
+    stmt = select(CentralBank).where(CentralBank.id == 1)
+    if lock:
+        stmt = stmt.with_for_update()
+    result = await db.execute(stmt)
     bank = result.scalar_one_or_none()
     if bank is None:
         raise RuntimeError(
@@ -195,14 +203,20 @@ async def deposit(
     if amount <= 0:
         raise ValueError("Deposit amount must be positive")
 
+    # Lock agent row, bank account, and central bank to prevent concurrent mutations
+    agent_row = await db.execute(
+        select(Agent).where(Agent.id == agent.id).with_for_update()
+    )
+    agent = agent_row.scalar_one()
+
     agent_balance = _to_decimal(agent.balance)
     if agent_balance < amount:
         raise ValueError(
             f"Insufficient wallet balance: have {float(agent_balance):.2f}, need {float(amount):.2f}"
         )
 
-    account = await _get_or_create_account(db, agent)
-    bank = await _get_central_bank(db)
+    account = await _get_or_create_account(db, agent, lock=True)
+    bank = await _get_central_bank(db, lock=True)
 
     # Move money: wallet → bank account
     agent.balance = _round_money(agent_balance - amount)
@@ -268,7 +282,13 @@ async def withdraw(
     if amount <= 0:
         raise ValueError("Withdrawal amount must be positive")
 
-    account = await _get_or_create_account(db, agent)
+    # Lock agent row, bank account, and central bank to prevent concurrent mutations
+    agent_row = await db.execute(
+        select(Agent).where(Agent.id == agent.id).with_for_update()
+    )
+    agent = agent_row.scalar_one()
+
+    account = await _get_or_create_account(db, agent, lock=True)
     account_balance = _to_decimal(account.balance)
 
     if account_balance < amount:
@@ -276,7 +296,7 @@ async def withdraw(
             f"Insufficient account balance: have {float(account_balance):.2f}, need {float(amount):.2f}"
         )
 
-    bank = await _get_central_bank(db)
+    bank = await _get_central_bank(db, lock=True)
     reserves = _to_decimal(bank.reserves)
 
     # Sanity check: reserves should cover withdrawal (they always should if money supply is conserved)
@@ -536,6 +556,12 @@ async def take_loan(
     if amount < Decimal("1"):
         raise ValueError("Minimum loan amount is 1")
 
+    # Lock agent row to prevent concurrent loan/balance manipulation
+    agent_row = await db.execute(
+        select(Agent).where(Agent.id == agent.id).with_for_update()
+    )
+    agent = agent_row.scalar_one()
+
     # --- Check credit ---
     credit = await calculate_credit(db, agent, clock, settings)
     max_loan = _to_decimal(credit["max_loan_amount"])
@@ -552,12 +578,12 @@ async def take_loan(
             "Build net worth, avoid bankruptcies, and try again."
         )
 
-    # --- Check one-loan-at-a-time ---
+    # --- Check one-loan-at-a-time (locked to prevent double-loan race) ---
     existing_result = await db.execute(
         select(Loan).where(
             Loan.agent_id == agent.id,
             Loan.status == "active",
-        )
+        ).with_for_update()
     )
     existing_loan = existing_result.scalar_one_or_none()
     if existing_loan is not None:
@@ -567,7 +593,7 @@ async def take_loan(
         )
 
     # --- Check fractional reserve capacity ---
-    bank = await _get_central_bank(db)
+    bank = await _get_central_bank(db, lock=True)
     policy = await _get_active_policy(db, settings)
 
     reserves = _to_decimal(bank.reserves)
@@ -581,11 +607,16 @@ async def take_loan(
     # capacity = reserves / reserve_ratio - total_loaned
     lending_capacity = _round_money(reserves / reserve_ratio - total_loaned)
 
-    if lending_capacity < amount:
+    # No single agent can borrow more than 10% of bank reserves
+    max_from_reserves = _round_money(reserves * Decimal("0.10"))
+    effective_max = min(max_loan, lending_capacity, max_from_reserves)
+
+    if amount > effective_max:
         raise ValueError(
-            f"Bank does not have sufficient lending capacity. "
-            f"Available: {float(lending_capacity):.2f}, Requested: {float(amount):.2f}. "
-            f"The reserve ratio limits how much the bank can lend."
+            f"Requested amount {float(amount):.2f} exceeds effective limit "
+            f"{float(effective_max):.2f} (credit limit: {float(max_loan):.2f}, "
+            f"lending capacity: {float(lending_capacity):.2f}, "
+            f"max from reserves: {float(max_from_reserves):.2f})"
         )
 
     # --- Create the loan ---
@@ -716,7 +747,11 @@ async def process_loan_payments(
             logger.warning("Loan %s has no corresponding agent — skipping", loan.id)
             continue
 
-        installment = _to_decimal(loan.installment_amount)
+        if loan.installments_remaining == 1:
+            # Final installment: pay exact remaining balance to avoid rounding drift
+            installment = _to_decimal(loan.remaining_balance)
+        else:
+            installment = _to_decimal(loan.installment_amount)
         agent_balance = _to_decimal(agent.balance)
 
         if agent_balance >= installment:
@@ -1064,10 +1099,15 @@ async def close_bank_account_for_bankruptcy(
     clock: "Clock",
 ) -> dict:
     """
-    Liquidate a bank account during bankruptcy.
+    Liquidate a bank account during bankruptcy, seizing deposits to pay loans first.
 
-    Withdraws remaining balance to the agent's wallet so it can be
-    used to partially cover debts before the final balance zero-out.
+    Order:
+      1. Seize bank deposits
+      2. Use deposits to pay down any active loans
+      3. If deposits > total loan balance: pay off loans, remainder goes to agent wallet
+      4. If deposits <= total loan balance: apply all deposits to loans, write off the rest
+
+    This prevents the exploit: take loan -> deposit everything -> default -> recover deposits.
 
     Args:
         db:    Active async session.
@@ -1075,40 +1115,136 @@ async def close_bank_account_for_bankruptcy(
         clock: For timestamps.
 
     Returns:
-        Dict with amount recovered from bank account.
+        Dict with amount recovered, amount applied to loans, and amount written off.
     """
+    now = clock.now()
+
     result = await db.execute(
         select(BankAccount).where(BankAccount.agent_id == agent.id)
     )
     account = result.scalar_one_or_none()
+    deposit_balance = _to_decimal(account.balance) if account else Decimal("0")
 
-    if account is None or _to_decimal(account.balance) <= 0:
-        return {"account_balance_recovered": 0.0}
+    # Fetch active loans
+    loans_result = await db.execute(
+        select(Loan).where(
+            Loan.agent_id == agent.id,
+            Loan.status == "active",
+        )
+    )
+    active_loans = list(loans_result.scalars().all())
 
-    balance = _to_decimal(account.balance)
     bank = await _get_central_bank(db)
+    total_loaned = _to_decimal(bank.total_loaned)
 
-    # Transfer to wallet (helps cover debts)
-    agent.balance = _round_money(_to_decimal(agent.balance) + balance)
-    bank.reserves = _round_money(_to_decimal(bank.reserves) - balance)
-    account.balance = Decimal("0")
+    # Calculate total loan debt
+    total_loan_debt = Decimal("0")
+    for loan in active_loans:
+        total_loan_debt += _to_decimal(loan.remaining_balance)
 
-    db.add(Transaction(
-        type="withdrawal",
-        from_agent_id=None,
-        to_agent_id=agent.id,
-        amount=balance,
-        metadata_json={
-            "reason": "bankruptcy_account_liquidation",
-            "tick_time": clock.now().isoformat(),
-        },
-    ))
+    # Apply deposits toward loans first
+    applied_to_loans = Decimal("0")
+    written_off = Decimal("0")
+    remaining_deposits = deposit_balance
+
+    for loan in active_loans:
+        loan_remaining = _to_decimal(loan.remaining_balance)
+        if remaining_deposits >= loan_remaining:
+            # Deposits can cover this loan fully
+            applied_to_loans += loan_remaining
+            remaining_deposits -= loan_remaining
+            total_loaned -= loan_remaining
+            loan.status = "defaulted"
+            loan.remaining_balance = Decimal("0")
+
+            db.add(Transaction(
+                type="loan_payment",
+                from_agent_id=agent.id,
+                to_agent_id=None,
+                amount=loan_remaining,
+                metadata_json={
+                    "loan_id": str(loan.id),
+                    "status": "bankruptcy_seized_deposits",
+                    "tick_time": now.isoformat(),
+                },
+            ))
+        else:
+            # Deposits only partially cover this loan
+            if remaining_deposits > 0:
+                applied_to_loans += remaining_deposits
+                loan_remaining -= remaining_deposits
+                total_loaned -= remaining_deposits
+
+                db.add(Transaction(
+                    type="loan_payment",
+                    from_agent_id=agent.id,
+                    to_agent_id=None,
+                    amount=remaining_deposits,
+                    metadata_json={
+                        "loan_id": str(loan.id),
+                        "status": "bankruptcy_partial_seizure",
+                        "partial_amount": float(remaining_deposits),
+                        "tick_time": now.isoformat(),
+                    },
+                ))
+                remaining_deposits = Decimal("0")
+
+            # Write off what remains of this loan
+            written_off += loan_remaining
+            total_loaned -= loan_remaining
+            loan.status = "defaulted"
+            loan.remaining_balance = Decimal("0")
+
+            db.add(Transaction(
+                type="loan_payment",
+                from_agent_id=agent.id,
+                to_agent_id=None,
+                amount=Decimal("0"),
+                metadata_json={
+                    "loan_id": str(loan.id),
+                    "status": "defaulted_bankruptcy",
+                    "remaining_written_off": float(loan_remaining),
+                    "tick_time": now.isoformat(),
+                },
+            ))
+
+    # Zero out the bank account
+    if account is not None:
+        account.balance = Decimal("0")
+
+    # Deposits that went to loan repayment flow back into reserves
+    # (they were already in reserves as deposits, and now repay loans)
+    # Net effect on reserves: deposits stay in reserves (account closed),
+    # but applied_to_loans reduces total_loaned (debt repaid from seized deposits).
+    # remaining_deposits go to agent wallet and leave reserves.
+    if remaining_deposits > 0:
+        agent.balance = _round_money(_to_decimal(agent.balance) + remaining_deposits)
+        bank.reserves = _round_money(_to_decimal(bank.reserves) - remaining_deposits)
+
+        db.add(Transaction(
+            type="withdrawal",
+            from_agent_id=None,
+            to_agent_id=agent.id,
+            amount=remaining_deposits,
+            metadata_json={
+                "reason": "bankruptcy_account_remainder",
+                "tick_time": now.isoformat(),
+            },
+        ))
+
+    bank.total_loaned = _round_money(max(Decimal("0"), total_loaned))
 
     await db.flush()
 
     logger.info(
-        "Recovered %.2f from bank account for bankrupt agent %s",
-        float(balance), agent.name,
+        "Bankruptcy account closure for agent %s: deposits=%.2f, applied_to_loans=%.2f, "
+        "written_off=%.2f, returned_to_wallet=%.2f",
+        agent.name, float(deposit_balance), float(applied_to_loans),
+        float(written_off), float(remaining_deposits),
     )
 
-    return {"account_balance_recovered": float(balance)}
+    return {
+        "account_balance_recovered": float(remaining_deposits),
+        "deposits_applied_to_loans": float(applied_to_loans),
+        "loan_debt_written_off": float(written_off),
+    }
