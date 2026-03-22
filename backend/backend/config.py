@@ -42,6 +42,7 @@ class ServerSettings(BaseModel):
     host: str = "0.0.0.0"
     port: int = 8000
     debug: bool = False
+    base_url: str = "http://localhost:8000"
 
 
 class EconomySettings(BaseModel):
@@ -127,9 +128,10 @@ class _EnvLoader(BaseSettings):
     debug: str = "false"
     host: str = "0.0.0.0"
     port: int = 8000
+    base_url: str = "http://localhost:8000"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", ".env.local"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -192,6 +194,7 @@ def load_settings(config_dir: str | Path | None = None, env_file: str | None = N
         host=loader.host,
         port=loader.port,
         debug=debug,
+        base_url=loader.base_url,
     )
 
     # Merge economy.yaml into EconomySettings

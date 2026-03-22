@@ -132,19 +132,26 @@ def create_app(
     # CORS — allow frontend dev server and production origins.
     # In Docker, nginx proxies all requests so the browser only talks to nginx
     # (port 80). We also allow localhost:5173 for local dev without Docker.
+    base = settings.server.base_url.rstrip("/")
+    # Derive www variant for production domains
+    from urllib.parse import urlparse
+    parsed = urlparse(base)
+    www_origin = f"{parsed.scheme}://www.{parsed.hostname}" if parsed.hostname and not parsed.hostname.startswith("www.") else None
+
+    prod_origins = [base]
+    if www_origin:
+        prod_origins.append(www_origin)
+    prod_origins += [
+        "http://localhost",
+        "http://localhost:80",
+        "http://localhost:5173",
+        "http://127.0.0.1",
+        "http://127.0.0.1:80",
+    ]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "*",
-        ] if settings.server.debug else [
-            "https://DOMAIN_PLACEHOLDER",
-            "https://www.DOMAIN_PLACEHOLDER",
-            "http://localhost",
-            "http://localhost:80",
-            "http://localhost:5173",
-            "http://127.0.0.1",
-            "http://127.0.0.1:80",
-        ],
+        allow_origins=["*"] if settings.server.debug else prod_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
