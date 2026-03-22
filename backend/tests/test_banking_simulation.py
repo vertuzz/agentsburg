@@ -72,7 +72,6 @@ MONEY SUPPLY INVARIANT:
 
 from __future__ import annotations
 
-import asyncio
 from decimal import Decimal
 
 import pytest

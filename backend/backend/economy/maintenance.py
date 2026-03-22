@@ -20,7 +20,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, func, select, text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
@@ -128,45 +127,7 @@ async def _aggregate_to_hourly(db: AsyncSession, now: datetime) -> int:
 
     cutoff = now - timedelta(hours=24)
 
-    # Group raw trades by (good_slug, hour bucket) and compute OHLCV
-    # date_trunc('hour', executed_at) gives the start of each hour
-    stmt = (
-        select(
-            MarketTrade.good_slug,
-            func.date_trunc("hour", MarketTrade.executed_at).label("period_start"),
-            func.first_value(MarketTrade.price)
-            .over(
-                partition_by=[
-                    MarketTrade.good_slug,
-                    func.date_trunc("hour", MarketTrade.executed_at),
-                ],
-                order_by=MarketTrade.executed_at,
-            )
-            .label("open_price"),
-            func.max(MarketTrade.price).label("high_price"),
-            func.min(MarketTrade.price).label("low_price"),
-            func.last_value(MarketTrade.price)
-            .over(
-                partition_by=[
-                    MarketTrade.good_slug,
-                    func.date_trunc("hour", MarketTrade.executed_at),
-                ],
-                order_by=MarketTrade.executed_at,
-                rows=(None, None),
-            )
-            .label("close_price"),
-            func.sum(MarketTrade.quantity).label("volume"),
-            func.sum(MarketTrade.price * MarketTrade.quantity).label("total_value"),
-        )
-        .where(MarketTrade.executed_at < cutoff)
-        .group_by(
-            MarketTrade.good_slug,
-            func.date_trunc("hour", MarketTrade.executed_at),
-        )
-    )
-
-    # Use a simpler approach: raw SQL for the OHLCV aggregation
-    # (window functions in subquery)
+    # Raw SQL for the OHLCV aggregation (window functions in subquery)
     raw_sql = text("""
         WITH trade_data AS (
             SELECT

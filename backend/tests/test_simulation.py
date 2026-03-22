@@ -32,12 +32,10 @@ Calibration notes:
 
 from __future__ import annotations
 
-import asyncio
 from decimal import Decimal
 
 import pytest
-import pytest_asyncio
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 
 from backend.models.agent import Agent
 from backend.models.inventory import InventoryItem
@@ -260,18 +258,7 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
     # We'll need to gather repeatedly, advancing clock each time
     # Let's fill to near capacity
 
-    berry_count = 0
-    # Start: agent_7 has 0 items
-    # Berries cost 1 storage unit each, capacity is 100
-    # We need to gather 100 to fill it, each with 50s cooldown (homeless)
-
-    # Speed through the gathering by advancing clock
-    for _ in range(98):  # gather 98 berries
-        clock.advance(51)  # advance past 50s homeless cooldown
-        r = await agents[7].call("gather", {"resource": "berries"})
-        berry_count += 1
-
-    # OPTIMIZATION: fill agent_7's storage via DB instead of 100 HTTP gather calls.
+    # OPTIMIZATION: fill agent_7's storage via DB instead of HTTP gather calls.
     # agent_7 already has 1 berry from the first gather (homeless, wood too). We set
     # berries to 100 and remove other items to land exactly at capacity.
     # This tests storage-limit enforcement (same assertion) without the slow gather loop.

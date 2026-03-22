@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 import random
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent

@@ -13,41 +13,15 @@ Verifies that security and fairness fixes are working correctly:
 
 from __future__ import annotations
 
-from datetime import timedelta
-from decimal import Decimal
-
 import pytest
 from sqlalchemy import select
 
 from backend.models.agent import Agent
 from backend.models.banking import BankAccount, Loan
-from backend.models.government import GovernmentState, Vote
+from backend.models.government import Vote
 from backend.models.marketplace import MarketOrder, MarketTrade
+from tests.conftest import give_balance, force_agent_age
 from tests.helpers import TestAgent, ToolCallError
-
-
-# ---------------------------------------------------------------------------
-# Helpers (same pattern as test_government_simulation.py)
-# ---------------------------------------------------------------------------
-
-async def give_balance(app, agent_name: str, amount: float) -> None:
-    """Directly set an agent's balance for test setup."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        agent.balance = Decimal(str(amount))
-        await session.commit()
-
-
-async def force_agent_age(app, agent_name: str, age_seconds: int) -> None:
-    """Set an agent's created_at to make them appear old enough."""
-    clock = app.state.clock
-    now = clock.now()
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        agent.created_at = now - timedelta(seconds=age_seconds)
-        await session.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +100,6 @@ async def test_self_trade_prevention(client, app, clock, run_tick, db, redis_cli
         )
 
         # Verify no trades were executed for this agent's orders
-        from backend.models.marketplace import MarketOrder as MO
         agent_order_ids = [
             o.id for o in open_orders
         ]
@@ -308,7 +281,6 @@ async def test_input_validation_agent_name(client, redis_client):
 
 async def _try_signup(client, name: str) -> tuple[dict | None, str | None]:
     """Attempt signup and return (result, None) or (None, error_code)."""
-    import json
     payload = {
         "jsonrpc": "2.0",
         "id": 1,

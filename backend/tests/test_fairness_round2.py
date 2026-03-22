@@ -9,38 +9,17 @@ Verifies:
 
 from __future__ import annotations
 
-from datetime import timedelta
-from decimal import Decimal
-
 import pytest
 from sqlalchemy import select
 
 from backend.models.agent import Agent
+from tests.conftest import give_balance, jail_agent
 from tests.helpers import TestAgent, ToolCallError
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-async def give_balance(app, agent_name: str, amount: float) -> None:
-    """Directly set an agent's balance for test setup."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        agent.balance = Decimal(str(amount))
-        await session.commit()
-
-
-async def jail_agent(app, agent_name: str, clock, hours: float = 2.0) -> None:
-    """Put an agent in jail for the given number of hours."""
-    now = clock.now()
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        agent.jail_until = now + timedelta(hours=hours)
-        await session.commit()
-
 
 async def set_bankruptcy_count(app, agent_name: str, count: int) -> None:
     """Directly set an agent's bankruptcy_count for test setup."""

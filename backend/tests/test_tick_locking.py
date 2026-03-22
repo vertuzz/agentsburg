@@ -24,30 +24,9 @@ import pytest
 from sqlalchemy import select
 
 from backend.models.agent import Agent
-from backend.models.banking import BankAccount, CentralBank, Loan
-from backend.models.transaction import Transaction
+from backend.models.banking import CentralBank
+from tests.conftest import give_balance, get_balance
 from tests.helpers import TestAgent, ToolCallError
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-async def give_balance(app, agent_name: str, amount: float) -> None:
-    """Directly set an agent's balance for test setup."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        agent.balance = Decimal(str(amount))
-        await session.commit()
-
-
-async def get_balance(app, agent_name: str) -> Decimal:
-    """Read an agent's current balance."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        return Decimal(str(agent.balance))
 
 
 # ---------------------------------------------------------------------------
@@ -153,8 +132,6 @@ async def test_concurrent_tick_and_gather_balance_integrity(
         return await run_tick(hours=1)
 
     async def do_gather():
-        # Small delay to let tick start first
-        await asyncio.sleep(0.01)
         try:
             return await agent.call("gather", {"resource": "wood"})
         except Exception:

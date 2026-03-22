@@ -43,7 +43,6 @@ from backend.models.business import Business, Employment, JobPosting
 from backend.models.inventory import InventoryItem
 from backend.models.recipe import Recipe
 from backend.models.transaction import Transaction
-from backend.models.zone import Zone
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis

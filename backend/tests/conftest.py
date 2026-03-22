@@ -25,20 +25,23 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import AsyncGenerator
 
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from backend.clock import MockClock
 from backend.config import load_settings, Settings
-from backend.database import create_engine, create_sessionmaker
 from backend.main import create_app
+from backend.models.agent import Agent
 from backend.models.base import Base
+from backend.models.inventory import InventoryItem
 
 # ---------------------------------------------------------------------------
 # Load .env.test at import time so all settings pick up test values.
@@ -296,3 +299,87 @@ async def run_tick(app, clock: MockClock):
 
     _run_tick.days = _run_days
     return _run_tick
+
+
+# ---------------------------------------------------------------------------
+# Shared test helpers — used by multiple test files
+# ---------------------------------------------------------------------------
+
+async def give_balance(app, agent_name: str, amount: float) -> None:
+    """Directly set an agent's balance for test setup."""
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(Agent).where(Agent.name == agent_name))
+        agent = result.scalar_one()
+        agent.balance = Decimal(str(amount))
+        await session.commit()
+
+
+async def get_balance(app, agent_name: str) -> Decimal:
+    """Read an agent's current balance."""
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(Agent).where(Agent.name == agent_name))
+        agent = result.scalar_one()
+        return Decimal(str(agent.balance))
+
+
+async def force_agent_age(app, agent_name: str, age_seconds: int) -> None:
+    """Set an agent's created_at to make them appear old enough."""
+    clock = app.state.clock
+    now = clock.now()
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(Agent).where(Agent.name == agent_name))
+        agent = result.scalar_one()
+        agent.created_at = now - timedelta(seconds=age_seconds)
+        await session.commit()
+
+
+async def jail_agent(app, agent_name: str, clock, hours: float = 2.0) -> None:
+    """Put an agent in jail for the given number of hours."""
+    now = clock.now()
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(Agent).where(Agent.name == agent_name))
+        agent = result.scalar_one()
+        agent.jail_until = now + timedelta(hours=hours)
+        await session.commit()
+
+
+async def give_inventory(app, agent_name: str, good_slug: str, quantity: int) -> None:
+    """Directly give an agent inventory for test setup."""
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(Agent).where(Agent.name == agent_name))
+        agent = result.scalar_one()
+
+        inv_result = await session.execute(
+            select(InventoryItem).where(
+                InventoryItem.owner_type == "agent",
+                InventoryItem.owner_id == agent.id,
+                InventoryItem.good_slug == good_slug,
+            )
+        )
+        inv_item = inv_result.scalar_one_or_none()
+        if inv_item:
+            inv_item.quantity = quantity
+        else:
+            session.add(InventoryItem(
+                owner_type="agent",
+                owner_id=agent.id,
+                good_slug=good_slug,
+                quantity=quantity,
+            ))
+        await session.commit()
+
+
+async def get_inventory_qty(app, agent_name: str, good_slug: str) -> int:
+    """Read an agent's inventory quantity for a given good."""
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(Agent).where(Agent.name == agent_name))
+        agent = result.scalar_one()
+        inv_result = await session.execute(
+            select(InventoryItem).where(
+                InventoryItem.owner_type == "agent",
+                InventoryItem.owner_id == agent.id,
+                InventoryItem.good_slug == good_slug,
+            )
+        )
+        inv_item = inv_result.scalar_one_or_none()
+        return inv_item.quantity if inv_item else 0

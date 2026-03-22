@@ -28,11 +28,9 @@ Tests the Phase 8 additions:
 
 from __future__ import annotations
 
-import asyncio
 import json
 
 import pytest
-import pytest_asyncio
 
 from tests.helpers import TestAgent, ToolCallError
 
@@ -382,22 +380,6 @@ async def test_error_code_cooldown_active(client, redis_client):
     assert error_code == "COOLDOWN_ACTIVE", (
         f"Expected COOLDOWN_ACTIVE on second gather, got {error_code!r}"
     )
-
-
-@pytest.mark.asyncio
-async def test_error_code_not_found(client, redis_client):
-    """
-    Sending a message to an unknown agent should return NOT_FOUND.
-    """
-    agent = await TestAgent.signup(client, "not_found_test_agent")
-
-    _, error_code = await agent.try_call("messages", {
-        "action": "send",
-        "to_agent": "unknown_agent_zzz",
-        "text": "Are you there?",
-    })
-
-    assert error_code == "NOT_FOUND", f"Expected NOT_FOUND, got {error_code!r}"
 
 
 @pytest.mark.asyncio

@@ -9,77 +9,11 @@ Verifies that FOR UPDATE locking prevents race conditions:
 from __future__ import annotations
 
 import asyncio
-from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
 
-from backend.models.agent import Agent
-from backend.models.inventory import InventoryItem
-from tests.helpers import TestAgent, ToolCallError
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-async def give_balance(app, agent_name: str, amount: float) -> None:
-    """Directly set an agent's balance for test setup."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        agent.balance = Decimal(str(amount))
-        await session.commit()
-
-
-async def give_inventory(app, agent_name: str, good_slug: str, quantity: int) -> None:
-    """Directly give an agent inventory for test setup."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-
-        inv_result = await session.execute(
-            select(InventoryItem).where(
-                InventoryItem.owner_type == "agent",
-                InventoryItem.owner_id == agent.id,
-                InventoryItem.good_slug == good_slug,
-            )
-        )
-        inv_item = inv_result.scalar_one_or_none()
-        if inv_item:
-            inv_item.quantity = quantity
-        else:
-            session.add(InventoryItem(
-                owner_type="agent",
-                owner_id=agent.id,
-                good_slug=good_slug,
-                quantity=quantity,
-            ))
-        await session.commit()
-
-
-async def get_balance(app, agent_name: str) -> Decimal:
-    """Read an agent's current balance."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        return Decimal(str(agent.balance))
-
-
-async def get_inventory_qty(app, agent_name: str, good_slug: str) -> int:
-    """Read an agent's inventory quantity for a given good."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        inv_result = await session.execute(
-            select(InventoryItem).where(
-                InventoryItem.owner_type == "agent",
-                InventoryItem.owner_id == agent.id,
-                InventoryItem.good_slug == good_slug,
-            )
-        )
-        inv_item = inv_result.scalar_one_or_none()
-        return inv_item.quantity if inv_item else 0
+from tests.conftest import give_balance, give_inventory, get_balance, get_inventory_qty
+from tests.helpers import TestAgent
 
 
 # ---------------------------------------------------------------------------

@@ -7,29 +7,14 @@ Tests for Sybil attack vector and NPC exploitation fixes.
 
 from __future__ import annotations
 
-from datetime import timedelta
-from decimal import Decimal
-
 import pytest
 from sqlalchemy import select, func
 
 from backend.models.agent import Agent
 from backend.models.inventory import InventoryItem
 from backend.models.marketplace import MarketOrder
+from tests.conftest import give_balance
 from tests.helpers import TestAgent
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-async def give_balance(app, agent_name: str, amount: float) -> None:
-    """Directly set an agent's balance for test setup."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        agent.balance = Decimal(str(amount))
-        await session.commit()
 
 
 # ---------------------------------------------------------------------------

@@ -42,48 +42,21 @@ Tests the complete government, tax, and enforcement system:
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from decimal import Decimal
 
 import pytest
-import pytest_asyncio
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from backend.models.agent import Agent
 from backend.models.government import GovernmentState, Vote, Violation, TaxRecord
-from backend.models.transaction import Transaction
+from tests.conftest import force_agent_age, give_balance
 from tests.helpers import TestAgent, ToolCallError
 
 
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
-
-async def force_agent_age(app, agent_name: str, age_seconds: int) -> None:
-    """
-    Backdoor: set an agent's created_at to make them appear old enough to vote.
-    Uses the app's clock (MockClock) for consistency.
-    """
-    clock = app.state.clock
-    now = clock.now()
-    async with app.state.session_factory() as session:
-        result = await session.execute(
-            select(Agent).where(Agent.name == agent_name)
-        )
-        agent = result.scalar_one()
-        agent.created_at = now - timedelta(seconds=age_seconds)
-        await session.commit()
-
-
-async def give_balance(app, agent_name: str, amount: float) -> None:
-    """Directly set an agent's balance."""
-    async with app.state.session_factory() as session:
-        result = await session.execute(select(Agent).where(Agent.name == agent_name))
-        agent = result.scalar_one()
-        agent.balance = Decimal(str(amount))
-        await session.commit()
-
 
 async def set_jail(app, agent_name: str, jail_hours: float) -> None:
     """Directly jail an agent for testing. Uses MockClock for consistency."""

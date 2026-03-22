@@ -29,13 +29,9 @@ Each "day" = 4 tick calls advancing 6h each = 4x faster than hourly ticks.
 
 from __future__ import annotations
 
-import asyncio
-import math
 from decimal import Decimal
-from typing import Any
 
 import pytest
-import pytest_asyncio
 from sqlalchemy import func, select
 
 from backend.models.agent import Agent
