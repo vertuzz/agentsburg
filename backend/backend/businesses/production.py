@@ -140,7 +140,8 @@ async def work(
                 "with register_business(name, type, zone)."
             )
 
-        # Self-employed: look at active job postings to determine what to produce
+        # Self-employed: first try active job postings, then fall back to
+        # the default_recipe_slug set via configure_production()
         jp_result = await db.execute(
             select(JobPosting).where(
                 JobPosting.business_id == business.id,
@@ -149,14 +150,16 @@ async def work(
         )
         job_posting = jp_result.scalar_one_or_none()
 
-        if job_posting is None:
+        if job_posting is not None:
+            product_slug = job_posting.product_slug
+        elif business.default_recipe_slug is not None:
+            product_slug = business.default_recipe_slug
+        else:
             raise ValueError(
-                f"Business {business.name!r} has no active job postings configured. "
-                "Post a job first with manage_employees(business_id, action='post_job', "
-                "product='...') to define what to produce, then call work()."
+                f"Business {business.name!r} has no production configured. "
+                "Call configure_production(business_id, product='...') to set what "
+                "to produce, then call work()."
             )
-
-        product_slug = job_posting.product_slug
 
     # -----------------------------------------------------------------------
     # Step 2: Get the recipe for the product
@@ -350,15 +353,25 @@ async def work(
     else:
         commute_multiplier = 1.0
 
-    # Government production cooldown modifier — default 1.0 until Phase 6
-    # In Phase 6, this will read from GovernmentState
-    government_modifier = await _get_government_modifier(db)
+    # Government production cooldown modifier
+    government_modifier = await _get_government_modifier(db, settings)
+
+    # Homeless penalty: homeless agents produce at reduced efficiency
+    # (cooldown multiplied by 1/penalty, e.g. penalty=0.5 → cooldown doubles)
+    homeless_penalty_multiplier = 1.0
+    if agent.is_homeless():
+        homeless_efficiency_penalty = getattr(
+            settings.economy, "housing_homeless_efficiency_penalty", 0.5
+        )
+        if homeless_efficiency_penalty > 0:
+            homeless_penalty_multiplier = 1.0 / homeless_efficiency_penalty
 
     effective_cooldown = int(
         base_cooldown
         * bonus_multiplier
         * commute_multiplier
         * government_modifier
+        * homeless_penalty_multiplier
     )
     # Minimum 1 second cooldown
     effective_cooldown = max(1, effective_cooldown)
@@ -402,6 +415,8 @@ async def work(
             "commute_penalty_applied": commute_penalty_applied,
             "commute_multiplier": commute_multiplier if commute_penalty_applied else None,
             "government_modifier": government_modifier if government_modifier != 1.0 else None,
+            "homeless_penalty_applied": homeless_penalty_multiplier != 1.0,
+            "homeless_penalty_multiplier": homeless_penalty_multiplier if homeless_penalty_multiplier != 1.0 else None,
         },
         "employed": is_employed,
         "_hints": {
@@ -420,23 +435,24 @@ async def work(
     return result
 
 
-async def _get_government_modifier(db: AsyncSession) -> float:
+async def _get_government_modifier(db: AsyncSession, settings: "Settings") -> float:
     """
     Get the current government production_cooldown_modifier.
 
-    Returns 1.0 until Phase 6 (Government) is implemented.
-    In Phase 6, this will query GovernmentState for the current
-    template's production_cooldown_modifier.
+    Queries GovernmentState for the current template's production_cooldown_modifier.
+    Falls back to 1.0 if government tables don't exist or state is missing.
     """
-    # Phase 6: uncomment when GovernmentState is available
-    # from backend.models.government import GovernmentState
-    # from backend.config import settings  # need to pass settings here
-    # state = await db.execute(select(GovernmentState).limit(1))
-    # gov = state.scalar_one_or_none()
-    # if gov:
-    #     template = settings.government.get("templates", {}).get(gov.current_template_slug, {})
-    #     return template.get("production_cooldown_modifier", 1.0)
-    return 1.0
+    try:
+        from backend.models.government import GovernmentState
+        from backend.government.service import get_policy_params
+        result = await db.execute(select(GovernmentState).where(GovernmentState.id == 1))
+        govt = result.scalar_one_or_none()
+        if not govt:
+            return 1.0
+        params = get_policy_params(settings, govt.current_template_slug)
+        return float(params.get("production_cooldown_modifier", 1.0))
+    except Exception:
+        return 1.0
 
 
 async def get_work_cooldown_remaining(

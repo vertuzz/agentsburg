@@ -209,11 +209,23 @@ async def _run_daily_tick(
     """
     Run all daily tick processing.
 
-    Phase 7 will add:
-    - NPC business adjustments
-    - Price history downsampling
+    - Take an economy snapshot for macro tracking
+    - Data maintenance (price history downsampling, old record cleanup)
     """
-    return {"processed": []}
+    processed = []
+
+    # Economy snapshot for macro stats tracking
+    snapshot_result = {"type": "economy_snapshot", "skipped": True}
+    try:
+        from backend.economy.maintenance import downsample_data
+        snapshot_result = await downsample_data(db, clock)
+        snapshot_result["type"] = "maintenance"
+        processed.append("economy_snapshot")
+        processed.append("data_maintenance")
+    except Exception:
+        logger.exception("Daily maintenance (snapshot/downsampling) failed — continuing")
+
+    return {"processed": processed, "maintenance": snapshot_result}
 
 
 async def _run_weekly_tick(

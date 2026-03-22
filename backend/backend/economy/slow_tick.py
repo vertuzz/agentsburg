@@ -51,8 +51,7 @@ async def process_survival_costs(
         Dict with count of agents charged and total amount deducted.
     """
     now = clock.now()
-    survival_cost = Decimal(str(settings.economy.food_cost_per_day / 24))
-    # food_cost_per_day / 24 = hourly food cost
+    survival_cost = Decimal(str(settings.economy.survival_cost_per_hour))
 
     # Load all agents
     result = await db.execute(select(Agent))

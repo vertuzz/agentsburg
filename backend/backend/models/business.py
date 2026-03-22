@@ -17,7 +17,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -64,6 +64,13 @@ class Business(UUIDMixin, TimestampMixin, Base):
     # If True, this is an NPC-controlled business (from bootstrap)
     is_npc: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
+    # Default product slug for self-employed owners (set via configure_production).
+    # When work() is called by the business owner without a job posting, this
+    # determines what to produce. None means not configured yet.
+    default_recipe_slug: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, default=None
+    )
+
     # Set when the business is closed. None = currently open.
     closed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -88,6 +95,7 @@ class Business(UUIDMixin, TimestampMixin, Base):
             "storage_capacity": self.storage_capacity,
             "is_npc": self.is_npc,
             "is_open": self.is_open(),
+            "default_recipe_slug": self.default_recipe_slug,
             "closed_at": self.closed_at.isoformat() if self.closed_at else None,
         }
 

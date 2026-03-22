@@ -16,7 +16,7 @@ import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
@@ -280,6 +280,9 @@ async def tally_election(
     loans_adjusted = 0
     if changed:
         loans_adjusted = await _adjust_loan_rates(db, settings, winner)
+
+    # Reset all votes so stale votes don't carry forward to the next election
+    await db.execute(delete(Vote))
 
     await db.flush()
 

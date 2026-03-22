@@ -44,8 +44,8 @@ class ServerSettings(BaseModel):
 class EconomySettings(BaseModel):
     """Global economic parameters loaded from economy.yaml."""
 
-    # Survival costs (deducted per day in slow tick)
-    food_cost_per_day: float = 10.0
+    # Survival costs (deducted per hour in slow tick)
+    survival_cost_per_hour: float = 5.0
     # Base production cooldown in seconds
     base_production_cooldown: int = 60
     # Commute penalty multiplier (applied when housing_zone != business_zone)

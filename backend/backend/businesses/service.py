@@ -93,8 +93,15 @@ async def register_business(
                 f"Allowed types: {zone.allowed_business_types}"
             )
 
-    # Check registration cost
-    reg_cost = Decimal(str(settings.economy.business_registration_cost))
+    # Check registration cost (modified by current government licensing policy)
+    base_reg_cost = float(settings.economy.business_registration_cost)
+    try:
+        from backend.government.service import get_current_policy
+        policy = await get_current_policy(db, settings)
+        licensing_modifier = float(policy.get("licensing_cost_modifier", 1.0))
+    except Exception:
+        licensing_modifier = 1.0
+    reg_cost = Decimal(str(base_reg_cost * licensing_modifier))
     agent_balance = Decimal(str(agent.balance))
 
     if agent_balance < reg_cost:
@@ -288,6 +295,11 @@ async def configure_production(
             f"No recipe found that produces {product_slug!r}. "
             f"Check recipes.yaml for available production recipes."
         )
+
+    # Persist the default recipe slug on the business so work() can use it
+    # for self-employed owners without an active job posting
+    business.default_recipe_slug = product_slug
+    await db.flush()
 
     # Return the available recipes for this product
     recipe_list = [r.to_dict() for r in recipes]
