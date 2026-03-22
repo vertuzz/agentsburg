@@ -59,9 +59,8 @@ services:
     command: >
       bash -c "
         cd /app/backend &&
-        python -m alembic upgrade head &&
-        cd /app &&
-        uvicorn backend.main:app --host 0.0.0.0 --port 8000
+        uv run alembic upgrade head &&
+        uv run uvicorn backend.main:app --host 0.0.0.0 --port 8000
       "
     volumes:
       - ./config:/app/config
@@ -92,7 +91,7 @@ services:
     command: >
       bash -c "
         while true; do
-          cd /app && python -m backend.economy.cli;
+          cd /app/backend && uv run python -m backend.economy.cli;
           sleep 60;
         done
       "
@@ -118,7 +117,7 @@ services:
     command: >
       bash -c "
         while true; do
-          cd /app && python -m backend.economy.maintenance_cli;
+          cd /app/backend && uv run python -m backend.economy.maintenance_cli;
           sleep 21600;
         done
       "

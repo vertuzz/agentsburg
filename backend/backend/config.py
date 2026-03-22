@@ -6,6 +6,9 @@ single frozen Settings object stored on app.state.
 
 Config files live in /app/config/ inside the container (mounted from
 the project root config/ directory).
+
+Environment variables take priority over .env file values, which take
+priority over YAML config values, which take priority over model defaults.
 """
 
 from __future__ import annotations
@@ -15,8 +18,8 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, field_validator
-from pydantic_settings import BaseSettings
+from pydantic import BaseModel, ConfigDict
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 # ---------------------------------------------------------------------------
@@ -74,8 +77,7 @@ class EconomySettings(BaseModel):
     # NPC worker wage multiplier (relative to posted wage)
     npc_worker_wage_multiplier: float = 2.0
 
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class Settings(BaseModel):
@@ -100,6 +102,40 @@ class Settings(BaseModel):
     model_config = {"frozen": True}
 
 
+# ---------------------------------------------------------------------------
+# Environment loader — reads .env file into os.environ before settings build
+# ---------------------------------------------------------------------------
+
+
+class _EnvLoader(BaseSettings):
+    """
+    Lightweight BaseSettings used only to load .env file values.
+
+    Reads the env_file into resolved values. Actual model fields are
+    defined here so pydantic-settings resolves them; we then use the
+    raw env values to populate the full Settings object.
+
+    Priority (highest → lowest):
+    1. Real environment variables (already in os.environ)
+    2. .env file (if present)
+    3. Model defaults below
+    """
+
+    database_url: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy"
+    redis_url: str = "redis://redis:6379/0"
+    config_dir: str = "/app/config"
+    debug: str = "false"
+    host: str = "0.0.0.0"
+    port: int = 8000
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+
 def _load_yaml_file(path: Path) -> Any:
     """Load a YAML file, returning empty dict/list on missing file."""
     if not path.exists():
@@ -108,17 +144,31 @@ def _load_yaml_file(path: Path) -> Any:
         return yaml.safe_load(f) or {}
 
 
-def load_settings(config_dir: str | Path | None = None) -> Settings:
+def load_settings(config_dir: str | Path | None = None, env_file: str | None = None) -> Settings:
     """
-    Load settings by merging environment variables and YAML config files.
+    Load settings by merging environment variables, .env file, and YAML config files.
 
     Priority (highest to lowest):
     1. Environment variables (DATABASE_URL, REDIS_URL, etc.)
-    2. YAML config files in config_dir
-    3. Pydantic model defaults
+    2. .env file (auto-detected or specified via env_file)
+    3. YAML config files in config_dir
+    4. Pydantic model defaults
+
+    Args:
+        config_dir: Directory to load YAML configs from.
+                    Falls back to CONFIG_DIR env var, then /app/config.
+        env_file:   Path to .env file to load. Defaults to ".env" in cwd.
+                    Pass ".env.test" to load test settings.
     """
+    # Build env loader with optional env_file override
+    if env_file is not None:
+        loader = _EnvLoader(_env_file=env_file)  # type: ignore[call-arg]
+    else:
+        loader = _EnvLoader()
+
+    # Resolve config_dir (explicit arg > env var > loader default)
     if config_dir is None:
-        config_dir = Path(os.environ.get("CONFIG_DIR", "/app/config"))
+        config_dir = Path(loader.config_dir)
     config_dir = Path(config_dir)
 
     # Load each YAML config file
@@ -130,22 +180,17 @@ def load_settings(config_dir: str | Path | None = None) -> Settings:
     economy_data = _load_yaml_file(config_dir / "economy.yaml")
     bootstrap_data = _load_yaml_file(config_dir / "bootstrap.yaml")
 
-    # Build database settings — env var overrides YAML
-    db_url = os.environ.get(
-        "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy",
-    )
-    redis_url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
-    debug = os.environ.get("DEBUG", "false").lower() == "true"
+    # Build sub-settings from resolved env values
+    debug = loader.debug.lower() == "true"
 
     db_settings = DatabaseSettings(
-        url=db_url,
+        url=loader.database_url,
         echo=debug,
     )
-    redis_settings = RedisSettings(url=redis_url)
+    redis_settings = RedisSettings(url=loader.redis_url)
     server_settings = ServerSettings(
-        host=os.environ.get("HOST", "0.0.0.0"),
-        port=int(os.environ.get("PORT", "8000")),
+        host=loader.host,
+        port=loader.port,
         debug=debug,
     )
 

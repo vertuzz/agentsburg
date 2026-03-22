@@ -6,8 +6,10 @@ __pycache__/
 dist/
 build/
 node_modules/
-.env
-.env.*
+# .env and .env.test are committed — they contain safe localhost defaults only.
+# Use .env.local for personal/machine-specific overrides (never committed).
+.env.local
+.env.*.local
 *.db
 .vite/
 frontend/dist/

@@ -16,13 +16,15 @@ The ONLY mock is MockClock. Everything else is real:
 - Real tool dispatch
 
 If a test passes here, a real AI agent doing the same calls will get the same result.
+
+Environment is loaded automatically from .env.test (in the backend/ directory).
+No manual env var exports are needed.
 """
 
 from __future__ import annotations
 
 import asyncio
 import os
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import AsyncGenerator
@@ -30,8 +32,7 @@ from typing import AsyncGenerator
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from backend.clock import MockClock
 from backend.config import load_settings, Settings
@@ -40,43 +41,67 @@ from backend.main import create_app
 from backend.models.base import Base
 
 # ---------------------------------------------------------------------------
-# Test database and Redis configuration
+# Load .env.test at import time so all settings pick up test values.
+# We resolve the path relative to this file's location so it works
+# regardless of the working directory pytest is invoked from.
 # ---------------------------------------------------------------------------
 
-# Use a dedicated test database by appending "_test" to the DB name
-# or using TEST_DATABASE_URL env var directly
-def _get_test_db_url() -> str:
-    test_url = os.environ.get("TEST_DATABASE_URL")
-    if test_url:
-        return test_url
+_BACKEND_DIR = Path(__file__).parent.parent  # .../backend/
+_ENV_TEST_FILE = _BACKEND_DIR / ".env.test"
 
-    base_url = os.environ.get(
+
+def _load_env_file(path: Path) -> None:
+    """
+    Parse a .env file and set values into os.environ.
+
+    Real environment variables already present take priority and are
+    NOT overwritten — same semantics as pydantic-settings.
+    """
+    if not path.exists():
+        return
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip()
+            # Strip optional surrounding quotes
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            # Real env vars take priority
+            if key not in os.environ:
+                os.environ[key] = value
+
+
+# Apply test environment before any test code runs
+_load_env_file(_ENV_TEST_FILE)
+
+# ---------------------------------------------------------------------------
+# Config directory — locate the YAML config files
+# ---------------------------------------------------------------------------
+
+CONFIG_DIR = _BACKEND_DIR.parent / "config"
+
+if not CONFIG_DIR.exists():
+    # Try one level up (monorepo layouts vary)
+    CONFIG_DIR = _BACKEND_DIR.parent.parent / "config"
+
+
+# ---------------------------------------------------------------------------
+# Settings helpers — read from os.environ (already populated above)
+# ---------------------------------------------------------------------------
+
+def _get_test_db_url() -> str:
+    return os.environ.get(
         "DATABASE_URL",
-        "postgresql+asyncpg://postgres:postgres@localhost:5432/agent_economy",
+        "postgresql+asyncpg://postgres:postgres@localhost:5432/agent_economy_test",
     )
-    # Append _test to the database name
-    # postgresql+asyncpg://user:pass@host:port/dbname -> .../dbname_test
-    return re.sub(r"(/[^/]+)$", r"\1_test", base_url)
 
 
 def _get_test_redis_url() -> str:
-    # Use Redis DB index 1 for tests (production uses index 0)
-    base_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    # Replace /0 with /1 at end of URL, or append /1
-    if re.search(r"/\d+$", base_url):
-        return re.sub(r"/\d+$", "/1", base_url)
-    return base_url.rstrip("/") + "/1"
-
-
-# ---------------------------------------------------------------------------
-# Config directory
-# ---------------------------------------------------------------------------
-
-CONFIG_DIR = Path(__file__).parent.parent.parent.parent / "config"
-
-if not CONFIG_DIR.exists():
-    # Try alternative paths
-    CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
+    return os.environ.get("REDIS_URL", "redis://localhost:6379/1")
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +149,8 @@ async def create_test_database(test_db_url: str):
 async def settings(test_db_url: str, test_redis_url: str) -> Settings:
     """Load settings with test DB and Redis URLs."""
     s = load_settings(CONFIG_DIR)
-    # Override DB and Redis with test URLs
+    # Override DB and Redis with test URLs (already set via .env.test but
+    # we apply them explicitly here so the fixture is self-documenting)
     from backend.config import DatabaseSettings, RedisSettings
     return Settings(
         database=DatabaseSettings(url=test_db_url, echo=False),
