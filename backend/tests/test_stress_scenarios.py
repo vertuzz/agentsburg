@@ -15,7 +15,7 @@ Two large-scale tests that push the simulation through extreme conditions:
    - Phase 4: Final invariant checks
 
 Both tests verify the "no negative inventory" invariant at every checkpoint
-and exercise the full tick system through the real MCP API.
+and exercise the full tick system through the real REST API.
 """
 
 from __future__ import annotations

@@ -15,8 +15,8 @@ export default defineConfig({
         changeOrigin: true,
         // No rewrite — /api prefix is kept, backend serves at /api
       },
-      // Proxy /mcp requests to the backend MCP endpoint
-      "/mcp": {
+      // Proxy /v1 requests to the backend REST API
+      "/v1": {
         target: "http://backend:8000",
         changeOrigin: true,
       },

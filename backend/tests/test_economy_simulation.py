@@ -4,7 +4,7 @@ Grand Economy Simulation Test
 THE comprehensive end-to-end test for the Agent Economy. If this test passes,
 the application works. Covers all 8 phases of the economy lifecycle:
 
-Phase 1: Bootstrap & Basics (signup, gathering, cooldowns, MCP protocol)
+Phase 1: Bootstrap & Basics (signup, gathering, cooldowns, API discovery)
 Phase 2: Housing & Survival (rent, survival costs, tick deductions)
 Phase 3: Business & Employment (register, produce, hire, work, commute)
 Phase 4: Marketplace (order book, matching, cancellation, market orders)
@@ -13,7 +13,7 @@ Phase 6: Banking (deposit, withdraw, loans, interest, installments)
 Phase 7: Government & Law (voting, elections, taxes, audits, jail)
 Phase 8: Bankruptcy & Recovery (liquidation, serial bankruptcy, NPC fill, economy stats)
 
-All tests go through the real MCP endpoint via httpx ASGI transport.
+All tests go through the real REST API via httpx ASGI transport.
 The ONLY mock is MockClock.
 """
 
@@ -153,37 +153,22 @@ async def test_grand_economy_simulation(client, app, clock, run_tick, redis_clie
     assert err is not None, "bread should not be gatherable"
     print(f"  Non-gatherable resource rejected (error={err})")
 
-    # --- 1e: MCP Protocol checks ---
-    _print_section("Testing MCP protocol")
+    # --- 1e: API discovery checks ---
+    _print_section("Testing API discovery")
 
-    # tools/list
-    tools_resp = await client.post("/mcp", json={
-        "jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {},
-    })
+    # GET /v1/tools - endpoint catalog
+    tools_resp = await client.get("/v1/tools")
     assert tools_resp.status_code == 200
     tools_body = tools_resp.json()
-    assert "result" in tools_body
-    tool_list = tools_body["result"]["tools"]
-    assert len(tool_list) == 18, f"Expected 18 tools, got {len(tool_list)}"
-    tool_names = {t["name"] for t in tool_list}
-    expected_tools = {
-        "signup", "get_status", "rent_housing", "gather",
-        "register_business", "configure_production", "set_prices", "manage_employees",
-        "list_jobs", "apply_job", "work", "marketplace_order", "marketplace_browse",
-        "trade", "bank", "vote", "get_economy", "messages",
-    }
-    assert tool_names == expected_tools, f"Tool mismatch: {tool_names.symmetric_difference(expected_tools)}"
-    print(f"  tools/list returns 18 tools")
+    assert tools_body["ok"] is True
+    endpoints = tools_body["data"]["endpoints"]
+    assert len(endpoints) >= 18, f"Expected at least 18 endpoints, got {len(endpoints)}"
+    print(f"  /v1/tools returns {len(endpoints)} endpoints")
 
-    # initialize
-    init_resp = await client.post("/mcp", json={
-        "jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {},
-    })
-    assert init_resp.status_code == 200
-    init_body = init_resp.json()
-    assert "result" in init_body
-    assert init_body["result"]["serverInfo"]["name"] == "agent-economy"
-    print(f"  initialize response correct: {init_body['result']['serverInfo']['name']}")
+    # GET /v1/rules - game rules
+    rules_resp = await client.get("/v1/rules")
+    assert rules_resp.status_code == 200
+    print(f"  /v1/rules returns game documentation")
 
     print("\n  Phase 1 COMPLETE")
 

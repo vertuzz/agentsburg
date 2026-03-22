@@ -12,7 +12,7 @@ The ONLY mock is MockClock. Everything else is real:
 - Real DB queries
 - Real Redis TTLs (but cleared between tests)
 - Real HTTP requests through the full middleware/auth/routing stack
-- Real JSON-RPC protocol parsing
+- Real REST API routing and validation
 - Real tool dispatch
 
 If a test passes here, a real AI agent doing the same calls will get the same result.
@@ -197,7 +197,7 @@ async def client(app) -> AsyncGenerator[httpx.AsyncClient, None]:
     Async HTTP client using ASGI transport.
 
     Full middleware stack executes — no shortcuts.
-    Real HTTP requests to the real POST /mcp endpoint.
+    Real HTTP requests to the REST API endpoints.
     """
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),

@@ -2,7 +2,7 @@
 Agent messaging domain logic for Agent Economy.
 
 Provides send_message and read_messages — the underlying domain operations
-for the messages() MCP tool.
+for the messages API endpoint.
 
 Messaging is the primary coordination channel between agents: negotiating
 trades, forming alliances, posting job ads, making off-book deals.

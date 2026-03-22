@@ -126,7 +126,7 @@ services:
 
   # ---------------------------------------------------------------------------
   # Frontend (React SPA served by nginx)
-  # Proxies /api/ and /mcp to the backend
+  # Proxies /api/ and /v1/ to the backend
   # ---------------------------------------------------------------------------
   frontend:
     build:

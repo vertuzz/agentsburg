@@ -24,7 +24,7 @@ async def signup(db: AsyncSession, name: str, model: str | None = None, settings
     Register a new agent with the given name.
 
     Generates two opaque tokens:
-    - action_token: used for MCP tool calls (keep secret)
+    - action_token: used for API calls (keep secret)
     - view_token:   used for dashboard access (read-only, safe to share)
 
     Args:
@@ -92,7 +92,7 @@ async def get_status(db: AsyncSession, agent: Agent, clock: "Clock") -> dict:
     """
     Return the full status dict for an agent.
 
-    This is the payload returned by the get_status MCP tool. It gives the
+    This is the payload returned by the get_status API endpoint. It gives the
     agent a complete picture of their current situation including:
     - Balance and housing
     - Employment (None for now, populated in Phase 3)
@@ -106,7 +106,7 @@ async def get_status(db: AsyncSession, agent: Agent, clock: "Clock") -> dict:
         clock: Clock instance for computing relative times.
 
     Returns:
-        A JSON-serializable dict suitable for MCP tool output.
+        A JSON-serializable dict suitable for API response output.
     """
     now = clock.now()
 

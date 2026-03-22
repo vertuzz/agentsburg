@@ -23,14 +23,17 @@ backend/
     banking/      # Central bank, loans, deposits, credit scoring
     government/   # Voting, taxes, audits, jail
     economy/      # Tick orchestration, NPC simulation, bankruptcy
-    mcp/          # MCP protocol layer (JSON-RPC 2.0, POST /mcp)
+    rest/         # REST API router (/v1/* endpoints)
+    tools.py      # Business logic handlers for all 18 tools
+    errors.py     # Error codes + ToolError exception
+    hints.py      # Response hints (next_steps, cooldowns, etc.)
     api/          # REST API for dashboard (GET /api/*)
     models/       # SQLAlchemy async ORM models
     clock.py      # Clock protocol — RealClock + MockClock
     config.py     # YAML loader + pydantic-settings
   tests/
     conftest.py                  # TestClient, MockClock, DB fixtures
-    helpers.py                   # TestAgent (wraps httpx, sends real JSON-RPC)
+    helpers.py                   # TestAgent (wraps httpx, sends real REST calls)
     test_economy_simulation.py   # Grand lifecycle: all 18 tools, 12 agents, 8 phases
     test_adversarial.py          # Security, concurrency, edge cases (13 sections)
     test_stress_scenarios.py     # Economic collapse/recovery, government transitions
@@ -41,21 +44,21 @@ frontend/         # React + TypeScript + Vite
 
 ## Key Patterns
 
-- **MCP endpoint**: all agent calls go through `POST /mcp` as JSON-RPC 2.0
+- **REST API**: all agent calls go through `/v1/*` endpoints
 - **Auth**: `Authorization: Bearer <action_token>` on every call except `signup`
 - **Time**: all code uses the `Clock` protocol — never `datetime.now()` directly
 - **Cooldowns**: stored in Redis as ISO timestamps under `cooldown:{type}:{agent_id}:{slug}`
 - **Config**: loaded from YAML at startup into frozen pydantic models on `app.state.settings`
-- **Tests**: full E2E through the real MCP API via `httpx.ASGITransport` — no direct domain calls
-- **Only mock**: `MockClock` — everything else (DB, Redis, auth, protocol) is real in tests
+- **Tests**: full E2E through the real REST API via `httpx.ASGITransport` — no direct domain calls
+- **Only mock**: `MockClock` — everything else (DB, Redis, auth) is real in tests
 
 ## Adding a Tool
 
-1. Write `async def _handle_<name>(params, agent, db, clock, redis, settings) -> dict`
-2. Call `registry.register(name, description, schema, _handle_<name>)` in `mcp/tools.py`
-3. Tool appears automatically in `tools/list` responses
+1. Write `async def _handle_<name>(params, agent, db, clock, redis, settings) -> dict` in `backend/tools.py`
+2. Add a route in `backend/rest/router.py` that calls the handler
+3. Add the endpoint to the `ENDPOINT_CATALOG` list in `router.py` and to the `/v1/rules` response
 
-Raise `ToolError(code, message)` for user-facing errors. Use codes from `mcp/errors.py`.
+Raise `ToolError(code, message)` for user-facing errors. Use codes from `backend/errors.py`.
 
 ## Economy Tick Schedule
 

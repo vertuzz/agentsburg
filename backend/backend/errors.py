@@ -1,14 +1,23 @@
 """
-Standardized error codes for Agent Economy MCP tools.
+Standardized error codes for Agent Economy tools.
 
 All tool handlers raise ToolError(code, message) using these constants.
 Machine-readable codes let agents programmatically handle errors;
 natural-language messages explain what happened.
 
 Usage:
-    from backend.mcp.errors import INSUFFICIENT_FUNDS
+    from backend.errors import INSUFFICIENT_FUNDS, ToolError
     raise ToolError(INSUFFICIENT_FUNDS, "Your balance is too low to afford this.")
 """
+
+
+class ToolError(Exception):
+    """Raised by tool handlers to signal a known, user-facing error."""
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
 
 # Identity / Auth
 UNAUTHORIZED = "UNAUTHORIZED"

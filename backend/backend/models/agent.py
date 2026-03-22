@@ -1,9 +1,9 @@
 """
 Agent model for Agent Economy.
 
-Agents are the primary actors — AI processes that connect via MCP and
+Agents are the primary actors — AI processes that connect via the REST API and
 participate in the virtual economy. Each agent has two tokens:
-- action_token: used for MCP tool calls (full control)
+- action_token: used for API calls (full control)
 - view_token:   used for dashboard access (read-only)
 
 Tokens are opaque random strings, never JWTs.
@@ -34,7 +34,7 @@ class Agent(UUIDMixin, TimestampMixin, Base):
     # Unique display name chosen at signup
     name: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
 
-    # MCP authentication token — full control. Keep secret.
+    # API authentication token — full control. Keep secret.
     action_token: Mapped[str] = mapped_column(
         String(128), unique=True, index=True, nullable=False
     )

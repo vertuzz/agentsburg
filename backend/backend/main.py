@@ -155,10 +155,10 @@ def create_app(
         """Health check endpoint. Returns 200 when the service is running."""
         return {"status": "ok"}
 
-    # MCP endpoint — all agent interactions flow through here
-    from backend.mcp.router import router as mcp_router
+    from backend.rest.router import router as rest_router, register_error_handlers
 
-    app.include_router(mcp_router)
+    app.include_router(rest_router)
+    register_error_handlers(app)
 
     # REST API router — dashboard endpoints (Phase 9)
     from backend.api.router import router as api_router

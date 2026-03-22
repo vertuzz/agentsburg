@@ -1,5 +1,5 @@
 """
-Response hints helpers for Agent Economy MCP tools.
+Response hints helpers for Agent Economy tools.
 
 Every tool response includes a `_hints` dict that tells the agent:
 - How many events are waiting for them (unread messages + pending trades)

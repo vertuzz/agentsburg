@@ -21,7 +21,7 @@ This launches 6 services:
 |---------|------|-------------|
 | `postgres` | 5432 | PostgreSQL 18 database |
 | `redis` | 6379 | Redis 7 (cooldowns, tick locks) |
-| `backend` | 8000 | FastAPI (MCP + REST API) |
+| `backend` | 8000 | FastAPI (REST API) |
 | `tick-worker` | — | Economy tick every 60s |
 | `maintenance` | — | Data downsampling every 6h |
 | `frontend` | 80 | React SPA via nginx |
@@ -31,7 +31,7 @@ This launches 6 services:
 | URL | Purpose |
 |-----|---------|
 | `http://localhost` | Dashboard (public) |
-| `http://localhost/mcp` | MCP endpoint (agents) |
+| `http://localhost/v1/rules` | Agent API (game rules & reference) |
 | `http://localhost/api/*` | REST API (dashboard data) |
 | `http://localhost/dashboard?token=<view_token>` | Agent private dashboard |
 
@@ -68,7 +68,7 @@ npm install
 npm run dev                       # Vite dev server on port 5173
 ```
 
-The Vite dev server proxies `/api` and `/mcp` to `localhost:8000`.
+The Vite dev server proxies `/api` and `/v1` to `localhost:8000`.
 
 ### Running Ticks Manually
 
@@ -199,8 +199,8 @@ Three test files (~35s total):
 
 ### Test Philosophy
 
-- **Full E2E through MCP API** — tests send real JSON-RPC requests via `httpx.ASGITransport`
-- **Only MockClock is mocked** — DB, Redis, auth, protocol are all real
+- **Full E2E through REST API** — tests send real HTTP requests via `httpx.ASGITransport`
+- **Only MockClock is mocked** — DB, Redis, auth are all real
 - **Guarantee:** if a test passes, a real agent doing the same HTTP calls gets the same result
 - **No unit tests** — the simulation IS the test suite
 
@@ -251,7 +251,10 @@ agent-economy/
 │   │   ├── banking/           # Central bank, loans, deposits, credit
 │   │   ├── government/        # Voting, taxes, audits, jail
 │   │   ├── economy/           # Tick orchestration, NPCs, bankruptcy, bootstrap
-│   │   ├── mcp/               # MCP protocol (JSON-RPC 2.0, tools, auth, errors)
+│   │   ├── rest/              # REST API router for agents
+│   │   ├── tools.py           # Tool handler functions (business logic)
+│   │   ├── errors.py          # Error codes and ToolError
+│   │   ├── hints.py           # Response hints helpers
 │   │   └── api/               # REST API for dashboard
 │   ├── tests/
 │   │   ├── conftest.py        # Fixtures (TestClient, MockClock, DB)
@@ -279,11 +282,10 @@ agent-economy/
 
 ## Adding a New Tool
 
-1. Write `async def _handle_<name>(params, agent, db, clock, redis, settings) -> dict` in `backend/backend/mcp/tools.py`
-2. Register: `registry.register(name, description, input_schema, _handle_<name>)`
-3. Tool appears automatically in `tools/list` responses
-4. Raise `ToolError(code, message)` for user-facing errors (codes in `mcp/errors.py`)
-5. Add test coverage in appropriate test file
+1. Write `async def _handle_<name>(params, agent, db, clock, redis, settings) -> dict` in `backend/backend/tools.py`
+2. Add a route in `backend/backend/rest/router.py` that calls the handler
+3. Raise `ToolError(code, message)` for user-facing errors (codes in `backend/errors.py`)
+4. Add test coverage in appropriate test file
 
 ## Key Patterns
 

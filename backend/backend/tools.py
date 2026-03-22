@@ -1,9 +1,9 @@
 """
-MCP tool registry for Agent Economy.
+Tool handler functions for Agent Economy.
 
-The ToolRegistry holds tool definitions and dispatches tool/call requests to
-the appropriate async handler functions. This is the central place where all
-MCP tools are registered and their JSON Schema input contracts are defined.
+Each handler implements one tool's business logic. Handlers are called by the
+REST router layer which provides authentication, database sessions, clock, and
+settings.
 
 Tool handler signature:
     async def handler(
@@ -17,26 +17,20 @@ Tool handler signature:
 
 Tools that require authentication should raise ToolError with code
 "UNAUTHORIZED" if agent is None.
-
-Adding a new tool:
-1. Write the handler function (async def)
-2. Call registry.register(name, description, schema, handler)
-3. The tool will automatically appear in tools/list responses
 """
 
 from __future__ import annotations
 
-import json as _json
 import re
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents import service as agent_service
-from backend.mcp.errors import (  # noqa: F401 — re-exported for convenience
+from backend.errors import (
     ALREADY_EXISTS,
-    BANKRUPT,
+    BANKRUPT,  # noqa: F401
     COOLDOWN_ACTIVE,
     IN_JAIL,
     INSUFFICIENT_FUNDS,
@@ -50,6 +44,7 @@ from backend.mcp.errors import (  # noqa: F401 — re-exported for convenience
     STORAGE_FULL,
     TRADE_EXPIRED,
     UNAUTHORIZED,
+    ToolError,
 )
 
 if TYPE_CHECKING:
@@ -58,126 +53,6 @@ if TYPE_CHECKING:
     from backend.clock import Clock
     from backend.config import Settings
     from backend.models.agent import Agent
-
-
-class ToolError(Exception):
-    """
-    Raised by tool handlers to signal a known, user-facing error.
-
-    Attributes:
-        code:    Machine-readable error code (e.g., "UNAUTHORIZED", "NOT_FOUND").
-        message: Human-readable explanation shown to the agent.
-    """
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
-        self.message = message
-
-
-class ToolRegistry:
-    """
-    Registry of all MCP tools available in the Agent Economy.
-
-    Tools are registered with their name, description, JSON Schema input
-    contract, and async handler. The registry handles dispatch and formats
-    results in the MCP content format.
-    """
-
-    def __init__(self) -> None:
-        # Ordered dict preserves registration order for tools/list
-        self._tools: dict[str, dict[str, Any]] = {}
-
-    def register(
-        self,
-        name: str,
-        description: str,
-        schema: dict,
-        handler: Callable,
-    ) -> None:
-        """
-        Register a tool with the registry.
-
-        Args:
-            name:        Unique tool name (used in tools/call).
-            description: Human-readable description shown to agents in tools/list.
-            schema:      JSON Schema object for the tool's input parameters.
-            handler:     Async callable that implements the tool logic.
-        """
-        self._tools[name] = {
-            "name": name,
-            "description": description,
-            "inputSchema": schema,
-            "handler": handler,
-        }
-
-    def get_tool_list(self) -> list[dict]:
-        """
-        Return all tools in the MCP tools/list format.
-
-        Returns:
-            List of tool descriptors: [{name, description, inputSchema}, ...]
-        """
-        return [
-            {
-                "name": t["name"],
-                "description": t["description"],
-                "inputSchema": t["inputSchema"],
-            }
-            for t in self._tools.values()
-        ]
-
-    async def call_tool(
-        self,
-        name: str,
-        params: dict,
-        agent: "Agent | None",
-        db: AsyncSession,
-        clock: "Clock",
-        redis: "aioredis.Redis",
-        settings: "Settings",
-    ) -> dict:
-        """
-        Dispatch a tool call to the registered handler.
-
-        Args:
-            name:     Tool name from the tools/call request.
-            params:   Tool parameters dict from the request.
-            agent:    Authenticated agent, or None if unauthenticated.
-            db:       Active async database session.
-            clock:    Clock for time-dependent logic.
-            redis:    Redis client for cooldown checks.
-            settings: Application settings.
-
-        Returns:
-            MCP content response dict: {"content": [{"type": "text", "text": ...}]}
-
-        Raises:
-            ToolError: if the tool raises a known error (forwarded to caller).
-            KeyError:  if the tool name is not registered.
-        """
-        if name not in self._tools:
-            raise KeyError(f"Unknown tool: {name!r}")
-
-        handler = self._tools[name]["handler"]
-        result = await handler(
-            params=params,
-            agent=agent,
-            db=db,
-            clock=clock,
-            redis=redis,
-            settings=settings,
-        )
-
-        # Wrap plain dicts in MCP content format
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": _json.dumps(result, default=str),
-                }
-            ]
-        }
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +245,7 @@ async def _handle_get_status(
     ]
 
     # Phase 8: pending events (unread messages + pending trades)
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
     status["pending_events"] = pending_events
 
@@ -434,7 +309,7 @@ async def _handle_rent_housing(
             raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
         raise ToolError(INVALID_PARAMS, error_msg) from e
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
 
     return {
@@ -525,7 +400,7 @@ async def _handle_gather(
     global_expire = clock.now() + timedelta(seconds=2)
     await redis.set(global_cooldown_key, global_expire.isoformat(), ex=30)
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
 
     # Merge hints — gather result already includes cooldown_remaining
@@ -621,7 +496,7 @@ async def _handle_register_business(
         else:
             raise ToolError(INVALID_PARAMS, error_message) from e
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
     result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
@@ -684,7 +559,7 @@ async def _handle_configure_production(
         else:
             raise ToolError(INVALID_PARAMS, error_message) from e
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
     result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
@@ -757,7 +632,7 @@ async def _handle_set_prices(
         else:
             raise ToolError(INVALID_PARAMS, error_message) from e
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
     result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
@@ -807,7 +682,7 @@ async def _handle_manage_employees(
         except (ValueError, AttributeError):
             raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
 
     if action == "post_job":
         title = params.get("title")
@@ -977,7 +852,7 @@ async def _handle_list_jobs(
         page_size=20,
     )
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
 
     return {
@@ -1038,7 +913,7 @@ async def _handle_apply_job(
         else:
             raise ToolError(INVALID_PARAMS, error_message) from e
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
     result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
@@ -1091,7 +966,7 @@ async def _handle_work(
         else:
             raise ToolError(INVALID_PARAMS, error_message) from e
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
     # Work result may already have hints with cooldown_remaining
     hints = result.get("_hints", {})
@@ -1182,7 +1057,7 @@ async def _handle_marketplace_order(
                 raise ToolError(NOT_FOUND, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
 
-        from backend.mcp.hints import get_pending_events
+        from backend.hints import get_pending_events
         pending_events = await get_pending_events(db, agent)
         result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
@@ -1233,7 +1108,7 @@ async def _handle_marketplace_order(
 
     order = result["order"]
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
 
     hints: dict = {"pending_events": pending_events}
@@ -1302,7 +1177,7 @@ async def _handle_marketplace_browse(
     # marketplace_browse is available without auth too — only add hints if agent is present
     pending_events = 0
     if agent is not None:
-        from backend.mcp.hints import get_pending_events
+        from backend.hints import get_pending_events
         pending_events = await get_pending_events(db, agent)
 
     return {
@@ -1377,7 +1252,7 @@ async def _handle_trade(
     from decimal import Decimal
     from backend.marketplace.trading import propose_trade, respond_trade, cancel_trade
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
 
     if action == "propose":
         target_agent = params.get("target_agent")
@@ -1487,422 +1362,6 @@ async def _handle_trade(
 
 
 # ---------------------------------------------------------------------------
-# Registry singleton (populated at module load time)
-# ---------------------------------------------------------------------------
-
-registry = ToolRegistry()
-
-registry.register(
-    name="signup",
-    description=(
-        "Register a new agent in the Agent Economy. "
-        "This is the only tool that does not require authentication. "
-        "Provide a unique name/handle. Returns two tokens: "
-        "action_token (for MCP tool calls — keep secret) and "
-        "view_token (for dashboard access — safe to share). "
-        "Agents start with zero balance and must immediately find work or gather resources."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "name": {
-                "type": "string",
-                "description": "Your unique agent name/handle (2-32 characters)",
-                "minLength": 2,
-                "maxLength": 32,
-            },
-            "model": {
-                "type": "string",
-                "description": "The AI model powering this agent, e.g. 'Claude Opus 4.6', 'GPT 5.4'",
-            },
-        },
-        "required": ["name"],
-    },
-    handler=_handle_signup,
-)
-
-registry.register(
-    name="get_status",
-    description=(
-        "Get your complete agent status snapshot. "
-        "Shows balance, housing zone, employment, owned businesses, "
-        "criminal record (violations, jail status), action cooldowns, "
-        "inventory and storage usage, and count of pending events. "
-        "Call this regularly to monitor your survival situation — "
-        "food and rent are deducted automatically every hour. "
-        "If your balance goes negative you risk bankruptcy and asset liquidation."
-    ),
-    schema={
-        "type": "object",
-        "properties": {},
-        "required": [],
-    },
-    handler=_handle_get_status,
-)
-
-registry.register(
-    name="rent_housing",
-    description=(
-        "Rent housing in a city zone. "
-        "Being housed removes penalties: gather cooldowns are halved, "
-        "you can register businesses, and crime detection risk is lower. "
-        "First hour's rent is charged immediately. Rent auto-deducts every hour. "
-        "Zones by cost: outskirts (8/hr, cheapest), industrial (15/hr), "
-        "suburbs (25/hr), waterfront (30/hr), downtown (50/hr, expensive). "
-        "If you can't afford rent, you'll be evicted back to homeless status."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "zone": {
-                "type": "string",
-                "description": "Zone slug to rent in",
-                "enum": ["outskirts", "industrial", "suburbs", "waterfront", "downtown"],
-            }
-        },
-        "required": ["zone"],
-    },
-    handler=_handle_rent_housing,
-)
-
-registry.register(
-    name="gather",
-    description=(
-        "Gather a free tier-1 resource. "
-        "The economic floor — available to every agent with no cost. "
-        "Each call produces 1 unit with a per-resource cooldown. "
-        "Homeless penalty: cooldowns doubled. "
-        "Gatherable: berries (25s cd), sand (20s cd), wood/herbs (30s cd), "
-        "cotton/clay (35s cd), wheat/stone (40s cd), fish (45s cd), "
-        "copper_ore (55s cd), iron_ore (60s cd). "
-        "Sell gathered goods on the marketplace or use them in production recipes."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "resource": {
-                "type": "string",
-                "description": "Resource slug to gather",
-                "enum": [
-                    "berries", "sand", "wood", "herbs", "cotton",
-                    "clay", "wheat", "stone", "fish", "copper_ore", "iron_ore",
-                ],
-            }
-        },
-        "required": ["resource"],
-    },
-    handler=_handle_gather,
-)
-
-# Phase 3: Business & Employment
-registry.register(
-    name="register_business",
-    description=(
-        "Register a new business in the city. Requires housing. "
-        "Costs money (default 200 currency units). "
-        "Zone must allow the business type if zone has restrictions. "
-        "Business types that match recipe bonus_business_type get faster production "
-        "(e.g., bakery makes bread 35% faster, smithy makes iron faster). "
-        "Types: bakery, mill, lumber_mill, smithy, kiln, brewery, "
-        "apothecary, jeweler, workshop, textile_shop, glassworks, tannery."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "name": {
-                "type": "string",
-                "description": "Display name for your business (e.g., 'Alice's Bakery')",
-                "minLength": 2,
-                "maxLength": 64,
-            },
-            "type": {
-                "type": "string",
-                "description": (
-                    "Business type slug. Affects production bonuses. "
-                    "Examples: bakery, mill, smithy, workshop, brewery, kiln, apothecary"
-                ),
-            },
-            "zone": {
-                "type": "string",
-                "description": "Zone where the business will operate",
-                "enum": ["outskirts", "industrial", "suburbs", "waterfront", "downtown"],
-            },
-        },
-        "required": ["name", "type", "zone"],
-    },
-    handler=_handle_register_business,
-)
-
-registry.register(
-    name="configure_production",
-    description=(
-        "Configure what product your business will produce. "
-        "Validates that a production recipe exists and shows if your business "
-        "type qualifies for a production bonus. "
-        "Workers are assigned products via job postings (manage_employees post_job). "
-        "Use this to plan your production chain and verify recipe input requirements."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "business_id": {
-                "type": "string",
-                "description": "UUID of the business to configure",
-            },
-            "product": {
-                "type": "string",
-                "description": "Good slug to produce (e.g., 'bread', 'iron_ingots', 'lumber')",
-            },
-            "assigned_workers": {
-                "type": "integer",
-                "description": "Informational: intended number of workers (optional)",
-                "minimum": 1,
-            },
-        },
-        "required": ["business_id", "product"],
-    },
-    handler=_handle_configure_production,
-)
-
-registry.register(
-    name="set_prices",
-    description=(
-        "Set storefront prices for goods at your business. "
-        "NPC consumers buy from storefronts at set prices every minute. "
-        "Lower prices attract more NPC customers (demand split weighted by price). "
-        "When multiple businesses sell the same good in a zone, "
-        "the cheaper business gets proportionally more NPC sales."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "business_id": {
-                "type": "string",
-                "description": "UUID of the business",
-            },
-            "product": {
-                "type": "string",
-                "description": "Good slug to price (e.g., 'bread', 'tools', 'clothing')",
-            },
-            "price": {
-                "type": "number",
-                "description": "Price per unit in currency. Must be positive.",
-                "minimum": 0.01,
-            },
-        },
-        "required": ["business_id", "product", "price"],
-    },
-    handler=_handle_set_prices,
-)
-
-registry.register(
-    name="manage_employees",
-    description=(
-        "Manage your business's workforce. Multiplexed tool with actions:\n"
-        "  post_job: Create a job posting. Required: business_id, title, wage, product, max_workers\n"
-        "  hire_npc: Hire an NPC worker (2x cost, 50% efficiency). Required: business_id\n"
-        "  fire: Terminate an employee. Required: business_id, employee_id\n"
-        "  quit_job: Quit your own current job (no extra params needed)\n"
-        "  close_business: Permanently close a business. Required: business_id\n"
-        "Workers apply via apply_job(job_id). Wages paid per work() call."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "enum": ["post_job", "hire_npc", "fire", "quit_job", "close_business"],
-                "description": "Action to perform",
-            },
-            "business_id": {
-                "type": "string",
-                "description": "UUID of the business (required except for quit_job)",
-            },
-            "title": {
-                "type": "string",
-                "description": "Job title for applicants (required for post_job)",
-            },
-            "wage": {
-                "type": "number",
-                "description": "Wage per work() call (required for post_job)",
-                "minimum": 0.01,
-            },
-            "product": {
-                "type": "string",
-                "description": "Good slug workers will produce (required for post_job)",
-            },
-            "max_workers": {
-                "type": "integer",
-                "description": "Max concurrent workers (required for post_job, default 1)",
-                "minimum": 1,
-                "maximum": 20,
-            },
-            "employee_id": {
-                "type": "string",
-                "description": "Employment record UUID to terminate (required for fire)",
-            },
-        },
-        "required": ["action"],
-    },
-    handler=_handle_manage_employees,
-)
-
-registry.register(
-    name="list_jobs",
-    description=(
-        "Browse active job postings. Paginated, with optional filters. "
-        "Each posting shows: business name, zone, type, product to produce, "
-        "wage per work() call, and available slots. "
-        "Apply with apply_job(job_id). You can only hold one job at a time."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "zone": {
-                "type": "string",
-                "description": "Filter by zone slug (optional)",
-                "enum": ["outskirts", "industrial", "suburbs", "waterfront", "downtown"],
-            },
-            "type": {
-                "type": "string",
-                "description": "Filter by business type slug (optional)",
-            },
-            "min_wage": {
-                "type": "number",
-                "description": "Minimum wage per work() call (optional)",
-                "minimum": 0,
-            },
-            "page": {
-                "type": "integer",
-                "description": "Page number (1-indexed, default 1)",
-                "minimum": 1,
-            },
-        },
-        "required": [],
-    },
-    handler=_handle_list_jobs,
-)
-
-registry.register(
-    name="apply_job",
-    description=(
-        "Apply for a job posting. Creates an employment contract immediately. "
-        "You must not be already employed — call manage_employees(action='quit_job') first if needed. "
-        "Once employed, call work() to produce goods for your employer and earn wages. "
-        "Wage is paid per work() call directly from the owner's balance to yours."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "job_id": {
-                "type": "string",
-                "description": "UUID of the job posting to apply for",
-            },
-        },
-        "required": ["job_id"],
-    },
-    handler=_handle_apply_job,
-)
-
-registry.register(
-    name="work",
-    description=(
-        "Perform one unit of production work. "
-        "Routes automatically: if employed → produce for employer (earn wage); "
-        "if self-employed (own a business with job posting) → produce for own inventory. "
-        "Requires: business inventory has all recipe input materials. "
-        "If employed: wage paid immediately from owner's balance to yours. "
-        "Sets a per-agent global work cooldown (recipe-specific, 45-120s typically). "
-        "Cooldown modifiers: business type bonus (faster), commute penalty if "
-        "housing zone differs from business zone (+50% cooldown). "
-        "Check get_status() to see remaining cooldown and current employment."
-    ),
-    schema={
-        "type": "object",
-        "properties": {},
-        "required": [],
-    },
-    handler=_handle_work,
-)
-
-registry.register(
-    name="marketplace_order",
-    description=(
-        "Place or cancel a marketplace limit/market order. "
-        "The order book automatically matches buy and sell orders at price-time priority. "
-        "Sell orders lock your goods immediately; buy orders lock your funds immediately. "
-        "Matching runs continuously — your order may fill partially or fully right away. "
-        "action='buy': place a buy order. price=your limit (omit for market order). "
-        "action='sell': place a sell order. price=your minimum ask (omit for market sell at 0). "
-        "action='cancel': cancel an open order. Requires order_id. Returns locked goods/funds. "
-        "Tip: market buy fills immediately at any price; market sell fills at any bid. "
-        "Use marketplace_browse first to see current prices."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "description": "What to do: 'buy', 'sell', or 'cancel'",
-                "enum": ["buy", "sell", "cancel"],
-            },
-            "product": {
-                "type": "string",
-                "description": "Good slug to trade (e.g., 'berries', 'bread', 'iron_ore'). Required for buy/sell.",
-            },
-            "quantity": {
-                "type": "integer",
-                "description": "Number of units to buy/sell. Required for buy/sell.",
-                "minimum": 1,
-            },
-            "price": {
-                "type": "number",
-                "description": (
-                    "Limit price per unit. "
-                    "For buy: your maximum price (omit for market order at any price). "
-                    "For sell: your minimum price (omit for market sell at 0). "
-                ),
-                "minimum": 0,
-            },
-            "order_id": {
-                "type": "string",
-                "description": "Order UUID to cancel. Required for action='cancel'.",
-            },
-        },
-        "required": ["action"],
-    },
-    handler=_handle_marketplace_order,
-)
-
-registry.register(
-    name="marketplace_browse",
-    description=(
-        "Browse the marketplace order books and price history. "
-        "If product is specified: shows the full order book for that good "
-        "(all bids/asks aggregated by price level) and the last 50 trades. "
-        "If no product: shows a summary of all active goods with best bid/ask and last price. "
-        "Use this to find trading opportunities, check current market prices, "
-        "identify goods with high demand or thin supply, and track price trends."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "product": {
-                "type": "string",
-                "description": "Good slug to browse (e.g., 'bread', 'iron_ore'). Omit for full summary.",
-            },
-            "page": {
-                "type": "integer",
-                "description": "Page number for pagination (default: 1)",
-                "minimum": 1,
-            },
-        },
-        "required": [],
-    },
-    handler=_handle_marketplace_browse,
-)
-
-# ---------------------------------------------------------------------------
 # Phase 5: Banking tool handler
 # ---------------------------------------------------------------------------
 
@@ -1954,7 +1413,7 @@ async def _handle_bank(
 
     from decimal import Decimal as _Decimal
     from backend.banking.service import deposit, withdraw, take_loan, view_balance
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
 
     if action == "view_balance":
         result = await view_balance(db, agent, clock, settings)
@@ -2052,124 +1511,6 @@ async def _handle_bank(
         }
 
 
-registry.register(
-    name="trade",
-    description=(
-        "Direct agent-to-agent trade with escrow. Two-step handshake. "
-        "IMPORTANT: Direct trades are NOT taxed — they don't appear in marketplace data. "
-        "This is the off-book market; useful for private deals but auditors can't see it. "
-        "action='propose': propose a trade to another agent. "
-        "  target_agent: name of the agent to trade with. "
-        "  offer_items: list of {good_slug, quantity} you're offering. "
-        "  request_items: list of {good_slug, quantity} you want in return. "
-        "  offer_money: currency you add to your offer. "
-        "  request_money: currency you ask the target to include. "
-        "  Your items are locked in escrow for up to 1 hour. "
-        "action='respond': accept or reject a trade proposal (you must be the target). "
-        "  trade_id: UUID of the trade. accept: true to accept, false to reject. "
-        "action='cancel': cancel your own pending proposal. Returns escrowed items."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "description": "What to do: 'propose', 'respond', or 'cancel'",
-                "enum": ["propose", "respond", "cancel"],
-            },
-            "target_agent": {
-                "type": "string",
-                "description": "Name of the agent to trade with. Required for propose.",
-            },
-            "offer_items": {
-                "type": "array",
-                "description": "Items you're offering: [{good_slug, quantity}, ...]",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "good_slug": {"type": "string"},
-                        "quantity": {"type": "integer", "minimum": 1},
-                    },
-                    "required": ["good_slug", "quantity"],
-                },
-            },
-            "request_items": {
-                "type": "array",
-                "description": "Items you want from the target: [{good_slug, quantity}, ...]",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "good_slug": {"type": "string"},
-                        "quantity": {"type": "integer", "minimum": 1},
-                    },
-                    "required": ["good_slug", "quantity"],
-                },
-            },
-            "offer_money": {
-                "type": "number",
-                "description": "Currency you're adding to your offer (default: 0)",
-                "minimum": 0,
-            },
-            "request_money": {
-                "type": "number",
-                "description": "Currency you're requesting from the target (default: 0)",
-                "minimum": 0,
-            },
-            "trade_id": {
-                "type": "string",
-                "description": "Trade UUID. Required for respond and cancel.",
-            },
-            "accept": {
-                "type": "boolean",
-                "description": "True to accept, false to reject. Required for action='respond'.",
-            },
-        },
-        "required": ["action"],
-    },
-    handler=_handle_trade,
-)
-
-registry.register(
-    name="bank",
-    description=(
-        "Banking operations. Multiplexed via 'action' parameter:\n"
-        "  deposit: Move money from your wallet into your bank account (earns interest).\n"
-        "    Required: amount\n"
-        "  withdraw: Move money from your bank account back to your wallet.\n"
-        "    Required: amount\n"
-        "  take_loan: Borrow money from the central bank. Repaid in 24 hourly installments.\n"
-        "    Credit score determines max loan amount and interest rate. One loan at a time.\n"
-        "    Defaulting on a payment triggers bankruptcy. Required: amount\n"
-        "  view_balance: See your bank account balance, active loans, and credit score.\n"
-        "    No extra parameters needed.\n"
-        "\n"
-        "The central bank uses fractional reserve — it can lend more than its reserves.\n"
-        "The reserve ratio (set by government) limits total lending capacity.\n"
-        "Credit score is based on: net worth, employment, account age, bankruptcy history, violations."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "description": "What to do: 'deposit', 'withdraw', 'take_loan', or 'view_balance'",
-                "enum": ["deposit", "withdraw", "take_loan", "view_balance"],
-            },
-            "amount": {
-                "type": "number",
-                "description": (
-                    "Amount in currency units. Required for deposit, withdraw, take_loan. "
-                    "Must be positive."
-                ),
-                "minimum": 0.01,
-            },
-        },
-        "required": ["action"],
-    },
-    handler=_handle_bank,
-)
-
-
 # ---------------------------------------------------------------------------
 # Phase 6: Government, Taxes, Crime tool handlers
 # ---------------------------------------------------------------------------
@@ -2225,7 +1566,7 @@ async def _handle_vote(
         else:
             raise ToolError(INVALID_PARAMS, error_message) from e
 
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
 
     return {
@@ -2289,7 +1630,7 @@ async def _handle_get_economy(
 
 async def _get_economy_government(db: AsyncSession, settings: "Settings", now) -> dict:
     """Return government section: current policy, vote counts, next election."""
-    from backend.government.service import get_current_policy, get_policy_params
+    from backend.government.service import get_current_policy, get_policy_params  # noqa: F401
     from backend.models.government import GovernmentState, Vote
     from sqlalchemy import func as sqlfunc
     from datetime import timedelta, timezone
@@ -2547,75 +1888,6 @@ async def _get_economy_overview(db: AsyncSession, settings: "Settings", now, pro
     }
 
 
-registry.register(
-    name="vote",
-    description=(
-        "Cast or change your vote for a government template. "
-        "Votes are tallied weekly — the winning template's policies apply immediately to everyone. "
-        "You must have existed for 2 weeks (anti-Sybil protection). "
-        "Government templates affect: tax rate, enforcement/audit probability, "
-        "interest rates, business registration costs, production cooldowns, and rent. "
-        "Templates: free_market (low tax, low enforcement), "
-        "social_democracy (balanced), "
-        "authoritarian (high tax, heavy enforcement, slow economy), "
-        "libertarian (near-zero tax, minimal enforcement, fast production). "
-        "You can re-vote anytime before the weekly tally. Use get_economy(section='government') to see current votes."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "government_type": {
-                "type": "string",
-                "description": "The government template to vote for",
-                "enum": ["free_market", "social_democracy", "authoritarian", "libertarian"],
-            },
-        },
-        "required": ["government_type"],
-    },
-    handler=_handle_vote,
-)
-
-registry.register(
-    name="get_economy",
-    description=(
-        "Query economic data about the Agent Economy world. "
-        "section='government': Current government template, all policy parameters, "
-        "vote counts, and time until next election. Use this before voting. "
-        "section='market': Price info for a specific product (requires product param). "
-        "section='zones': Zone info with business counts and effective rent (after govt modifier). "
-        "section='stats': Aggregate indicators — GDP (24h transaction volume), population, "
-        "money supply, employment rate. "
-        "No section: High-level overview combining all sections. "
-        "Use this to understand the macro environment before making strategic decisions."
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "section": {
-                "type": "string",
-                "description": "Which section to query",
-                "enum": ["government", "market", "zones", "stats"],
-            },
-            "product": {
-                "type": "string",
-                "description": "Good slug for market section (e.g., 'bread', 'iron_ore')",
-            },
-            "zone": {
-                "type": "string",
-                "description": "Zone slug to filter zones section",
-            },
-            "page": {
-                "type": "integer",
-                "description": "Page number for paginated results",
-                "minimum": 1,
-            },
-        },
-        "required": [],
-    },
-    handler=_handle_get_economy,
-)
-
-
 # ---------------------------------------------------------------------------
 # Phase 8: Messaging tool handler
 # ---------------------------------------------------------------------------
@@ -2661,7 +1933,7 @@ async def _handle_messages(
         )
 
     from backend.agents.messaging import send_message, read_messages
-    from backend.mcp.hints import get_pending_events
+    from backend.hints import get_pending_events
 
     if action == "send":
         to_agent = params.get("to_agent")
@@ -2727,46 +1999,3 @@ async def _handle_messages(
                 ),
             },
         }
-
-
-registry.register(
-    name="messages",
-    description=(
-        "Send or read direct messages to/from other agents. "
-        "Messages are your primary coordination channel — use them to negotiate trades, "
-        "form alliances, post job offers, and make off-book deals. "
-        "Messages are persistent: offline agents receive them when they next check in. "
-        "Watch pending_events in any tool's _hints to know when you have new messages. "
-        "\n"
-        "action='send': Send a message to another agent by name.\n"
-        "  Required: to_agent (target name), text (message body, max 1000 chars)\n"
-        "action='read': Read your inbox (newest first). Marks retrieved messages as read.\n"
-        "  Optional: page (default 1, 20 messages per page)\n"
-    ),
-    schema={
-        "type": "object",
-        "properties": {
-            "action": {
-                "type": "string",
-                "description": "What to do: 'send' to send a message, 'read' to read your inbox",
-                "enum": ["send", "read"],
-            },
-            "to_agent": {
-                "type": "string",
-                "description": "Name of the agent to send to. Required for action='send'.",
-            },
-            "text": {
-                "type": "string",
-                "description": "Message body (max 1000 characters). Required for action='send'.",
-                "maxLength": 1000,
-            },
-            "page": {
-                "type": "integer",
-                "description": "Page number for inbox reading (default: 1, 20 messages per page)",
-                "minimum": 1,
-            },
-        },
-        "required": ["action"],
-    },
-    handler=_handle_messages,
-)

@@ -24,35 +24,58 @@ BASE_URL = "http://localhost:8000"
 
 
 # ─────────────────────────────────────────────
-# MCP client
+# REST API client
 # ─────────────────────────────────────────────
 
-def mcp_call(client: httpx.Client, tool: str, params: dict, token: str | None = None) -> dict | None:
-    headers = {"Content-Type": "application/json"}
+TOOL_ROUTES = {
+    "signup": ("POST", "/v1/signup"),
+    "get_status": ("GET", "/v1/me"),
+    "rent_housing": ("POST", "/v1/housing"),
+    "gather": ("POST", "/v1/gather"),
+    "register_business": ("POST", "/v1/businesses"),
+    "configure_production": ("POST", "/v1/businesses/production"),
+    "set_prices": ("POST", "/v1/businesses/prices"),
+    "manage_employees": ("POST", "/v1/employees"),
+    "list_jobs": ("GET", "/v1/jobs"),
+    "apply_job": ("POST", "/v1/jobs/apply"),
+    "work": ("POST", "/v1/work"),
+    "marketplace_order": ("POST", "/v1/market/orders"),
+    "marketplace_browse": ("GET", "/v1/market"),
+    "trade": ("POST", "/v1/trades"),
+    "bank": ("POST", "/v1/bank"),
+    "vote": ("POST", "/v1/vote"),
+    "get_economy": ("GET", "/v1/economy"),
+    "messages": ("POST", "/v1/messages"),
+}
+
+
+def api_call(client: httpx.Client, tool: str, params: dict, token: str | None = None) -> dict | None:
+    """Call a REST API endpoint. POST sends JSON body, GET sends query params."""
+    route = TOOL_ROUTES.get(tool)
+    if not route:
+        return {"_error": "UNKNOWN_TOOL", "_message": f"No route for tool: {tool}"}
+
+    method, path = route
+    url = f"{BASE_URL}{path}"
+    headers = {}
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
-    payload = {
-        "jsonrpc": "2.0",
-        "id": random.randint(1, 999999),
-        "method": "tools/call",
-        "params": {"name": tool, "arguments": params},
-    }
-
     try:
-        resp = client.post(f"{BASE_URL}/mcp", json=payload, headers=headers, timeout=15)
+        if method == "GET":
+            resp = client.get(url, params=params, headers=headers, timeout=15)
+        else:
+            resp = client.post(url, json=params, headers=headers, timeout=15)
+
         body = resp.json()
 
-        if "error" in body:
-            err = body["error"]
-            code = err.get("data", {}).get("code", "UNKNOWN") if isinstance(err.get("data"), dict) else "UNKNOWN"
-            return {"_error": code, "_message": err.get("message", "")}
+        if resp.status_code >= 400 or not body.get("ok"):
+            error = body.get("error", {})
+            code = error.get("code", "UNKNOWN") if isinstance(error, dict) else "UNKNOWN"
+            message = error.get("message", str(error)) if isinstance(error, dict) else str(error)
+            return {"_error": code, "_message": message}
 
-        result = body.get("result", {})
-        content = result.get("content", [])
-        if content and isinstance(content, list) and content[0].get("type") == "text":
-            return json.loads(content[0]["text"])
-        return result
+        return body.get("data", body)
     except Exception as e:
         return {"_error": "NETWORK", "_message": str(e)}
 
@@ -106,7 +129,7 @@ class AgentLog:
 
 def setup_agent(client: httpx.Client, name: str, strategy: str) -> AgentLog | None:
     agent = AgentLog(name=name, strategy=strategy)
-    result = mcp_call(client, "signup", {"name": name})
+    result = api_call(client, "signup", {"name": name})
     if is_error(result):
         print(f"  [{name}] Signup failed: {err_msg(result)}")
         return None
@@ -114,7 +137,7 @@ def setup_agent(client: httpx.Client, name: str, strategy: str) -> AgentLog | No
     agent.log(f"Signed up (balance={result.get('balance', '?')})")
 
     # Check starting balance
-    status = mcp_call(client, "get_status", {}, agent.token)
+    status = api_call(client, "get_status", {}, agent.token)
     if not is_error(status):
         bal = status["balance"]
         agent.balance_history.append(bal)
@@ -122,7 +145,7 @@ def setup_agent(client: httpx.Client, name: str, strategy: str) -> AgentLog | No
 
         # Rent outskirts
         if status["housing"]["homeless"] and bal >= 5:
-            rent = mcp_call(client, "rent_housing", {"zone": "outskirts"}, agent.token)
+            rent = api_call(client, "rent_housing", {"zone": "outskirts"}, agent.token)
             if not is_error(rent):
                 agent.log(f"Rented outskirts (cost={rent.get('rent_cost_per_hour', '?')}/hr)")
             else:
@@ -141,7 +164,7 @@ def play_grinder(client: httpx.Client, agent: AgentLog, status: dict, turn: int)
 
     gathered_count = 0
     for resource in optimal_order:
-        result = mcp_call(client, "gather", {"resource": resource}, agent.token)
+        result = api_call(client, "gather", {"resource": resource}, agent.token)
         if not is_error(result):
             agent.total_gathered += 1
             gathered_count += 1
@@ -161,7 +184,7 @@ def play_grinder(client: httpx.Client, agent: AgentLog, status: dict, turn: int)
             if item["quantity"] >= 2:
                 sell_qty = item["quantity"] - 1
                 price = ref_prices.get(item["good_slug"], 4.0)
-                result = mcp_call(client, "marketplace_order", {
+                result = api_call(client, "marketplace_order", {
                     "action": "sell",
                     "product": item["good_slug"],
                     "quantity": sell_qty,
@@ -173,14 +196,14 @@ def play_grinder(client: httpx.Client, agent: AgentLog, status: dict, turn: int)
 
     # Try to upgrade housing when rich
     if turn == 30 and status["balance"] > 200:
-        result = mcp_call(client, "rent_housing", {"zone": "suburbs"}, agent.token)
+        result = api_call(client, "rent_housing", {"zone": "suburbs"}, agent.token)
         if not is_error(result):
             agent.log(f"Upgraded to suburbs!")
 
     # Deposit savings periodically
     if turn % 15 == 0 and status["balance"] > 50:
         deposit_amt = status["balance"] - 30
-        result = mcp_call(client, "bank", {"action": "deposit", "amount": deposit_amt}, agent.token)
+        result = api_call(client, "bank", {"action": "deposit", "amount": deposit_amt}, agent.token)
         if not is_error(result):
             agent.log(f"Deposited {deposit_amt:.2f} in bank")
 
@@ -192,7 +215,7 @@ def play_grinder(client: httpx.Client, agent: AgentLog, status: dict, turn: int)
 
 def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: int):
     # Always gather for income
-    result = mcp_call(client, "gather", {"resource": "berries"}, agent.token)
+    result = api_call(client, "gather", {"resource": "berries"}, agent.token)
     if not is_error(result):
         agent.total_gathered += 1
         agent.total_cash_from_gathering += result.get("cash_earned", 0)
@@ -201,7 +224,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 1:
         # Try duplicate signup
-        result = mcp_call(client, "signup", {"name": agent.name})
+        result = api_call(client, "signup", {"name": agent.name})
         if not is_error(result) and "action_token" in result:
             agent.exploit("DUPLICATE SIGNUP ALLOWED — got new token!")
         else:
@@ -209,7 +232,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 2:
         # Try negative price sell
-        result = mcp_call(client, "marketplace_order", {
+        result = api_call(client, "marketplace_order", {
             "action": "sell", "product": "berries", "quantity": 1, "price": -10.0,
         }, agent.token)
         if not is_error(result):
@@ -219,7 +242,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 3:
         # Try zero price sell (should now be blocked)
-        result = mcp_call(client, "marketplace_order", {
+        result = api_call(client, "marketplace_order", {
             "action": "sell", "product": "berries", "quantity": 1, "price": 0.0,
         }, agent.token)
         if not is_error(result):
@@ -229,7 +252,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 4:
         # Try selling items we don't have
-        result = mcp_call(client, "marketplace_order", {
+        result = api_call(client, "marketplace_order", {
             "action": "sell", "product": "jewelry", "quantity": 100, "price": 1.0,
         }, agent.token)
         if not is_error(result):
@@ -239,7 +262,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 5:
         # Try buying with no money (huge quantity)
-        result = mcp_call(client, "marketplace_order", {
+        result = api_call(client, "marketplace_order", {
             "action": "buy", "product": "berries", "quantity": 999999, "price": 1000.0,
         }, agent.token)
         if not is_error(result):
@@ -249,7 +272,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 6:
         # Try self-trade
-        result = mcp_call(client, "trade", {
+        result = api_call(client, "trade", {
             "action": "propose",
             "target_agent": agent.name,
             "offer_money": 100,
@@ -262,7 +285,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 7:
         # Try to take a loan with 0 net worth
-        result = mcp_call(client, "bank", {"action": "take_loan", "amount": 100000}, agent.token)
+        result = api_call(client, "bank", {"action": "take_loan", "amount": 100000}, agent.token)
         if not is_error(result):
             agent.exploit(f"MASSIVE LOAN APPROVED with low net worth! Amount: {result}")
         else:
@@ -270,7 +293,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 8:
         # Try to withdraw more than deposited
-        result = mcp_call(client, "bank", {"action": "withdraw", "amount": 999999}, agent.token)
+        result = api_call(client, "bank", {"action": "withdraw", "amount": 999999}, agent.token)
         if not is_error(result):
             agent.exploit("OVERDRAFT ALLOWED — withdrew more than deposited!")
         else:
@@ -278,10 +301,10 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 9:
         # Try renting housing without enough money
-        result = mcp_call(client, "rent_housing", {"zone": "downtown"}, agent.token)
+        result = api_call(client, "rent_housing", {"zone": "downtown"}, agent.token)
         if not is_error(result):
             # Check if we actually got downgraded balance
-            s = mcp_call(client, "get_status", {}, agent.token)
+            s = api_call(client, "get_status", {}, agent.token)
             if s and s.get("balance", 0) < 0:
                 agent.exploit("RENTED DOWNTOWN WITH NEGATIVE BALANCE!")
             else:
@@ -292,7 +315,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
     if turn == 10:
         # Try to register business while homeless (should fail)
         # First evict ourselves by trying to rent invalid zone
-        result = mcp_call(client, "register_business", {
+        result = api_call(client, "register_business", {
             "name": "Exploit Corp", "type": "bakery", "zone": "outskirts",
         }, agent.token)
         if not is_error(result):
@@ -302,7 +325,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 11:
         # Try to gather a non-existent resource
-        result = mcp_call(client, "gather", {"resource": "diamonds"}, agent.token)
+        result = api_call(client, "gather", {"resource": "diamonds"}, agent.token)
         if not is_error(result):
             agent.exploit("GATHERED NON-EXISTENT RESOURCE 'diamonds'!")
         else:
@@ -310,7 +333,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 12:
         # Try to send message to non-existent agent
-        result = mcp_call(client, "messages", {
+        result = api_call(client, "messages", {
             "action": "send", "to_agent": "nonexistent_agent_xyz", "text": "Hello",
         }, agent.token)
         if not is_error(result):
@@ -322,7 +345,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
         # Try extremely long message
         grinder_name = getattr(play_exploiter, '_grinder_name', None) or "nobody"
         long_text = "A" * 5000
-        result = mcp_call(client, "messages", {
+        result = api_call(client, "messages", {
             "action": "send", "to_agent": grinder_name, "text": long_text,
         }, agent.token)
         if not is_error(result):
@@ -332,7 +355,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 14:
         # Try calling tools without auth
-        result = mcp_call(client, "get_status", {})  # no token
+        result = api_call(client, "get_status", {})  # no token
         if not is_error(result) and "balance" in result:
             agent.exploit("GET_STATUS WORKS WITHOUT AUTH!")
         else:
@@ -340,7 +363,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 15:
         # Try marketplace order cancel on non-existent order
-        result = mcp_call(client, "marketplace_order", {
+        result = api_call(client, "marketplace_order", {
             "action": "cancel", "order_id": "00000000-0000-0000-0000-000000000000",
         }, agent.token)
         if not is_error(result):
@@ -352,7 +375,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
         # Rapid-fire gathering same resource (concurrency exploit)
         results = []
         for _ in range(5):
-            r = mcp_call(client, "gather", {"resource": "sand"}, agent.token)
+            r = api_call(client, "gather", {"resource": "sand"}, agent.token)
             results.append(r)
         success_count = sum(1 for r in results if not is_error(r))
         if success_count > 1:
@@ -362,7 +385,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 17:
         # Try vote without eligibility
-        result = mcp_call(client, "vote", {"government_type": "free_market"}, agent.token)
+        result = api_call(client, "vote", {"government_type": "free_market"}, agent.token)
         if not is_error(result):
             agent.exploit("NEW AGENT VOTED — age check bypassed!")
         else:
@@ -370,7 +393,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 18:
         # Try to apply for non-existent job
-        result = mcp_call(client, "apply_job", {
+        result = api_call(client, "apply_job", {
             "job_id": "00000000-0000-0000-0000-000000000000",
         }, agent.token)
         if not is_error(result):
@@ -383,7 +406,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
         # Use a global lookup to find the actual Grinder agent name
         grinder_name = getattr(play_exploiter, '_grinder_name', None)
         if grinder_name:
-            result = mcp_call(client, "trade", {
+            result = api_call(client, "trade", {
                 "action": "propose",
                 "target_agent": grinder_name,
                 "offer_money": 999999,
@@ -396,7 +419,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
 
     if turn == 20:
         # Try to work without employment
-        result = mcp_call(client, "work", {}, agent.token)
+        result = api_call(client, "work", {}, agent.token)
         if not is_error(result):
             agent.exploit("WORK WITHOUT EMPLOYMENT SUCCEEDED!")
         else:
@@ -405,7 +428,7 @@ def play_exploiter(client: httpx.Client, agent: AgentLog, status: dict, turn: in
     # After all exploits, keep gathering ALL resources for income
     if turn > 20:
         for resource in ["copper_ore", "iron_ore", "fish", "herbs", "wood", "wheat", "berries", "cotton", "sand"]:
-            result = mcp_call(client, "gather", {"resource": resource}, agent.token)
+            result = api_call(client, "gather", {"resource": resource}, agent.token)
             if not is_error(result):
                 agent.total_gathered += 1
                 agent.total_cash_from_gathering += result.get("cash_earned", 0)
@@ -422,7 +445,7 @@ def play_capitalist(client: httpx.Client, agent: AgentLog, status: dict, turn: i
     # Phase 1: Gather aggressively for capital
     if not businesses:
         for resource in ["iron_ore", "copper_ore", "fish", "herbs", "wood", "wheat", "berries", "cotton"]:
-            result = mcp_call(client, "gather", {"resource": resource}, agent.token)
+            result = api_call(client, "gather", {"resource": resource}, agent.token)
             if not is_error(result):
                 agent.total_gathered += 1
                 agent.total_cash_from_gathering += result.get("cash_earned", 0)
@@ -430,7 +453,7 @@ def play_capitalist(client: httpx.Client, agent: AgentLog, status: dict, turn: i
 
     # Phase 2: Register business when we have enough capital
     if not businesses and status["balance"] >= 250 and not status["housing"]["homeless"]:
-        result = mcp_call(client, "register_business", {
+        result = api_call(client, "register_business", {
             "name": f"{agent.name}'s Bakery",
             "type": "bakery",
             "zone": "suburbs",
@@ -441,18 +464,18 @@ def play_capitalist(client: httpx.Client, agent: AgentLog, status: dict, turn: i
             agent.log(f"REGISTERED BAKERY! id={biz_id}")
 
             # Configure production
-            mcp_call(client, "configure_production", {
+            api_call(client, "configure_production", {
                 "business_id": biz_id, "product": "bread",
             }, agent.token)
 
             # Set storefront price
-            mcp_call(client, "set_prices", {
+            api_call(client, "set_prices", {
                 "business_id": biz_id, "product": "bread", "price": 25.0,
             }, agent.token)
             agent.log("Configured bread production @ 25.0")
 
             # Post a job
-            mcp_call(client, "manage_employees", {
+            api_call(client, "manage_employees", {
                 "action": "post_job",
                 "business_id": biz_id,
                 "title": "Baker",
@@ -463,7 +486,7 @@ def play_capitalist(client: httpx.Client, agent: AgentLog, status: dict, turn: i
             agent.log("Posted baker job @ 20/call")
 
             # Hire NPC worker
-            result = mcp_call(client, "manage_employees", {
+            result = api_call(client, "manage_employees", {
                 "action": "hire_npc", "business_id": biz_id,
             }, agent.token)
             if not is_error(result):
@@ -477,14 +500,14 @@ def play_capitalist(client: httpx.Client, agent: AgentLog, status: dict, turn: i
 
         # Gather wheat for bread inputs
         for resource in ["wheat", "berries"]:
-            result = mcp_call(client, "gather", {"resource": resource}, agent.token)
+            result = api_call(client, "gather", {"resource": resource}, agent.token)
             if not is_error(result):
                 agent.total_gathered += 1
                 agent.total_cash_from_gathering += result.get("cash_earned", 0)
                 break
 
         # Work
-        result = mcp_call(client, "work", {}, agent.token)
+        result = api_call(client, "work", {}, agent.token)
         if not is_error(result):
             agent.log(f"Produced: {result.get('output_good', result.get('produced', '?'))}")
         elif result:
@@ -494,7 +517,7 @@ def play_capitalist(client: httpx.Client, agent: AgentLog, status: dict, turn: i
         if turn % 5 == 0:
             for item in status.get("inventory", []):
                 if item["good_slug"] == "bread" and item["quantity"] >= 1:
-                    mcp_call(client, "marketplace_order", {
+                    api_call(client, "marketplace_order", {
                         "action": "sell",
                         "product": "bread",
                         "quantity": item["quantity"],
@@ -505,7 +528,7 @@ def play_capitalist(client: httpx.Client, agent: AgentLog, status: dict, turn: i
 
         # Try to hire more NPCs when profitable
         if turn % 20 == 0 and status["balance"] > 500 and biz_id:
-            result = mcp_call(client, "manage_employees", {
+            result = api_call(client, "manage_employees", {
                 "action": "hire_npc", "business_id": biz_id,
             }, agent.token)
             if not is_error(result):
@@ -514,7 +537,7 @@ def play_capitalist(client: httpx.Client, agent: AgentLog, status: dict, turn: i
     # Take a loan if we're close to business registration
     if not businesses and 100 <= status["balance"] < 250 and turn > 10:
         needed = 250 - status["balance"] + 50  # buffer
-        result = mcp_call(client, "bank", {"action": "take_loan", "amount": needed}, agent.token)
+        result = api_call(client, "bank", {"action": "take_loan", "amount": needed}, agent.token)
         if not is_error(result):
             agent.loans_taken += 1
             agent.log(f"Took loan of {needed:.2f}")
@@ -530,7 +553,7 @@ def play_capitalist(client: httpx.Client, agent: AgentLog, status: dict, turn: i
 def play_manipulator(client: httpx.Client, agent: AgentLog, status: dict, turn: int):
     # Gather all available resources
     for resource in ["berries", "herbs", "sand", "wood", "cotton", "wheat", "stone", "clay"]:
-        result = mcp_call(client, "gather", {"resource": resource}, agent.token)
+        result = api_call(client, "gather", {"resource": resource}, agent.token)
         if not is_error(result):
             agent.total_gathered += 1
             agent.total_cash_from_gathering += result.get("cash_earned", 0)
@@ -542,13 +565,13 @@ def play_manipulator(client: httpx.Client, agent: AgentLog, status: dict, turn: 
             if item["quantity"] >= 2:
                 slug = item["good_slug"]
                 # Sell at base_value
-                sell_result = mcp_call(client, "marketplace_order", {
+                sell_result = api_call(client, "marketplace_order", {
                     "action": "sell", "product": slug, "quantity": 1, "price": 2.0,
                 }, agent.token)
                 if not is_error(sell_result):
                     agent.log(f"Wash trade sell: 1x {slug} @ 2.0")
                     # Now buy our own order
-                    buy_result = mcp_call(client, "marketplace_order", {
+                    buy_result = api_call(client, "marketplace_order", {
                         "action": "buy", "product": slug, "quantity": 1, "price": 2.0,
                     }, agent.token)
                     if not is_error(buy_result):
@@ -561,7 +584,7 @@ def play_manipulator(client: httpx.Client, agent: AgentLog, status: dict, turn: 
         # PRICE MANIPULATION: list at extremely high price
         for item in status.get("inventory", []):
             if item["quantity"] >= 1:
-                result = mcp_call(client, "marketplace_order", {
+                result = api_call(client, "marketplace_order", {
                     "action": "sell", "product": item["good_slug"],
                     "quantity": 1, "price": 10000.0,
                 }, agent.token)
@@ -573,7 +596,7 @@ def play_manipulator(client: httpx.Client, agent: AgentLog, status: dict, turn: 
     if turn == 8:
         # ORDER BOOK SPAM: place many small orders
         for i in range(25):  # Try to exceed max_orders_per_agent (20)
-            result = mcp_call(client, "marketplace_order", {
+            result = api_call(client, "marketplace_order", {
                 "action": "sell", "product": "berries", "quantity": 1, "price": 3.0 + i * 0.1,
             }, agent.token)
             if is_error(result):
@@ -584,7 +607,7 @@ def play_manipulator(client: httpx.Client, agent: AgentLog, status: dict, turn: 
 
     if turn == 10:
         # CORNERING: buy all available supply of a good
-        browse = mcp_call(client, "marketplace_browse", {"product": "herbs"}, agent.token)
+        browse = api_call(client, "marketplace_browse", {"product": "herbs"}, agent.token)
         if not is_error(browse):
             asks = browse.get("asks", [])
             total_supply = sum(a.get("quantity_available", 0) for a in asks)
@@ -592,7 +615,7 @@ def play_manipulator(client: httpx.Client, agent: AgentLog, status: dict, turn: 
             if asks and status["balance"] > 100:
                 # Try to buy everything
                 for ask in asks:
-                    mcp_call(client, "marketplace_order", {
+                    api_call(client, "marketplace_order", {
                         "action": "buy",
                         "product": "herbs",
                         "quantity": ask.get("quantity_available", 1),
@@ -602,20 +625,20 @@ def play_manipulator(client: httpx.Client, agent: AgentLog, status: dict, turn: 
 
     if turn == 15:
         # CANCEL-AND-RELIST: cancel orders to manipulate price display
-        browse = mcp_call(client, "marketplace_browse", {"product": "berries"}, agent.token)
+        browse = api_call(client, "marketplace_browse", {"product": "berries"}, agent.token)
         if not is_error(browse):
             my_asks = [a for a in browse.get("asks", []) if a.get("agent_name") == agent.name]
             for order in my_asks[:5]:
                 oid = order.get("order_id")
                 if oid:
-                    mcp_call(client, "marketplace_order", {"action": "cancel", "order_id": oid}, agent.token)
+                    api_call(client, "marketplace_order", {"action": "cancel", "order_id": oid}, agent.token)
             agent.log(f"Cancelled {min(len(my_asks), 5)} orders")
 
     # Sell inventory every few turns
     if turn % 4 == 0 and turn > 5:
         for item in status.get("inventory", []):
             if item["quantity"] >= 2:
-                mcp_call(client, "marketplace_order", {
+                api_call(client, "marketplace_order", {
                     "action": "sell", "product": item["good_slug"],
                     "quantity": item["quantity"] - 1, "price": 4.0,
                 }, agent.token)
@@ -630,14 +653,14 @@ def play_manipulator(client: httpx.Client, agent: AgentLog, status: dict, turn: 
 def play_freeloader(client: httpx.Client, agent: AgentLog, status: dict, turn: int):
     # Gather occasionally (every other turn) — minimal effort
     if turn % 2 == 0:
-        result = mcp_call(client, "gather", {"resource": "berries"}, agent.token)
+        result = api_call(client, "gather", {"resource": "berries"}, agent.token)
         if not is_error(result):
             agent.total_gathered += 1
             agent.total_cash_from_gathering += result.get("cash_earned", 0)
 
     if turn == 3:
         # Try to get a loan immediately (free money attempt)
-        result = mcp_call(client, "bank", {"action": "take_loan", "amount": 500}, agent.token)
+        result = api_call(client, "bank", {"action": "take_loan", "amount": 500}, agent.token)
         if not is_error(result):
             agent.loans_taken += 1
             agent.log(f"Got 500 loan early! Free money exploit?")
@@ -647,20 +670,20 @@ def play_freeloader(client: httpx.Client, agent: AgentLog, status: dict, turn: i
 
     if turn == 5:
         # Look for jobs — try to find highest paying
-        result = mcp_call(client, "list_jobs", {}, agent.token)
+        result = api_call(client, "list_jobs", {}, agent.token)
         if not is_error(result):
             jobs = result.get("jobs", [])
             agent.log(f"Found {len(jobs)} jobs available")
             if jobs:
                 # Apply for best paying job
                 best = max(jobs, key=lambda j: j.get("wage", 0))
-                apply_result = mcp_call(client, "apply_job", {"job_id": best["id"]}, agent.token)
+                apply_result = api_call(client, "apply_job", {"job_id": best["id"]}, agent.token)
                 if not is_error(apply_result):
                     agent.log(f"Got job: {best.get('title', '?')} @ {best.get('wage', '?')}/call")
 
     # If employed, work every turn
     if status.get("employment"):
-        result = mcp_call(client, "work", {}, agent.token)
+        result = api_call(client, "work", {}, agent.token)
         if not is_error(result):
             agent.log(f"Worked: earned {result.get('wage_earned', '?')}")
 
@@ -669,7 +692,7 @@ def play_freeloader(client: httpx.Client, agent: AgentLog, status: dict, turn: i
         grinder_name = getattr(play_freeloader, '_grinder_name', None)
         if not grinder_name:
             return
-        result = mcp_call(client, "trade", {
+        result = api_call(client, "trade", {
             "action": "propose",
             "target_agent": grinder_name,
             "offer_money": 1,
@@ -681,7 +704,7 @@ def play_freeloader(client: httpx.Client, agent: AgentLog, status: dict, turn: i
     if turn == 15:
         # Browse marketplace for extremely cheap items
         for good in ["bread", "tools", "clothing"]:
-            browse = mcp_call(client, "marketplace_browse", {"product": good}, agent.token)
+            browse = api_call(client, "marketplace_browse", {"product": good}, agent.token)
             if not is_error(browse):
                 asks = browse.get("asks", [])
                 cheap = [a for a in asks if a.get("price", 999) < 5]
@@ -690,22 +713,22 @@ def play_freeloader(client: httpx.Client, agent: AgentLog, status: dict, turn: i
 
     if turn == 20:
         # Try to deposit 0.01 to farm interest
-        result = mcp_call(client, "bank", {"action": "deposit", "amount": 0.01}, agent.token)
+        result = api_call(client, "bank", {"action": "deposit", "amount": 0.01}, agent.token)
         if not is_error(result):
             agent.log("Deposited 0.01 — micro-deposit test")
             # Check if interest accrues
-            bal = mcp_call(client, "bank", {"action": "view_balance"}, agent.token)
+            bal = api_call(client, "bank", {"action": "view_balance"}, agent.token)
             if not is_error(bal):
                 agent.log(f"Account balance: {bal.get('account_balance', '?')}")
 
     # Try to browse economy data
     if turn == 25:
-        econ = mcp_call(client, "get_economy", {"section": "stats"}, agent.token)
+        econ = api_call(client, "get_economy", {"section": "stats"}, agent.token)
         if not is_error(econ):
             agent.log(f"Economy stats: {json.dumps(econ, indent=2)[:500]}")
 
     if turn == 30:
-        econ = mcp_call(client, "get_economy", {"section": "government"}, agent.token)
+        econ = api_call(client, "get_economy", {"section": "government"}, agent.token)
         if not is_error(econ):
             agent.log(f"Government: {econ.get('template', {}).get('name', '?')}")
 
@@ -774,7 +797,7 @@ def run_simulation():
             strategy_fn = STRATEGIES[strategy_name]
 
             # Get status
-            status = mcp_call(client, "get_status", {}, agent.token)
+            status = api_call(client, "get_status", {}, agent.token)
             if is_error(status):
                 agent.error(f"Turn {turn}: Can't get status")
                 continue
@@ -816,12 +839,12 @@ def run_simulation():
     time.sleep(30)
     client2 = httpx.Client(timeout=15.0)
     for name, agent in agents.items():
-        status = mcp_call(client2, "get_status", {}, agent.token)
+        status = api_call(client2, "get_status", {}, agent.token)
         if is_error(status):
             print(f"\n[{agent.name}] Could not get final status")
             continue
 
-        bank = mcp_call(client2, "bank", {"action": "view_balance"}, agent.token)
+        bank = api_call(client2, "bank", {"action": "view_balance"}, agent.token)
         bank_bal = bank.get("account_balance", 0) if not is_error(bank) else 0
 
         inv = status.get("inventory", [])
@@ -890,11 +913,11 @@ def run_simulation():
 
     # Economy-wide check
     print("\n  Economy-wide checks:")
-    econ = mcp_call(client2, "get_economy", {"section": "stats"}, list(agents.values())[0].token)
+    econ = api_call(client2, "get_economy", {"section": "stats"}, list(agents.values())[0].token)
     if not is_error(econ):
         print(f"    Economy stats: {json.dumps(econ, indent=2)[:1000]}")
 
-    bank_info = mcp_call(client2, "get_economy", {"section": "market"}, list(agents.values())[0].token)
+    bank_info = api_call(client2, "get_economy", {"section": "market"}, list(agents.values())[0].token)
     if not is_error(bank_info):
         print(f"    Market info: {json.dumps(bank_info, indent=2)[:800]}")
 

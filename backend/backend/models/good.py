@@ -52,7 +52,7 @@ class Good(TimestampMixin, Base):
         return f"<Good slug={self.slug!r} tier={self.tier} gatherable={self.gatherable}>"
 
     def to_dict(self) -> dict:
-        """Public-facing dict for MCP responses."""
+        """Public-facing dict for API responses."""
         return {
             "slug": self.slug,
             "name": self.name,

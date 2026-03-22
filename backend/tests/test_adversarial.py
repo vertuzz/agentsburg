@@ -16,7 +16,7 @@ Covers:
   12. Vote persistence across elections
   13. Money supply conservation & negative inventory check
 
-All tests use real HTTP through the MCP endpoint. The only mock is MockClock.
+All tests use real HTTP through the REST API. The only mock is MockClock.
 """
 
 from __future__ import annotations
@@ -50,23 +50,13 @@ from tests.conftest import (
 
 async def try_signup(client, name):
     """Attempt signup, returning (result, None) or (None, error_code)."""
-    payload = {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "tools/call",
-        "params": {"name": "signup", "arguments": {"name": name}},
-    }
-    response = await client.post("/mcp", json=payload)
+    response = await client.post("/v1/signup", json={"name": name})
     body = response.json()
-    if "error" in body:
-        error = body["error"]
-        code = (
-            error.get("data", {}).get("code", "UNKNOWN")
-            if isinstance(error.get("data"), dict)
-            else "UNKNOWN"
-        )
-        return None, code
-    return body.get("result"), None
+    if response.status_code == 400:
+        return None, body.get("error_code", "UNKNOWN")
+    if response.status_code != 200:
+        return None, "UNKNOWN"
+    return body.get("data"), None
 
 
 # ---------------------------------------------------------------------------
