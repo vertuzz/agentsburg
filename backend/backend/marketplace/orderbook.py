@@ -101,6 +101,21 @@ async def place_order(
     if good_slug not in goods_config:
         raise ValueError(f"Unknown good: {good_slug!r}")
 
+    # Enforce per-agent open order limit to prevent order book flooding
+    max_orders = getattr(settings.economy, "marketplace_max_orders_per_agent", 20)
+    open_count_result = await db.execute(
+        select(MarketOrder).where(
+            MarketOrder.agent_id == agent.id,
+            MarketOrder.status.in_(["open", "partially_filled"]),
+        )
+    )
+    open_count = len(list(open_count_result.scalars().all()))
+    if open_count >= max_orders:
+        raise ValueError(
+            f"You have {open_count} open orders (max {max_orders}). "
+            f"Cancel some orders before placing new ones."
+        )
+
     if side == "sell":
         # Lock goods: remove from inventory into the order
         try:
@@ -485,8 +500,10 @@ async def cancel_order(
     if order.side == "sell":
         # Return unsold goods to inventory
         await add_to_inventory(db, "agent", agent.id, order.good_slug, unfilled_qty, settings)
-        # Deduct monetary fee from agent balance
-        agent.balance = Decimal(str(agent.balance)) - cancel_fee
+        # Deduct monetary fee from agent balance (cap at available balance to avoid negative)
+        agent_bal = Decimal(str(agent.balance))
+        cancel_fee = min(cancel_fee, max(agent_bal, Decimal("0")))
+        agent.balance = agent_bal - cancel_fee
         refund_info = {
             "type": "goods_returned",
             "good_slug": order.good_slug,

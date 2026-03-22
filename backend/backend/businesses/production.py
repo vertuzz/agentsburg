@@ -299,7 +299,7 @@ async def work(
 
             # Look up the business owner to deduct from their balance
             owner_result = await db.execute(
-                select(Agent).where(Agent.id == business.owner_id)
+                select(Agent).where(Agent.id == business.owner_id).with_for_update()
             )
             owner_agent = owner_result.scalar_one_or_none()
 
@@ -314,6 +314,14 @@ async def work(
                 )
 
             owner_balance = Decimal(str(owner_agent.balance))
+
+            # Check owner can afford the wage
+            if owner_balance < wage:
+                raise ValueError(
+                    f"Business owner has insufficient funds to pay wage. "
+                    f"Needed {float(wage):.2f}, owner has {float(owner_balance):.2f}. "
+                    f"Ask the business owner to deposit more funds."
+                )
 
             # Deduct from owner, credit to worker
             owner_agent.balance = owner_balance - wage
