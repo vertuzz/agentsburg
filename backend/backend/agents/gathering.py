@@ -24,8 +24,11 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from decimal import Decimal
+
 from backend.agents.inventory import add_to_inventory
 from backend.models.agent import Agent
+from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
@@ -150,6 +153,26 @@ async def gather(
         except ValueError as e:
             raise ValueError(str(e)) from e
 
+        # Credit agent with cash — the "roadside sale" value.
+        # This is the economic floor: even without a marketplace or business,
+        # gathering produces income. Set at base_value to make gathering
+        # sustainable in cheapest zones when done actively.
+        gather_cash = Decimal(str(good_data.get("base_value", 1)))
+        agent.balance = Decimal(str(agent.balance)) + gather_cash
+
+        txn = Transaction(
+            type="gather",
+            from_agent_id=None,  # from the environment
+            to_agent_id=agent.id,
+            amount=float(gather_cash),
+            metadata_json={
+                "resource": resource_slug,
+                "base_value": float(good_data.get("base_value", 1)),
+                "tick_time": now.isoformat(),
+            },
+        )
+        db.add(txn)
+
         # Store cooldown expiry timestamp using clock time
         from datetime import timedelta
         expiry_time = now + timedelta(seconds=cooldown_seconds)
@@ -179,9 +202,11 @@ async def gather(
         "cooldown_seconds": cooldown_seconds,
         "homeless_penalty_applied": homeless_penalty_applied,
         "base_value": float(good_data.get("base_value", 1)),
+        "cash_earned": float(gather_cash),
         "_hints": {
             "check_back_seconds": cooldown_seconds,
-            "message": f"You gathered 1x {good_data.get('name', resource_slug)}. "
+            "message": f"You gathered 1x {good_data.get('name', resource_slug)} "
+                       f"and earned {float(gather_cash):.2f} cash. "
                        f"Next gather available in {cooldown_seconds}s.",
         },
     }

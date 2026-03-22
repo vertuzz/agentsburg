@@ -93,22 +93,35 @@ async def run_tick(
         results["fast_tick"] = fast_result
 
         # --- Check hourly boundary ---
+        # Compute how many hours have elapsed since the last slow tick.
+        # In production (called every ~60s) this is always 1.
+        # In tests with large time jumps this can be 24+ hours, and we
+        # pass the count to slow tick functions so they multiply costs
+        # accordingly — much faster than looping 24 times.
         last_hourly_str = await redis.get(LAST_HOURLY_KEY)
-        last_hourly = float(last_hourly_str) if last_hourly_str else 0.0
+        if last_hourly_str:
+            last_hourly = float(last_hourly_str)
+        else:
+            # First tick ever — initialize to "just over 1 hour ago" so the
+            # first tick fires immediately (accounting for jitter).
+            last_hourly = now_ts - HOURLY_INTERVAL - 61
 
-        # Add 0-60s jitter to prevent front-running NPC price adjustments.
-        # Small absolute jitter makes ticks unpredictable without delaying
-        # significantly relative to the interval.
         if now_ts - last_hourly >= HOURLY_INTERVAL + random.uniform(0, 60):
-            logger.info("Running hourly slow tick at %s", now.isoformat())
-            slow_results = await _run_slow_tick(db, clock, settings)
+            elapsed_hours = max(1, int((now_ts - last_hourly) / HOURLY_INTERVAL))
+            # Cap at 168 hours (1 week) to prevent runaway catch-up
+            elapsed_hours = min(elapsed_hours, 168)
+            logger.info(
+                "Running slow tick at %s (catching up %d hours)",
+                now.isoformat(), elapsed_hours,
+            )
+            slow_results = await _run_slow_tick(db, clock, settings, hours=elapsed_hours)
+            slow_results["_hours"] = elapsed_hours
             results["slow_tick"] = slow_results
-            # Update boundary timestamp
             await redis.set(LAST_HOURLY_KEY, str(now_ts))
 
         # --- Check daily boundary ---
         last_daily_str = await redis.get(LAST_DAILY_KEY)
-        last_daily = float(last_daily_str) if last_daily_str else 0.0
+        last_daily = float(last_daily_str) if last_daily_str else now_ts - DAILY_INTERVAL - 61
 
         if now_ts - last_daily >= DAILY_INTERVAL + random.uniform(0, 60):
             logger.info("Running daily tick at %s", now.isoformat())
@@ -118,7 +131,7 @@ async def run_tick(
 
         # --- Check weekly boundary (election tally) ---
         last_weekly_str = await redis.get(LAST_WEEKLY_KEY)
-        last_weekly = float(last_weekly_str) if last_weekly_str else 0.0
+        last_weekly = float(last_weekly_str) if last_weekly_str else now_ts - WEEKLY_INTERVAL - 61
 
         if now_ts - last_weekly >= WEEKLY_INTERVAL + random.uniform(0, 60):
             logger.info("Running weekly election tally at %s", now.isoformat())
@@ -144,18 +157,14 @@ async def _run_slow_tick(
     db: AsyncSession,
     clock: "Clock",
     settings: "Settings",
+    hours: int = 1,
 ) -> dict:
     """
     Run all hourly slow tick processing.
 
-    Order matters:
-    1. Tax collection (before survival deductions — we tax income first)
-    2. Run audits (after taxes — so audit compares against just-filed records)
-    3. Loan payments (financial obligations)
-    4. Deposit interest (interest accrual)
-    5. Survival costs (everyone pays food)
-    6. Rent (housed agents pay; unaffordable = eviction)
-    7. Bankruptcy check (agents too deep in debt are liquidated)
+    Args:
+        hours: Number of hours to process in this tick (default 1).
+               Values > 1 are used when catching up after a time jump.
     """
     # Phase 6: Tax collection
     tax_results = {"type": "tax_collection", "skipped": True}
@@ -177,8 +186,8 @@ async def _run_slow_tick(
     except Exception:
         logger.exception("Banking tick processing failed — continuing")
 
-    survival = await process_survival_costs(db, clock, settings)
-    rent = await process_rent(db, clock, settings)
+    survival = await process_survival_costs(db, clock, settings, hours=hours)
+    rent = await process_rent(db, clock, settings, hours=hours)
 
     # Phase 7: NPC business simulation (auto-produce, close unprofitable, spawn new)
     npc_biz_results = {"type": "npc_businesses", "skipped": True}

@@ -36,6 +36,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
+from backend.models.banking import CentralBank
 from backend.models.business import Business, StorefrontPrice
 from backend.models.inventory import InventoryItem
 from backend.models.transaction import Transaction
@@ -139,6 +140,12 @@ async def simulate_npc_purchases(
     agents_result = await db.execute(select(Agent))
     agents_map: dict[str, Agent] = {str(a.id): a for a in agents_result.scalars().all()}
 
+    # Load central bank — NPC purchases are funded from bank reserves
+    bank_result = await db.execute(
+        select(CentralBank).where(CentralBank.id == 1).with_for_update()
+    )
+    central_bank = bank_result.scalar_one_or_none()
+
     all_purchases = []
     total_transactions = 0
     total_revenue_float = 0.0
@@ -232,6 +239,16 @@ async def simulate_npc_purchases(
 
                 # Execute the sale
                 revenue = Decimal(str(price)) * units_to_sell
+
+                # NPC purchases are funded from central bank reserves.
+                # If the bank can't afford it, skip this purchase.
+                if central_bank is not None:
+                    bank_reserves = Decimal(str(central_bank.reserves))
+                    if bank_reserves < revenue:
+                        # Bank can't fund this NPC purchase — skip
+                        continue
+                    central_bank.reserves = bank_reserves - revenue
+
                 inv_item.quantity -= units_to_sell
 
                 # Credit the business owner's balance

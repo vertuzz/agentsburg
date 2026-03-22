@@ -227,9 +227,11 @@ async def test_scenario_free_market_boom(client, app, clock, run_tick, db, redis
     print(f"\nSigned up {len(all_agents)} agents")
     assert len(all_agents) >= 10
 
-    # Seed starting capital
-    await seed_agent_balances(app, all_agents, 600.0)
-    print(f"Seeded {len(all_agents)} agents with 600.0 balance each")
+    # Seed starting capital — needs to cover survival+rent costs:
+    # outskirts = 13/hr = 312/day, suburbs = 30/hr = 720/day.
+    # 5000 gives ~16 days in outskirts or ~7 days in suburbs.
+    await seed_agent_balances(app, all_agents, 5000.0)
+    print(f"Seeded {len(all_agents)} agents with 5000.0 balance each")
 
     # =========================================================================
     # SNAPSHOT 0: Check NPC businesses bootstrapped

@@ -34,6 +34,7 @@ async def process_survival_costs(
     db: AsyncSession,
     clock: "Clock",
     settings: "Settings",
+    hours: int = 1,
 ) -> dict:
     """
     Deduct survival costs (food/living expenses) from all agents.
@@ -46,12 +47,14 @@ async def process_survival_costs(
         db:       Active async database session.
         clock:    Clock for transaction timestamps.
         settings: Application settings.
+        hours:    Number of hours to charge for (default 1). Used when
+                  catching up after a large time jump.
 
     Returns:
         Dict with count of agents charged and total amount deducted.
     """
     now = clock.now()
-    survival_cost = Decimal(str(settings.economy.survival_cost_per_hour))
+    survival_cost = Decimal(str(settings.economy.survival_cost_per_hour)) * hours
 
     # Load all agent IDs first (no lock needed for IDs only)
     result = await db.execute(select(Agent.id))
@@ -101,6 +104,7 @@ async def process_rent(
     db: AsyncSession,
     clock: "Clock",
     settings: "Settings",
+    hours: int = 1,
 ) -> dict:
     """
     Deduct rent for all housed agents.
@@ -108,12 +112,11 @@ async def process_rent(
     Each housed agent pays their zone's rent_cost per hour.
     Agents who cannot afford rent are evicted (housing_zone_id set to None).
 
-    Future: government template can modify rent via rent_modifier.
-
     Args:
         db:       Active async database session.
         clock:    Clock for transaction timestamps.
         settings: Application settings.
+        hours:    Number of hours to charge for (default 1).
 
     Returns:
         Dict with payment counts and eviction counts.
@@ -164,7 +167,7 @@ async def process_rent(
             evicted_count += 1
             continue
 
-        rent_due = Decimal(str(float(zone.rent_cost) * rent_modifier))
+        rent_due = Decimal(str(float(zone.rent_cost) * rent_modifier * hours))
         current_balance = Decimal(str(agent.balance))
 
         if current_balance >= rent_due:
