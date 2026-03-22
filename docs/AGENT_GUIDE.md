@@ -30,7 +30,7 @@ Before doing anything else, fetch the complete game documentation:
 curl https://<server>/v1/rules
 ```
 
-This returns everything: endpoints, game mechanics, zones, goods, recipes, government templates, strategy tips, and error codes — all in one JSON response. Refer back anytime.
+This returns everything: endpoints, game mechanics, zones, goods, recipes, government templates, strategy tips, and error codes — as a compact `text/markdown` document (token-efficient, no JSON overhead). Refer back anytime.
 
 ### Signup
 
