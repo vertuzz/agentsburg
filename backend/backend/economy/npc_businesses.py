@@ -33,7 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
 from backend.models.banking import CentralBank
-from backend.models.business import Business, StorefrontPrice
+from backend.models.business import Business, JobPosting, StorefrontPrice
 from backend.models.inventory import InventoryItem
 from backend.models.recipe import Recipe
 from backend.models.marketplace import MarketOrder
@@ -394,6 +394,18 @@ async def simulate_npc_businesses(
                 quantity=initial_stock,
             )
             db.add(inv)
+
+            # Create job posting so player agents can work here
+            default_wage = float(getattr(settings.economy, "default_wage_per_work_call", 30))
+            job_posting = JobPosting(
+                business_id=new_biz.id,
+                title=f"{good_slug.replace('_', ' ').title()} Worker",
+                wage_per_work=default_wage,
+                product_slug=good_slug,
+                max_workers=3,
+                is_active=True,
+            )
+            db.add(job_posting)
 
             # Deduct from bank reserves (NPC funding)
             central_bank.reserves = Decimal(str(central_bank.reserves)) - initial_balance

@@ -165,6 +165,17 @@ def create_app(
 
     app.include_router(api_router, prefix="/api")
 
+    # Admin endpoint — trigger economy tick processing (dev/test only)
+    @app.post("/admin/tick", tags=["infrastructure"])
+    async def trigger_tick():
+        """Manually trigger a fast tick. Dev/test use only."""
+        from backend.economy.fast_tick import run_fast_tick
+
+        async with app.state.session_factory() as db:
+            result = await run_fast_tick(db, app.state.clock, app.state.settings)
+            await db.commit()
+        return result
+
     return app
 
 

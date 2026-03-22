@@ -45,10 +45,10 @@ async def test_self_trade_prevention(client, app, clock, run_tick, db, redis_cli
     result = await agent.call("gather", {"resource": "berries"})
     assert result["gathered"] == "berries"
 
-    # Advance past resource cooldown (berry ~25s * 2 homeless = 50s) + global (5s)
-    clock.advance(55)
+    # Advance past resource cooldown (berry ~25s) + global (2s)
+    clock.advance(28)
     await agent.call("gather", {"resource": "berries"})
-    clock.advance(55)
+    clock.advance(28)
     await agent.call("gather", {"resource": "berries"})
 
     # Place sell order for 2 berries at price 5.00
@@ -205,7 +205,7 @@ async def test_cancel_order_fee(client, app, clock, db, redis_client):
 @pytest.mark.asyncio
 async def test_global_gather_cooldown(client, clock, redis_client):
     """
-    Verify the global 5-second gather cooldown prevents interleaved gathering
+    Verify the global 2-second gather cooldown prevents interleaved gathering
     of different resources.
     """
     agent = await TestAgent.signup(client, "gather_cooldown_agent")
@@ -215,14 +215,14 @@ async def test_global_gather_cooldown(client, clock, redis_client):
     assert result["gathered"] == "berries"
 
     # Immediately try to gather a DIFFERENT resource (wood)
-    # Should fail due to global gather cooldown (5 seconds)
+    # Should fail due to global gather cooldown (2 seconds)
     _, error = await agent.try_call("gather", {"resource": "wood"})
     assert error == "COOLDOWN_ACTIVE", (
         f"Expected COOLDOWN_ACTIVE for global gather cooldown, got {error}"
     )
 
-    # Advance clock past the 5s global cooldown but before per-resource cooldown
-    clock.advance(6)
+    # Advance clock past the 2s global cooldown but before per-resource cooldown
+    clock.advance(3)
 
     # Gathering wood should now succeed (global cooldown expired)
     result = await agent.call("gather", {"resource": "wood"})

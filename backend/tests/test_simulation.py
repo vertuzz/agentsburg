@@ -108,11 +108,11 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
     # -----------------------------------------------------------------------
     statuses = [await a.status() for a in agents]
     for s in statuses:
-        assert s["balance"] == 0.0
+        assert s["balance"] == 15.0  # agent_starting_balance from economy.yaml
         assert s["housing"]["homeless"] is True
         assert s["bankruptcy_count"] == 0
 
-    print("\nAll agents start homeless with 0 balance ✓")
+    print("\nAll agents start homeless with 15 balance ✓")
 
     # -----------------------------------------------------------------------
     # Step 3: Test gathering cooldown enforcement BEFORE housing
@@ -123,10 +123,10 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
     result = await agents[0].call("gather", {"resource": "berries"})
     assert result["gathered"] == "berries"
     assert result["quantity"] == 1
-    # Homeless penalty: cooldown should be doubled (25s * 2 = 50s)
-    assert result["homeless_penalty_applied"] is True
-    assert result["cooldown_seconds"] == 50
-    print(f"  First gather: 1x berries, cooldown={result['cooldown_seconds']}s (homeless 2x penalty) ✓")
+    # No homeless penalty on gathering (removed to fix bootstrap problem)
+    assert result["homeless_penalty_applied"] is False
+    assert result["cooldown_seconds"] == 25
+    print(f"  First gather: 1x berries, cooldown={result['cooldown_seconds']}s (no homeless penalty) ✓")
 
     # Immediate retry should fail with COOLDOWN_ACTIVE
     _, error_code = await agents[0].try_call("gather", {"resource": "berries"})
@@ -134,8 +134,8 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
     print("  Cooldown enforced: immediate retry rejected ✓")
 
     # Can gather a DIFFERENT resource (per-resource cooldowns)
-    # Advance past the 5s global gather cooldown but stay within the 50s berries cooldown
-    clock.advance(6)
+    # Advance past the 2s global gather cooldown but stay within the 50s berries cooldown
+    clock.advance(3)
     result2 = await agents[0].call("gather", {"resource": "wood"})
     assert result2["gathered"] == "wood"
     print("  Different resource gather works (per-resource cooldowns) ✓")
@@ -143,7 +143,7 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
     # -----------------------------------------------------------------------
     # Step 4: Test invalid gather (non-gatherable resource)
     # -----------------------------------------------------------------------
-    clock.advance(6)  # Skip global gather cooldown
+    clock.advance(3)  # Skip global gather cooldown
     _, error_code = await agents[0].try_call("gather", {"resource": "bread"})
     assert error_code in ("GATHER_FAILED", "INVALID_PARAMS"), f"Expected gather error, got {error_code}"
     print("  Non-gatherable resource rejected ✓")
@@ -532,11 +532,11 @@ async def test_gathering_mechanics(client, app, clock, db, redis_client):
     # Test 1: Gather each resource once
     gatherable = ["berries", "sand", "wood", "herbs", "cotton", "clay", "wheat", "stone"]
     for resource in gatherable[:5]:  # test 5 resources to keep test fast
-        clock.advance(6)  # Skip global gather cooldown (5s between any gather)
+        clock.advance(3)  # Skip global gather cooldown (2s between any gather)
         result = await agent.call("gather", {"resource": resource})
         assert result["gathered"] == resource
         assert result["quantity"] == 1
-        assert result["homeless_penalty_applied"] is True  # homeless
+        assert result["homeless_penalty_applied"] is False  # no homeless penalty on gathering
         print(f"  Gathered {resource}: cooldown={result['cooldown_seconds']}s")
 
     # Test 2: Verify inventory has the items
@@ -937,8 +937,8 @@ async def test_employment_lifecycle(client, app, clock, run_tick, db, redis_clie
 
     print(f"  Both workers hired ✓")
 
-    # Verify slot count
-    jobs = await quitter.call("list_jobs", {})
+    # Verify slot count (filter by zone to avoid NPC job pagination)
+    jobs = await quitter.call("list_jobs", {"zone": "outskirts"})
     bakery_job = next((j for j in jobs["items"] if j["business_name"] == "Sunrise Bakery"), None)
     assert bakery_job is not None
     assert bakery_job["slots_available"] == 1
@@ -972,7 +972,7 @@ async def test_employment_lifecycle(client, app, clock, run_tick, db, redis_clie
     print(f"  Fired worker; status shows no employment ✓")
 
     # Job back to 3 slots
-    jobs_after = await employer.call("list_jobs", {})
+    jobs_after = await employer.call("list_jobs", {"zone": "outskirts"})
     bakery_job_after = next((j for j in jobs_after["items"] if j["business_name"] == "Sunrise Bakery"), None)
     assert bakery_job_after is not None
     assert bakery_job_after["slots_available"] == 3
@@ -1351,7 +1351,8 @@ async def test_marketplace_order_matching(client, app, clock, run_tick, db, redi
         )
         session.add(seller_inv)
 
-        # Give buyer 100 balance
+        # Set balances explicitly
+        seller_ag.balance = Decimal("0")
         buyer_ag.balance = Decimal("100")
         await session.commit()
 
@@ -1595,9 +1596,11 @@ async def test_partial_fills_and_market_orders(client, app, clock, run_tick, db,
         b_result = await session.execute(select(Agent).where(Agent.name == "pf_buyer"))
         b_ag = b_result.scalar_one()
 
-        # seller1: 5 wood
+        # seller1: 5 wood, 0 balance
+        s1_ag.balance = Decimal("0")
         session.add(InventoryItem(owner_type="agent", owner_id=s1_ag.id, good_slug="wood", quantity=5))
-        # seller2: 5 wood
+        # seller2: 5 wood, 0 balance
+        s2_ag.balance = Decimal("0")
         session.add(InventoryItem(owner_type="agent", owner_id=s2_ag.id, good_slug="wood", quantity=5))
         # buyer: lots of balance
         b_ag.balance = Decimal("500")

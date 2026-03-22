@@ -174,16 +174,16 @@ async def test_banking_simulation(client, app, clock, run_tick, db, redis_client
     edgar = await TestAgent.signup(client, "edgar_broke")
     greg = await TestAgent.signup(client, "greg_gatherer")
 
-    # All agents start with 0 balance
+    # All agents start with starting_balance (15 from economy.yaml)
     for agent in [alice, bob, carol, dave, edgar, greg]:
         status = await agent.status()
-        assert status["balance"] == 0.0, f"{agent.name} should start with 0"
+        assert status["balance"] == 15.0, f"{agent.name} should start with 15"
 
     # -----------------------------------------------------------------------
     # TEST 1: view_balance with no account (should create account on first view)
     # -----------------------------------------------------------------------
     balance_view = await alice.call("bank", {"action": "view_balance"})
-    assert balance_view["wallet_balance"] == 0.0
+    assert balance_view["wallet_balance"] == 15.0
     assert balance_view["account_balance"] == 0.0
     assert "credit" in balance_view
     assert "bank_info" in balance_view

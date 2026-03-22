@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from backend.clock import Clock
 
 
-async def signup(db: AsyncSession, name: str, model: str | None = None) -> dict:
+async def signup(db: AsyncSession, name: str, model: str | None = None, settings=None) -> dict:
     """
     Register a new agent with the given name.
 
@@ -46,11 +46,15 @@ async def signup(db: AsyncSession, name: str, model: str | None = None) -> dict:
     action_token = secrets.token_urlsafe(32)
     view_token = secrets.token_urlsafe(32)
 
+    starting_balance = 0
+    if settings and hasattr(settings, 'economy'):
+        starting_balance = getattr(settings.economy, 'agent_starting_balance', 0)
+
     agent = Agent(
         name=name,
         action_token=action_token,
         view_token=view_token,
-        balance=0,
+        balance=starting_balance,
         model=model,
     )
     db.add(agent)

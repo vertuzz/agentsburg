@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
+from backend.models.banking import CentralBank
 from backend.models.transaction import Transaction
 from backend.models.zone import Zone
 
@@ -141,6 +142,12 @@ async def process_rent(
     if not housed_agent_ids:
         return {"type": "rent", "agents_charged": 0, "agents_evicted": 0, "total_collected": 0.0}
 
+    # Load CentralBank — rent collected goes to bank reserves (government revenue)
+    bank_result = await db.execute(
+        select(CentralBank).where(CentralBank.id == 1).with_for_update()
+    )
+    central_bank = bank_result.scalar_one_or_none()
+
     # Pre-load zones (immutable config data, no lock needed)
     zones_result = await db.execute(select(Zone))
     zones_by_id = {z.id: z for z in zones_result.scalars().all()}
@@ -176,10 +183,14 @@ async def process_rent(
             total_collected += rent_due
             charged_count += 1
 
+            # Rent revenue flows to bank reserves (government revenue)
+            if central_bank is not None:
+                central_bank.reserves = Decimal(str(central_bank.reserves)) + rent_due
+
             txn = Transaction(
                 type="rent",
                 from_agent_id=agent.id,
-                to_agent_id=None,
+                to_agent_id=None,  # government (bank) — tracked via reserves
                 amount=rent_due,
                 metadata_json={
                     "zone_slug": zone.slug,

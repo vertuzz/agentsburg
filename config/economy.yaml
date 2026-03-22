@@ -5,13 +5,12 @@
 # Container restart required for changes to take effect.
 #
 # KEY BALANCE TARGETS:
-#   1. A new agent gathering berries (fastest gather, 25s cooldown, value ~2-3)
-#      earns ~4-5 units/min raw. Survival costs ~5/hr food + zone rent.
-#      Outskirts rent = 8/hr → total ~13/hr = ~0.22/min.
-#      Gathering berries 2.4/min → margin is very thin. Must sell above base_value.
-#      This is intentional: gathering is the floor, not a comfortable life.
+#   1. A new agent starts with 15 cash, enough to rent outskirts (5/hr) immediately.
+#      Gathering berries (25s cooldown, 2 cash/gather) = ~288/hr.
+#      Outskirts costs: 2/hr survival + 5/hr rent = 7/hr. Net: ~281/hr.
+#      Gathering is sustainable but slow — enough to survive, not to thrive.
 #   2. A worker employed at a bakery earning 30/work call, calling work every 45s,
-#      earns 40/min → ~2400/hr. Survival costs 5 + 25 (suburbs) = 30/hr.
+#      earns 40/min → ~2400/hr. Survival costs 2 + 25 (suburbs) = 27/hr.
 #      Employment is far more profitable than raw gathering. Rewards cooperation.
 #   3. A business owner running a bakery with 1 NPC worker + storefront sales
 #      should net 200-400/hr profit (after rent, NPC wages, input costs).
@@ -20,6 +19,11 @@
 # ─────────────────────────────────────────────
 # SURVIVAL
 # ─────────────────────────────────────────────
+
+agent_starting_balance: 15
+# New agents arrive with this much cash — enough to rent outskirts (5)
+# and survive a few hours while they learn to gather. Not enough to skip
+# the early gathering grind. Set to 0 for hardcore mode.
 
 survival_cost_per_hour: 2
 # Food is abstracted: every slow tick (hourly), this amount is deducted from

@@ -11,8 +11,8 @@ This allows MockClock to control cooldown behavior in tests.
 The key has a real-time TTL of 2x the cooldown (safety buffer) so stale
 keys don't accumulate forever.
 
-Homeless penalty: homeless agents have their gather cooldown doubled
-(they have to travel further for resources without a stable base).
+No homeless penalty on gathering — gathering is the economic floor activity.
+Homeless penalty applies to production/work only (via housing.py).
 """
 
 from __future__ import annotations
@@ -126,19 +126,16 @@ async def gather(
                 # Corrupted key — ignore and allow gathering
                 logger.warning("Corrupted cooldown key %s: %r", cooldown_key, stored_expiry)
 
-        # Calculate cooldown duration (with homeless penalty)
+        # Calculate cooldown duration
         base_cooldown = good_data.get(
             "gather_cooldown_seconds",
             settings.economy.base_gather_cooldown,
         )
 
-        # Homeless agents have doubled gather cooldown (harder to survive without housing)
-        if agent.is_homeless():
-            cooldown_seconds = base_cooldown * 2
-            homeless_penalty_applied = True
-        else:
-            cooldown_seconds = base_cooldown
-            homeless_penalty_applied = False
+        # No homeless penalty on gathering — it's the economic floor activity.
+        # Homeless penalty still applies to production/work (2x cooldown there).
+        cooldown_seconds = base_cooldown
+        homeless_penalty_applied = False
 
         # Try to add to inventory — this checks storage capacity
         try:

@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.zone import Zone
 from backend.models.good import Good
 from backend.models.recipe import Recipe
+from backend.models.business import JobPosting
 
 if TYPE_CHECKING:
     from backend.config import Settings
@@ -424,6 +425,26 @@ async def seed_npc_businesses(db: AsyncSession, settings: "Settings") -> None:
                     quantity=initial_stock,
                 )
                 db.add(inv)
+
+        # Create job postings for each good this NPC business produces.
+        # This lets player agents apply for jobs immediately at bootstrap.
+        produces = biz_config.get("produces", [])
+        default_wage = float(settings.economy.default_wage_per_work_call)
+        for prod_cfg in produces:
+            good_slug = prod_cfg.get("good")
+            if not good_slug:
+                continue
+            posting = JobPosting(
+                business_id=business.id,
+                title=f"{good_slug.replace('_', ' ').title()} Worker",
+                wage_per_work=default_wage,
+                product_slug=good_slug,
+                max_workers=3,
+                is_active=True,
+            )
+            db.add(posting)
+
+        await db.flush()
 
         # Deduct initial balance from CentralBank reserves (NPC loan)
         if central_bank is not None and initial_balance > 0:

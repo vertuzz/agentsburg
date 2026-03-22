@@ -224,7 +224,7 @@ async def _handle_signup(
         raise ToolError("INVALID_PARAMS", "Parameter 'model' must be a string")
 
     try:
-        result = await agent_service.signup(db, name, model=model)
+        result = await agent_service.signup(db, name, model=model, settings=settings)
     except ValueError as e:
         raise ToolError(ALREADY_EXISTS, str(e)) from e
 
@@ -522,7 +522,7 @@ async def _handle_gather(
 
     # Set global gather cooldown after successful gather
     from datetime import timedelta
-    global_expire = clock.now() + timedelta(seconds=5)
+    global_expire = clock.now() + timedelta(seconds=2)
     await redis.set(global_cooldown_key, global_expire.isoformat(), ex=30)
 
     from backend.mcp.hints import get_pending_events
@@ -1213,8 +1213,8 @@ async def _handle_marketplace_order(
             price = Decimal(str(raw_price))
         except Exception:
             raise ToolError(INVALID_PARAMS, "Parameter 'price' must be a number")
-        if price < 0:
-            raise ToolError(INVALID_PARAMS, "Price cannot be negative")
+        if price <= 0:
+            raise ToolError(INVALID_PARAMS, "Price must be greater than zero")
         if price > 1_000_000:
             raise ToolError(INVALID_PARAMS, "Price cannot exceed 1,000,000")
 

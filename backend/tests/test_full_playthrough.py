@@ -135,7 +135,7 @@ async def strategy_gatherer(agent: TestAgent, clock, day: int, log: SimLog) -> N
     resources = ["berries", "herbs", "cotton", "wheat"]
 
     for resource in resources:
-        clock.advance(6)  # global cooldown
+        clock.advance(3)  # global cooldown
         result, err = await agent.try_call("gather", {"resource": resource})
         if err:
             log.error(agent.name, f"gather_{resource}", err, "")
@@ -349,14 +349,14 @@ async def strategy_trader(agent: TestAgent, clock, day: int, log: SimLog) -> Non
                     log.error(agent.name, f"resell_{item['good_slug']}", err, "")
 
     # Gather for income floor
-    clock.advance(6)
+    clock.advance(3)
     await agent.try_call("gather", {"resource": "berries"})
 
 
 async def strategy_banker(agent: TestAgent, clock, day: int, log: SimLog, app) -> None:
     """Uses banking system: deposits, loans, leveraged business."""
     for resource in ["berries", "herbs"]:
-        clock.advance(6)
+        clock.advance(3)
         await agent.try_call("gather", {"resource": resource})
 
     # Deposit on day 1
@@ -409,7 +409,7 @@ async def strategy_banker(agent: TestAgent, clock, day: int, log: SimLog, app) -
                     })
 
     # Work
-    clock.advance(6)
+    clock.advance(3)
     result, err = await agent.try_call("work", {})
     if err:
         log.error(agent.name, "work", err, "")
@@ -427,9 +427,9 @@ async def strategy_banker(agent: TestAgent, clock, day: int, log: SimLog, app) -
 async def strategy_employee(agent: TestAgent, clock, day: int, log: SimLog) -> None:
     """Tries to get employed at an NPC business and earn wages."""
     # Gather as fallback income
-    clock.advance(6)
+    clock.advance(3)
     await agent.try_call("gather", {"resource": "berries"})
-    clock.advance(6)
+    clock.advance(3)
     await agent.try_call("gather", {"resource": "wheat"})
 
     # Look for jobs on day 1+

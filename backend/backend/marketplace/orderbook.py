@@ -88,8 +88,8 @@ async def place_order(
         raise ValueError(f"Invalid side {side!r} — must be 'buy' or 'sell'")
     if quantity <= 0:
         raise ValueError("Quantity must be positive")
-    if price < 0:
-        raise ValueError("Price cannot be negative")
+    if price <= 0:
+        raise ValueError("Price must be greater than zero")
     if quantity > settings.economy.marketplace_order_max_quantity:
         raise ValueError(
             f"Quantity {quantity} exceeds maximum of "
