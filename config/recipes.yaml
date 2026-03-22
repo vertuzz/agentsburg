@@ -171,7 +171,7 @@ recipes:
   - slug: craft_furniture
     name: "Craft Furniture"
     output_good: furniture
-    output_quantity: 1
+    output_quantity: 2
     inputs:
       - good: lumber
         quantity: 4
@@ -257,7 +257,7 @@ recipes:
   - slug: forge_weapons
     name: "Forge Weapons"
     output_good: weapons
-    output_quantity: 1
+    output_quantity: 2
     inputs:
       - good: iron_ingots
         quantity: 3
@@ -271,7 +271,7 @@ recipes:
   - slug: brew_beer
     name: "Brew Beer"
     output_good: beer
-    output_quantity: 3
+    output_quantity: 2
     inputs:
       - good: wheat
         quantity: 3
@@ -285,7 +285,7 @@ recipes:
   - slug: assemble_housing_materials
     name: "Assemble Housing Materials"
     output_good: housing_materials
-    output_quantity: 1
+    output_quantity: 2
     inputs:
       - good: lumber
         quantity: 5

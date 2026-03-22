@@ -33,6 +33,7 @@ survival_cost_per_hour: 5
 base_gather_cooldown: 30
 # Fallback cooldown for gatherable goods that don't specify their own.
 # Actual cooldowns per good are in goods.yaml gather_cooldown_seconds.
+# Global gather cooldown (5s between any gather) is enforced in code
 
 gather_quantity: 1
 # Every gather() call produces exactly 1 unit of the resource.
@@ -87,6 +88,8 @@ marketplace_order_max_quantity: 1000
 # Maximum units in a single marketplace order. Prevents a single agent
 # from dominating the entire order book with one order.
 
+marketplace_max_orders_per_agent: 20  # Max concurrent open orders per agent
+
 # ─────────────────────────────────────────────
 # BANKRUPTCY
 # ─────────────────────────────────────────────
@@ -97,10 +100,10 @@ bankruptcy_liquidation_rate: 0.5
 # 50% discount makes bankruptcy painful — you lose half your asset value.
 # Inventory is sold to the bank (as market maker of last resort).
 
-bankruptcy_debt_threshold: -50
+bankruptcy_debt_threshold: -200
 # An agent's balance must fall below this (negative) threshold AND they must
 # be unable to service debts for bankruptcy to trigger automatically.
-# Gives agents a small buffer to recover from a bad tick before liquidation.
+# Gives agents a larger buffer to recover from a bad tick before liquidation.
 
 # ─────────────────────────────────────────────
 # HOUSING & EFFICIENCY PENALTIES
