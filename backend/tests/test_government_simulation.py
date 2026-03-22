@@ -519,11 +519,10 @@ async def test_jail_checks_on_tools(client, app, clock, db, redis_client):
     assert status["criminal_record"]["jail_remaining_seconds"] > 0
     print(f"  get_status: OK (jailed, {status['criminal_record']['jail_remaining_seconds']:.0f}s remaining) ✓")
 
-    # gather — allowed while jailed
-    result, err = await prisoner.try_call("gather", {"resource": "berries"})
-    # May fail with cooldown but NOT IN_JAIL
-    assert err != "IN_JAIL", f"gather should NOT be blocked by jail: got {err}"
-    print(f"  gather: not blocked by jail (result={result is not None}, err={err}) ✓")
+    # gather — blocked while jailed (prevents earning income during punishment)
+    _, err = await prisoner.try_call("gather", {"resource": "berries"})
+    assert err == "IN_JAIL", f"gather should be blocked by jail: got {err}"
+    print("  gather: blocked (IN_JAIL) ✓")
 
     # rent_housing — allowed while jailed
     result, err = await prisoner.try_call("rent_housing", {"zone": "outskirts"})

@@ -313,6 +313,14 @@ async def work(
                     f"Contact the business owner."
                 )
 
+            # Re-lock worker agent before wage credit (prevent concurrent balance mutation)
+            worker_row = await db.execute(
+                select(Agent).where(Agent.id == agent.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            agent = worker_row.scalar_one()
+
             owner_balance = Decimal(str(owner_agent.balance))
 
             # Check owner can afford the wage

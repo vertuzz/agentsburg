@@ -130,6 +130,16 @@ async def propose_trade(
                 f"Insufficient inventory: have {have}x {slug!r}, need {qty}"
             )
 
+    # Re-lock agent row before balance modification (prevent double-spend).
+    # populate_existing=True forces SQLAlchemy to overwrite the cached identity
+    # map entry with fresh data from the DB after the lock is acquired.
+    agent_row = await db.execute(
+        select(Agent).where(Agent.id == agent.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    agent = agent_row.scalar_one()
+
     # Verify proposer has enough balance for offer_money
     agent_balance = Decimal(str(agent.balance))
     if offer_money > agent_balance:
@@ -297,7 +307,8 @@ async def respond_trade(
                 InventoryItem.owner_type == "agent",
                 InventoryItem.owner_id == agent.id,
                 InventoryItem.good_slug == slug,
-            )
+            ).with_for_update()
+            .execution_options(populate_existing=True)
         )
         inv_item = inv_result.scalar_one_or_none()
         have = inv_item.quantity if inv_item else 0

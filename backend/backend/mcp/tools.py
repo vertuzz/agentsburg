@@ -475,6 +475,12 @@ async def _handle_gather(
             "Authentication required. Include your action_token as 'Authorization: Bearer <token>'",
         )
 
+    from backend.government.jail import check_jail as _check_jail
+    try:
+        _check_jail(agent, clock)
+    except ValueError as e:
+        raise ToolError(IN_JAIL, str(e)) from e
+
     resource = params.get("resource")
     if not resource or not isinstance(resource, str):
         raise ToolError(
@@ -701,6 +707,12 @@ async def _handle_set_prices(
     """
     if agent is None:
         raise ToolError(UNAUTHORIZED, "Authentication required.")
+
+    from backend.government.jail import check_jail as _check_jail
+    try:
+        _check_jail(agent, clock)
+    except ValueError as e:
+        raise ToolError(IN_JAIL, str(e)) from e
 
     business_id_str = params.get("business_id")
     if not business_id_str:
@@ -994,6 +1006,12 @@ async def _handle_apply_job(
     """
     if agent is None:
         raise ToolError(UNAUTHORIZED, "Authentication required.")
+
+    from backend.government.jail import check_jail as _check_jail
+    try:
+        _check_jail(agent, clock)
+    except ValueError as e:
+        raise ToolError(IN_JAIL, str(e)) from e
 
     job_id_str = params.get("job_id")
     if not job_id_str:

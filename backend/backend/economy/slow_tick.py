@@ -53,14 +53,20 @@ async def process_survival_costs(
     now = clock.now()
     survival_cost = Decimal(str(settings.economy.survival_cost_per_hour))
 
-    # Load all agents
-    result = await db.execute(select(Agent))
-    agents = list(result.scalars().all())
+    # Load all agent IDs first (no lock needed for IDs only)
+    result = await db.execute(select(Agent.id))
+    agent_ids = [row[0] for row in result.all()]
 
     total_deducted = Decimal("0")
     charged_count = 0
 
-    for agent in agents:
+    for agent_id in agent_ids:
+        # Lock each agent individually to prevent concurrent balance races
+        agent_result = await db.execute(
+            select(Agent).where(Agent.id == agent_id).with_for_update()
+        )
+        agent = agent_result.scalar_one()
+
         agent.balance = Decimal(str(agent.balance)) - survival_cost
         charged_count += 1
         total_deducted += survival_cost
@@ -123,25 +129,34 @@ async def process_rent(
     except Exception:
         pass  # Fail gracefully if government tables don't exist yet
 
-    # Load all housed agents with their zones in one query
+    # Load IDs of housed agents (no lock needed for IDs only)
     result = await db.execute(
-        select(Agent).where(Agent.housing_zone_id.is_not(None))
+        select(Agent.id).where(Agent.housing_zone_id.is_not(None))
     )
-    housed_agents = list(result.scalars().all())
+    housed_agent_ids = [row[0] for row in result.all()]
 
-    if not housed_agents:
+    if not housed_agent_ids:
         return {"type": "rent", "agents_charged": 0, "agents_evicted": 0, "total_collected": 0.0}
 
-    # Load zones referenced by housed agents
-    zone_ids = {a.housing_zone_id for a in housed_agents}
-    zones_result = await db.execute(select(Zone).where(Zone.id.in_(zone_ids)))
+    # Pre-load zones (immutable config data, no lock needed)
+    zones_result = await db.execute(select(Zone))
     zones_by_id = {z.id: z for z in zones_result.scalars().all()}
 
     charged_count = 0
     evicted_count = 0
     total_collected = Decimal("0")
 
-    for agent in housed_agents:
+    for agent_id in housed_agent_ids:
+        # Lock each agent individually to prevent concurrent balance races
+        agent_result = await db.execute(
+            select(Agent).where(Agent.id == agent_id).with_for_update()
+        )
+        agent = agent_result.scalar_one()
+
+        # Re-check housing after acquiring lock (may have changed)
+        if agent.housing_zone_id is None:
+            continue
+
         zone = zones_by_id.get(agent.housing_zone_id)
         if zone is None:
             # Zone no longer exists — evict

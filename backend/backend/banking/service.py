@@ -556,6 +556,9 @@ async def take_loan(
     if amount < Decimal("1"):
         raise ValueError("Minimum loan amount is 1")
 
+    if agent.bankruptcy_count >= 3:
+        raise ValueError("Loan denied: too many prior bankruptcies (3+). Your credit history is too poor.")
+
     # Lock agent row to prevent concurrent loan/balance manipulation
     agent_row = await db.execute(
         select(Agent).where(Agent.id == agent.id).with_for_update()
@@ -726,12 +729,14 @@ async def process_loan_payments(
             "total_collected": 0.0,
         }
 
-    # Load agents in batch
+    # Load agents in batch with row-level locks to prevent concurrent balance races
     agent_ids = {loan.agent_id for loan in due_loans}
-    agents_result = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)))
+    agents_result = await db.execute(
+        select(Agent).where(Agent.id.in_(agent_ids)).with_for_update()
+    )
     agents_by_id = {a.id: a for a in agents_result.scalars().all()}
 
-    bank = await _get_central_bank(db)
+    bank = await _get_central_bank(db, lock=True)
     reserves = _to_decimal(bank.reserves)
     total_loaned = _to_decimal(bank.total_loaned)
 
@@ -885,7 +890,7 @@ async def process_deposit_interest(
             "total_interest_paid": 0.0,
         }
 
-    bank = await _get_central_bank(db)
+    bank = await _get_central_bank(db, lock=True)
     reserves = _to_decimal(bank.reserves)
 
     paid_count = 0

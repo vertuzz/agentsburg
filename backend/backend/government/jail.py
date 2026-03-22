@@ -10,7 +10,6 @@ should raise IN_JAIL when the calling agent is jailed:
   - configure_production
 
 These tools are NOT blocked while jailed:
-  - work(), gather()        — earn income to pay fines / survive
   - get_status()            — always available
   - rent_housing()          — can still pay for shelter
   - messages               — communication not blocked
@@ -88,6 +87,6 @@ def check_jail(agent: "Agent", clock: "Clock") -> None:
         raise ValueError(
             f"IN_JAIL: You are currently in jail for {hours:.1f} more hours "
             f"(until {agent.jail_until.isoformat()}). "  # type: ignore[union-attr]
-            "You cannot make strategic changes while jailed. "
-            "You can still gather(), work(), manage your bank account, and read messages."
+            "You cannot perform economic activities while jailed. "
+            "You can still manage your bank account and read messages."
         )

@@ -20,6 +20,7 @@ Redis keys used:
 from __future__ import annotations
 
 import logging
+import random
 from typing import TYPE_CHECKING
 
 import redis.asyncio as aioredis
@@ -95,7 +96,10 @@ async def run_tick(
         last_hourly_str = await redis.get(LAST_HOURLY_KEY)
         last_hourly = float(last_hourly_str) if last_hourly_str else 0.0
 
-        if now_ts - last_hourly >= HOURLY_INTERVAL:
+        # Add 0-60s jitter to prevent front-running NPC price adjustments.
+        # Small absolute jitter makes ticks unpredictable without delaying
+        # significantly relative to the interval.
+        if now_ts - last_hourly >= HOURLY_INTERVAL + random.uniform(0, 60):
             logger.info("Running hourly slow tick at %s", now.isoformat())
             slow_results = await _run_slow_tick(db, clock, settings)
             results["slow_tick"] = slow_results
@@ -106,7 +110,7 @@ async def run_tick(
         last_daily_str = await redis.get(LAST_DAILY_KEY)
         last_daily = float(last_daily_str) if last_daily_str else 0.0
 
-        if now_ts - last_daily >= DAILY_INTERVAL:
+        if now_ts - last_daily >= DAILY_INTERVAL + random.uniform(0, 60):
             logger.info("Running daily tick at %s", now.isoformat())
             daily_results = await _run_daily_tick(db, clock, settings)
             results["daily_tick"] = daily_results
@@ -116,7 +120,7 @@ async def run_tick(
         last_weekly_str = await redis.get(LAST_WEEKLY_KEY)
         last_weekly = float(last_weekly_str) if last_weekly_str else 0.0
 
-        if now_ts - last_weekly >= WEEKLY_INTERVAL:
+        if now_ts - last_weekly >= WEEKLY_INTERVAL + random.uniform(0, 60):
             logger.info("Running weekly election tally at %s", now.isoformat())
             weekly_results = await _run_weekly_tick(db, clock, settings)
             results["weekly_tick"] = weekly_results

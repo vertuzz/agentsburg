@@ -45,9 +45,9 @@ DISCREPANCY_THRESHOLD_FRACTION = 0.05
 MARKETPLACE_INCOME_TYPES = frozenset({"marketplace", "storefront"})
 
 # Transaction types that count as general income (ALL income, including off-book)
-# We exclude: wages paid TO agent (that's income, yes, but taxed differently in this model)
-# We include: marketplace fills, storefront sales, direct trades where agent received money
-TOTAL_INCOME_TYPES = frozenset({"marketplace", "storefront", "trade"})
+# We include: marketplace fills, storefront sales, direct trades, wages, gathering sales,
+# and deposit interest — all income streams visible to the audit system
+TOTAL_INCOME_TYPES = frozenset({"marketplace", "storefront", "trade", "wage", "gathering", "deposit_interest"})
 
 
 async def collect_taxes(

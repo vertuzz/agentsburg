@@ -349,15 +349,24 @@ async def match_orders(
         try:
             await add_to_inventory(db, "agent", buyer.id, good_slug, fill_qty, settings)
         except ValueError as e:
-            # Buyer storage full — cannot complete this fill
-            # Skip this buy order and try next
+            # Buyer storage full — auto-cancel the buy order and refund locked funds
+            # (minus the standard cancellation fee) to prevent phantom orders
             logger.warning(
-                "Cannot deliver %dx %s to buyer %s: %s — skipping buy order",
+                "Cannot deliver %dx %s to buyer %s: %s — auto-cancelling buy order",
                 fill_qty,
                 good_slug,
                 buyer.name,
                 e,
             )
+            unfilled_qty = buy_order.quantity_total - buy_order.quantity_filled
+            locked_value = Decimal(str(buy_order.price)) * unfilled_qty
+            cancel_fee = (locked_value * CANCEL_FEE_RATE).quantize(Decimal("0.01"))
+            if locked_value > 0:
+                cancel_fee = max(cancel_fee, Decimal("0.01"))
+            refund_amount = locked_value - cancel_fee
+            buyer.balance = Decimal(str(buyer.balance)) + refund_amount
+            buy_order.status = "cancelled"
+            await db.flush()
             buy_idx += 1
             continue
 
@@ -496,6 +505,9 @@ async def cancel_order(
     # Calculate 2% cancellation fee to discourage order spoofing
     locked_value = Decimal(str(order.price)) * unfilled_qty
     cancel_fee = (locked_value * CANCEL_FEE_RATE).quantize(Decimal("0.01"))
+    # Enforce minimum cancel fee of $0.01 to prevent free spoofing on tiny orders
+    if locked_value > 0:
+        cancel_fee = max(cancel_fee, Decimal("0.01"))
 
     if order.side == "sell":
         # Return unsold goods to inventory

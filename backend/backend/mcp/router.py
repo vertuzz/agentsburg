@@ -232,9 +232,9 @@ async def _handle_tools_call(
     if getattr(request.app.state, "rate_limit_enabled", True) is False:
         pass  # Skip rate limiting
     else:
-        client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-        if not client_ip:
-            client_ip = request.client.host if request.client else "unknown"
+        # Always use the direct connection IP for rate limiting.
+        # x-forwarded-for is trivially spoofable and must not be trusted.
+        client_ip = request.client.host if request.client else "unknown"
 
         try:
             # Global per-IP rate limit

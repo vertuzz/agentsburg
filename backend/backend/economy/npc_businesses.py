@@ -36,6 +36,7 @@ from backend.models.banking import CentralBank
 from backend.models.business import Business, StorefrontPrice
 from backend.models.inventory import InventoryItem
 from backend.models.recipe import Recipe
+from backend.models.marketplace import MarketOrder
 from backend.models.transaction import Transaction
 from backend.models.zone import Zone
 
@@ -293,7 +294,23 @@ async def simulate_npc_businesses(
                 InventoryItem.quantity > 0,
             )
         )
-        total_supply = supply_result.scalar() or 0
+        inventory_supply = supply_result.scalar() or 0
+
+        # Also count active sell orders on the marketplace
+        # (prevents hoarding exploit: players hiding goods off-market
+        # to trigger NPC spawning)
+        sell_order_result = await db.execute(
+            select(
+                func.sum(MarketOrder.quantity_total - MarketOrder.quantity_filled)
+            ).where(
+                MarketOrder.good_slug == good_slug,
+                MarketOrder.side == "sell",
+                MarketOrder.status.in_(["open", "partially_filled"]),
+            )
+        )
+        marketplace_supply = sell_order_result.scalar() or 0
+
+        total_supply = inventory_supply + marketplace_supply
 
         # Supply threshold: less than 2 ticks' worth of demand
         num_zones = len(zones)
