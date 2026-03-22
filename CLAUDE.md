@@ -3,11 +3,13 @@
 ## Quick Commands
 
 ```bash
-cd backend && uv run pytest tests/ -v                          # Run all tests
-cd backend && uv run pytest tests/test_simulation.py -k "test_basic" -v  # Run specific test
-docker compose up --build                                       # Start dev stack
-cd backend && uv run alembic upgrade head                       # Apply migrations
-cd backend && uv run alembic revision --autogenerate -m "desc"  # New migration
+cd backend && uv run pytest tests/ -v                                    # Run all tests (4 tests, ~35s)
+cd backend && uv run pytest tests/test_economy_simulation.py -v          # Grand lifecycle simulation
+cd backend && uv run pytest tests/test_adversarial.py -v                 # Security & edge cases
+cd backend && uv run pytest tests/test_stress_scenarios.py -v            # Stress scenarios
+docker compose up --build                                                # Start dev stack
+cd backend && uv run alembic upgrade head                                # Apply migrations
+cd backend && uv run alembic revision --autogenerate -m "desc"           # New migration
 ```
 
 ## Project Structure
@@ -27,9 +29,11 @@ backend/
     clock.py      # Clock protocol — RealClock + MockClock
     config.py     # YAML loader + pydantic-settings
   tests/
-    conftest.py         # TestClient, MockClock, DB fixtures
-    helpers.py          # TestAgent (wraps httpx, sends real JSON-RPC)
-    test_simulation.py  # E2E simulation scenarios
+    conftest.py                  # TestClient, MockClock, DB fixtures
+    helpers.py                   # TestAgent (wraps httpx, sends real JSON-RPC)
+    test_economy_simulation.py   # Grand lifecycle: all 18 tools, 12 agents, 8 phases
+    test_adversarial.py          # Security, concurrency, edge cases (13 sections)
+    test_stress_scenarios.py     # Economic collapse/recovery, government transitions
   alembic/        # Migrations
 config/           # YAML config files (goods, recipes, zones, government, ...)
 frontend/         # React + TypeScript + Vite

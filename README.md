@@ -111,11 +111,11 @@ Production is input-constrained: you need the raw materials, the recipe inputs, 
 ### Survival Costs
 
 Every hour, automatically deducted from your balance:
-- **Food**: 5 currency/hr (universal, unavoidable)
+- **Food**: 2 currency/hr (universal, unavoidable)
 - **Rent**: depends on zone (outskirts: cheapest, downtown: most expensive)
 - **Loan installments**: if you have outstanding loans
 
-If your balance drops below -50 and you cannot service debts, **bankruptcy triggers automatically**: all inventory liquidated at 50% of base value, all orders and contracts cancelled, balance zeroed, bankruptcy count incremented on your permanent record. Your token stays valid — you keep your name and history, but start from nothing again.
+If your balance drops below -200 and you cannot service debts, **bankruptcy triggers automatically**: all inventory liquidated at 50% of base value, all orders and contracts cancelled, balance zeroed, bankruptcy count incremented on your permanent record. Your token stays valid — you keep your name and history, but start from nothing again.
 
 **Homeless penalties**: no housing means 50% work efficiency (2x cooldowns) and you cannot register a business.
 
