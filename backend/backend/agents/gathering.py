@@ -94,64 +94,73 @@ async def gather(
 
     now = clock.now()
 
-    # Check cooldown using stored expiry timestamp
-    cooldown_key = _gather_cooldown_key(agent.id, resource_slug)
-    stored_expiry = await redis.get(cooldown_key)
+    # Acquire a processing lock atomically to prevent concurrent gather races
+    lock_key = f"lock:gather:{agent.id}:{resource_slug}"
+    acquired = await redis.set(lock_key, "1", nx=True, ex=300)  # 5 min safety TTL
+    if not acquired:
+        raise ValueError("Gather already in progress for this resource. Try again shortly.")
 
-    if stored_expiry:
-        try:
-            expiry_dt = datetime.fromisoformat(stored_expiry)
-            # Make timezone-aware if needed
-            if expiry_dt.tzinfo is None:
-                expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
-            if now < expiry_dt:
-                remaining = int((expiry_dt - now).total_seconds())
-                raise ValueError(
-                    f"Gather cooldown active for {good_data.get('name', resource_slug)}. "
-                    f"Try again in {remaining} seconds."
-                )
-        except (ValueError, TypeError) as e:
-            if "cooldown active" in str(e).lower():
-                raise
-            # Corrupted key — ignore and allow gathering
-            logger.warning("Corrupted cooldown key %s: %r", cooldown_key, stored_expiry)
-
-    # Calculate cooldown duration (with homeless penalty)
-    base_cooldown = good_data.get(
-        "gather_cooldown_seconds",
-        settings.economy.base_gather_cooldown,
-    )
-
-    # Homeless agents have doubled gather cooldown (harder to survive without housing)
-    if agent.is_homeless():
-        cooldown_seconds = base_cooldown * 2
-        homeless_penalty_applied = True
-    else:
-        cooldown_seconds = base_cooldown
-        homeless_penalty_applied = False
-
-    # Try to add to inventory — this checks storage capacity
     try:
-        item = await add_to_inventory(
-            db=db,
-            owner_type="agent",
-            owner_id=agent.id,
-            good_slug=resource_slug,
-            quantity=1,
-            settings=settings,
+        # Check cooldown using stored expiry timestamp
+        cooldown_key = _gather_cooldown_key(agent.id, resource_slug)
+        stored_expiry = await redis.get(cooldown_key)
+
+        if stored_expiry:
+            try:
+                expiry_dt = datetime.fromisoformat(stored_expiry)
+                # Make timezone-aware if needed
+                if expiry_dt.tzinfo is None:
+                    expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+                if now < expiry_dt:
+                    remaining = int((expiry_dt - now).total_seconds())
+                    raise ValueError(
+                        f"Gather cooldown active for {good_data.get('name', resource_slug)}. "
+                        f"Try again in {remaining} seconds."
+                    )
+            except (ValueError, TypeError) as e:
+                if "cooldown active" in str(e).lower():
+                    raise
+                # Corrupted key — ignore and allow gathering
+                logger.warning("Corrupted cooldown key %s: %r", cooldown_key, stored_expiry)
+
+        # Calculate cooldown duration (with homeless penalty)
+        base_cooldown = good_data.get(
+            "gather_cooldown_seconds",
+            settings.economy.base_gather_cooldown,
         )
-    except ValueError as e:
-        raise ValueError(str(e)) from e
 
-    # Store cooldown expiry timestamp using clock time
-    from datetime import timedelta
-    expiry_time = now + timedelta(seconds=cooldown_seconds)
-    expiry_str = expiry_time.isoformat()
+        # Homeless agents have doubled gather cooldown (harder to survive without housing)
+        if agent.is_homeless():
+            cooldown_seconds = base_cooldown * 2
+            homeless_penalty_applied = True
+        else:
+            cooldown_seconds = base_cooldown
+            homeless_penalty_applied = False
 
-    # Use real-time TTL = 2x cooldown as safety buffer to prevent key accumulation
-    # If clock is MockClock, keys may persist in Redis longer, but that's OK
-    real_ttl = max(cooldown_seconds * 2, 120)
-    await redis.set(cooldown_key, expiry_str, ex=real_ttl)
+        # Try to add to inventory — this checks storage capacity
+        try:
+            item = await add_to_inventory(
+                db=db,
+                owner_type="agent",
+                owner_id=agent.id,
+                good_slug=resource_slug,
+                quantity=1,
+                settings=settings,
+            )
+        except ValueError as e:
+            raise ValueError(str(e)) from e
+
+        # Store cooldown expiry timestamp using clock time
+        from datetime import timedelta
+        expiry_time = now + timedelta(seconds=cooldown_seconds)
+        expiry_str = expiry_time.isoformat()
+
+        # Use real-time TTL = 2x cooldown as safety buffer to prevent key accumulation
+        # If clock is MockClock, keys may persist in Redis longer, but that's OK
+        real_ttl = max(cooldown_seconds * 2, 120)
+        await redis.set(cooldown_key, expiry_str, ex=real_ttl)
+    finally:
+        await redis.delete(lock_key)
 
     logger.debug(
         "Agent %s gathered 1x %s (cooldown: %ds, expires: %s, homeless: %s)",

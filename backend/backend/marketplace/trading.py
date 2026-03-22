@@ -112,7 +112,7 @@ async def propose_trade(
     if request_money < 0:
         raise ValueError("request_money cannot be negative")
 
-    # Verify proposer has all offered goods
+    # Verify proposer has all offered goods (locked to prevent concurrent removal)
     for item in offer_items:
         slug = item["good_slug"]
         qty = item["quantity"]
@@ -121,7 +121,7 @@ async def propose_trade(
                 InventoryItem.owner_type == "agent",
                 InventoryItem.owner_id == agent.id,
                 InventoryItem.good_slug == slug,
-            )
+            ).with_for_update()
         )
         inv_item = inv_result.scalar_one_or_none()
         have = inv_item.quantity if inv_item else 0
@@ -227,7 +227,7 @@ async def respond_trade(
         raise ValueError(f"Invalid trade ID: {trade_id!r}")
 
     trade_result = await db.execute(
-        select(Trade).where(Trade.id == trade_uuid)
+        select(Trade).where(Trade.id == trade_uuid).with_for_update()
     )
     trade = trade_result.scalar_one_or_none()
 
@@ -246,9 +246,14 @@ async def respond_trade(
             f"Trade has expired (expired at {trade.expires_at.isoformat()})"
         )
 
-    # Load proposer
+    # Load and lock both agents to prevent concurrent balance/inventory changes
+    agent_row = await db.execute(
+        select(Agent).where(Agent.id == agent.id).with_for_update()
+    )
+    agent = agent_row.scalar_one()
+
     proposer_result = await db.execute(
-        select(Agent).where(Agent.id == trade.proposer_id)
+        select(Agent).where(Agent.id == trade.proposer_id).with_for_update()
     )
     proposer = proposer_result.scalar_one_or_none()
     if proposer is None:

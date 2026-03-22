@@ -145,13 +145,13 @@ async def add_to_inventory(
             f"but only {available} available (capacity: {capacity}, used: {current_used})"
         )
 
-    # Upsert the inventory item
+    # Upsert the inventory item (locked to prevent concurrent double-add)
     result = await db.execute(
         select(InventoryItem).where(
             InventoryItem.owner_type == owner_type,
             InventoryItem.owner_id == owner_id,
             InventoryItem.good_slug == good_slug,
-        )
+        ).with_for_update()
     )
     item = result.scalar_one_or_none()
 
@@ -204,7 +204,7 @@ async def remove_from_inventory(
             InventoryItem.owner_type == owner_type,
             InventoryItem.owner_id == owner_id,
             InventoryItem.good_slug == good_slug,
-        )
+        ).with_for_update()
     )
     item = result.scalar_one_or_none()
 
