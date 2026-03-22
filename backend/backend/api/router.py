@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import func, select, and_, or_, desc
+from sqlalchemy import func, select, and_, or_, desc, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -532,19 +532,19 @@ async def get_zones(
 
         # Top goods sold (by storefront transaction volume, last 7d, filtered by zone)
         one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        from sqlalchemy import text as _text
         top_goods_result = await db.execute(
-            select(
-                Transaction.metadata_json["good_slug"].astext.label("good_slug"),
-                func.sum(Transaction.amount).label("total"),
-            ).where(
-                and_(
-                    Transaction.type == "storefront",
-                    Transaction.created_at >= one_week_ago,
-                    Transaction.metadata_json["zone_slug"].astext == zone.slug,
-                )
-            ).group_by(Transaction.metadata_json["good_slug"].astext)
-            .order_by(desc("total"))
-            .limit(5)
+            _text(
+                "SELECT metadata_json->>'good_slug' AS good_slug, SUM(amount) AS total "
+                "FROM transactions "
+                "WHERE type = 'storefront' "
+                "  AND created_at >= :one_week_ago "
+                "  AND metadata_json->>'zone_slug' = :zone_slug "
+                "GROUP BY metadata_json->>'good_slug' "
+                "ORDER BY total DESC "
+                "LIMIT 5"
+            ),
+            {"one_week_ago": one_week_ago, "zone_slug": zone.slug},
         )
         top_goods_rows = top_goods_result.all()
         top_goods = [
