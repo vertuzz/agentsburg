@@ -188,6 +188,12 @@ async def work(
     # -----------------------------------------------------------------------
     # Step 3: Check per-agent global work cooldown in Redis
     # -----------------------------------------------------------------------
+    # Acquire a processing lock atomically to prevent concurrent work races
+    lock_key = f"lock:work:{agent.id}"
+    acquired = await redis.set(lock_key, "1", nx=True, ex=300)  # 5 min safety TTL
+    if not acquired:
+        raise ValueError("Work already in progress. Try again shortly.")
+
     cooldown_key = _work_cooldown_key(agent.id)
     stored_expiry = await redis.get(cooldown_key)
 
@@ -198,6 +204,7 @@ async def work(
                 expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
             if now < expiry_dt:
                 remaining = int((expiry_dt - now).total_seconds())
+                await redis.delete(lock_key)
                 raise ValueError(
                     f"Work cooldown active. Try again in {remaining} seconds. "
                     f"(Producing: {product_slug})"
@@ -211,182 +218,185 @@ async def work(
     # -----------------------------------------------------------------------
     # Step 4: Verify the business has enough input materials
     # -----------------------------------------------------------------------
-    inputs = recipe.inputs_json or []
-
-    for inp in inputs:
-        good_slug = inp["good_slug"]
-        required_qty = inp["quantity"]
-
-        inv_result = await db.execute(
-            select(InventoryItem).where(
-                InventoryItem.owner_type == "business",
-                InventoryItem.owner_id == business.id,
-                InventoryItem.good_slug == good_slug,
-            )
-        )
-        inv_item = inv_result.scalar_one_or_none()
-        have = inv_item.quantity if inv_item else 0
-
-        if have < required_qty:
-            raise ValueError(
-                f"Business {business.name!r} lacks inputs to produce {product_slug!r}. "
-                f"Need {required_qty}x {good_slug}, have {have}. "
-                f"Stock up the business inventory before calling work()."
-            )
-
-    # -----------------------------------------------------------------------
-    # Step 5: Deduct inputs from business inventory
-    # -----------------------------------------------------------------------
-    for inp in inputs:
-        await remove_from_inventory(
-            db=db,
-            owner_type="business",
-            owner_id=business.id,
-            good_slug=inp["good_slug"],
-            quantity=inp["quantity"],
-        )
-
-    # -----------------------------------------------------------------------
-    # Step 6: Add outputs to business inventory
-    # -----------------------------------------------------------------------
     try:
-        output_item = await add_to_inventory(
-            db=db,
-            owner_type="business",
-            owner_id=business.id,
-            good_slug=recipe.output_good,
-            quantity=recipe.output_quantity,
-            settings=settings,
-        )
-    except ValueError as e:
-        # Storage full — roll back the input deductions by re-adding them
-        # This shouldn't happen often; warn and propagate
-        logger.warning(
-            "Business %r storage full during work() — re-adding inputs (this is unusual)",
-            business.name,
-        )
+        inputs = recipe.inputs_json or []
+
         for inp in inputs:
-            await add_to_inventory(
+            good_slug = inp["good_slug"]
+            required_qty = inp["quantity"]
+
+            inv_result = await db.execute(
+                select(InventoryItem).where(
+                    InventoryItem.owner_type == "business",
+                    InventoryItem.owner_id == business.id,
+                    InventoryItem.good_slug == good_slug,
+                )
+            )
+            inv_item = inv_result.scalar_one_or_none()
+            have = inv_item.quantity if inv_item else 0
+
+            if have < required_qty:
+                raise ValueError(
+                    f"Business {business.name!r} lacks inputs to produce {product_slug!r}. "
+                    f"Need {required_qty}x {good_slug}, have {have}. "
+                    f"Stock up the business inventory before calling work()."
+                )
+
+        # -------------------------------------------------------------------
+        # Step 5: Deduct inputs from business inventory
+        # -------------------------------------------------------------------
+        for inp in inputs:
+            await remove_from_inventory(
                 db=db,
                 owner_type="business",
                 owner_id=business.id,
                 good_slug=inp["good_slug"],
                 quantity=inp["quantity"],
+            )
+
+        # -------------------------------------------------------------------
+        # Step 6: Add outputs to business inventory
+        # -------------------------------------------------------------------
+        try:
+            output_item = await add_to_inventory(
+                db=db,
+                owner_type="business",
+                owner_id=business.id,
+                good_slug=recipe.output_good,
+                quantity=recipe.output_quantity,
                 settings=settings,
             )
-        raise ValueError(
-            f"Business {business.name!r} storage is full. Cannot store {recipe.output_good}. "
-            f"Sell some inventory first via set_prices() and let NPC consumers buy."
-        ) from e
-
-    # -----------------------------------------------------------------------
-    # Step 7: Pay wage (if employed)
-    # -----------------------------------------------------------------------
-    wage_earned: float = 0.0
-    owner_agent: Agent | None = None
-
-    if is_employed:
-        wage = Decimal(str(employment.wage_per_work))
-        wage_earned = float(wage)
-
-        # Look up the business owner to deduct from their balance
-        owner_result = await db.execute(
-            select(Agent).where(Agent.id == business.owner_id)
-        )
-        owner_agent = owner_result.scalar_one_or_none()
-
-        if owner_agent is None:
-            logger.error(
-                "Business %r has no owner agent (owner_id=%s) — cannot pay wage",
-                business.name, business.owner_id,
+        except ValueError as e:
+            # Storage full — roll back the input deductions by re-adding them
+            # This shouldn't happen often; warn and propagate
+            logger.warning(
+                "Business %r storage full during work() — re-adding inputs (this is unusual)",
+                business.name,
             )
+            for inp in inputs:
+                await add_to_inventory(
+                    db=db,
+                    owner_type="business",
+                    owner_id=business.id,
+                    good_slug=inp["good_slug"],
+                    quantity=inp["quantity"],
+                    settings=settings,
+                )
             raise ValueError(
-                f"Business owner not found. Cannot process wage payment. "
-                f"Contact the business owner."
+                f"Business {business.name!r} storage is full. Cannot store {recipe.output_good}. "
+                f"Sell some inventory first via set_prices() and let NPC consumers buy."
+            ) from e
+
+        # -------------------------------------------------------------------
+        # Step 7: Pay wage (if employed)
+        # -------------------------------------------------------------------
+        wage_earned: float = 0.0
+        owner_agent: Agent | None = None
+
+        if is_employed:
+            wage = Decimal(str(employment.wage_per_work))
+            wage_earned = float(wage)
+
+            # Look up the business owner to deduct from their balance
+            owner_result = await db.execute(
+                select(Agent).where(Agent.id == business.owner_id)
             )
+            owner_agent = owner_result.scalar_one_or_none()
 
-        owner_balance = Decimal(str(owner_agent.balance))
+            if owner_agent is None:
+                logger.error(
+                    "Business %r has no owner agent (owner_id=%s) — cannot pay wage",
+                    business.name, business.owner_id,
+                )
+                raise ValueError(
+                    f"Business owner not found. Cannot process wage payment. "
+                    f"Contact the business owner."
+                )
 
-        # Deduct from owner, credit to worker
-        owner_agent.balance = owner_balance - wage
-        agent.balance = Decimal(str(agent.balance)) + wage
+            owner_balance = Decimal(str(owner_agent.balance))
 
-        # Record wage transaction
-        txn = Transaction(
-            type="wage",
-            from_agent_id=owner_agent.id,
-            to_agent_id=agent.id,
-            amount=wage,
-            metadata_json={
-                "business_id": str(business.id),
-                "business_name": business.name,
-                "product_slug": product_slug,
-                "recipe_slug": recipe.slug,
-                "employment_id": str(employment.id),
-                "timestamp": now.isoformat(),
-            },
+            # Deduct from owner, credit to worker
+            owner_agent.balance = owner_balance - wage
+            agent.balance = Decimal(str(agent.balance)) + wage
+
+            # Record wage transaction
+            txn = Transaction(
+                type="wage",
+                from_agent_id=owner_agent.id,
+                to_agent_id=agent.id,
+                amount=wage,
+                metadata_json={
+                    "business_id": str(business.id),
+                    "business_name": business.name,
+                    "product_slug": product_slug,
+                    "recipe_slug": recipe.slug,
+                    "employment_id": str(employment.id),
+                    "timestamp": now.isoformat(),
+                },
+            )
+            db.add(txn)
+
+        # -------------------------------------------------------------------
+        # Step 8: Calculate effective cooldown
+        # -------------------------------------------------------------------
+        base_cooldown = recipe.cooldown_seconds
+
+        # Business type bonus
+        if (
+            recipe.bonus_business_type is not None
+            and recipe.bonus_business_type == business.type_slug
+            and recipe.bonus_cooldown_multiplier < 1.0
+        ):
+            bonus_multiplier = recipe.bonus_cooldown_multiplier
+            bonus_applied = True
+        else:
+            bonus_multiplier = 1.0
+            bonus_applied = False
+
+        # Commute penalty: if agent housing zone != business zone
+        commute_penalty_applied = False
+        if agent.housing_zone_id is not None and agent.housing_zone_id != business.zone_id:
+            commute_multiplier = settings.economy.commute_cooldown_multiplier
+            commute_penalty_applied = True
+        else:
+            commute_multiplier = 1.0
+
+        # Government production cooldown modifier
+        government_modifier = await _get_government_modifier(db, settings)
+
+        # Homeless penalty: homeless agents produce at reduced efficiency
+        # (cooldown multiplied by 1/penalty, e.g. penalty=0.5 → cooldown doubles)
+        homeless_penalty_multiplier = 1.0
+        if agent.is_homeless():
+            homeless_efficiency_penalty = getattr(
+                settings.economy, "housing_homeless_efficiency_penalty", 0.5
+            )
+            if homeless_efficiency_penalty > 0:
+                homeless_penalty_multiplier = 1.0 / homeless_efficiency_penalty
+
+        effective_cooldown = int(
+            base_cooldown
+            * bonus_multiplier
+            * commute_multiplier
+            * government_modifier
+            * homeless_penalty_multiplier
         )
-        db.add(txn)
+        # Minimum 1 second cooldown
+        effective_cooldown = max(1, effective_cooldown)
 
-    # -----------------------------------------------------------------------
-    # Step 8: Calculate effective cooldown
-    # -----------------------------------------------------------------------
-    base_cooldown = recipe.cooldown_seconds
+        # -------------------------------------------------------------------
+        # Step 9: Set cooldown in Redis (clock-based timestamp)
+        # -------------------------------------------------------------------
+        expiry_time = now + timedelta(seconds=effective_cooldown)
+        expiry_str = expiry_time.isoformat()
 
-    # Business type bonus
-    if (
-        recipe.bonus_business_type is not None
-        and recipe.bonus_business_type == business.type_slug
-        and recipe.bonus_cooldown_multiplier < 1.0
-    ):
-        bonus_multiplier = recipe.bonus_cooldown_multiplier
-        bonus_applied = True
-    else:
-        bonus_multiplier = 1.0
-        bonus_applied = False
+        # Real-time TTL = 2x cooldown as safety buffer
+        real_ttl = max(effective_cooldown * 2, 120)
+        await redis.set(cooldown_key, expiry_str, ex=real_ttl)
 
-    # Commute penalty: if agent housing zone != business zone
-    commute_penalty_applied = False
-    if agent.housing_zone_id is not None and agent.housing_zone_id != business.zone_id:
-        commute_multiplier = settings.economy.commute_cooldown_multiplier
-        commute_penalty_applied = True
-    else:
-        commute_multiplier = 1.0
-
-    # Government production cooldown modifier
-    government_modifier = await _get_government_modifier(db, settings)
-
-    # Homeless penalty: homeless agents produce at reduced efficiency
-    # (cooldown multiplied by 1/penalty, e.g. penalty=0.5 → cooldown doubles)
-    homeless_penalty_multiplier = 1.0
-    if agent.is_homeless():
-        homeless_efficiency_penalty = getattr(
-            settings.economy, "housing_homeless_efficiency_penalty", 0.5
-        )
-        if homeless_efficiency_penalty > 0:
-            homeless_penalty_multiplier = 1.0 / homeless_efficiency_penalty
-
-    effective_cooldown = int(
-        base_cooldown
-        * bonus_multiplier
-        * commute_multiplier
-        * government_modifier
-        * homeless_penalty_multiplier
-    )
-    # Minimum 1 second cooldown
-    effective_cooldown = max(1, effective_cooldown)
-
-    # -----------------------------------------------------------------------
-    # Step 9: Set cooldown in Redis (clock-based timestamp)
-    # -----------------------------------------------------------------------
-    expiry_time = now + timedelta(seconds=effective_cooldown)
-    expiry_str = expiry_time.isoformat()
-
-    # Real-time TTL = 2x cooldown as safety buffer
-    real_ttl = max(effective_cooldown * 2, 120)
-    await redis.set(cooldown_key, expiry_str, ex=real_ttl)
-
-    await db.flush()
+        await db.flush()
+    finally:
+        await redis.delete(lock_key)
 
     logger.info(
         "Agent %s worked at %r: produced %dx %s (cooldown=%ds, employed=%s, wage=%.2f)",

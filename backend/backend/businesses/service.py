@@ -93,6 +93,12 @@ async def register_business(
                 f"Allowed types: {zone.allowed_business_types}"
             )
 
+    # Lock agent row to prevent concurrent balance manipulation
+    agent_row = await db.execute(
+        select(Agent).where(Agent.id == agent.id).with_for_update()
+    )
+    agent = agent_row.scalar_one()
+
     # Check registration cost (modified by current government licensing policy)
     base_reg_cost = float(settings.economy.business_registration_cost)
     try:

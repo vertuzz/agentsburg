@@ -37,6 +37,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+CANCEL_FEE_RATE = Decimal("0.02")  # 2% cancellation fee to prevent spoofing
+
 # A price high enough that a market buy will cross any reasonable ask
 MARKET_BUY_PRICE = Decimal("999999999.99")
 # Market sell price: 0 — will cross any reasonable bid
@@ -158,6 +160,12 @@ async def place_order(
         else:
             total_cost = price * quantity
 
+        # Lock agent row to prevent concurrent balance manipulation
+        agent_row = await db.execute(
+            select(Agent).where(Agent.id == agent.id).with_for_update()
+        )
+        agent = agent_row.scalar_one()
+
         agent_balance = Decimal(str(agent.balance))
         if agent_balance < total_cost:
             raise ValueError(
@@ -244,6 +252,7 @@ async def match_orders(
             MarketOrder.status.in_(["open", "partially_filled"]),
         )
         .order_by(MarketOrder.price.desc(), MarketOrder.created_at.asc())
+        .with_for_update()
     )
     buy_orders = list(buy_result.scalars().all())
 
@@ -257,6 +266,7 @@ async def match_orders(
             MarketOrder.status.in_(["open", "partially_filled"]),
         )
         .order_by(MarketOrder.price.asc(), MarketOrder.created_at.asc())
+        .with_for_update()
     )
     sell_orders = list(sell_result.scalars().all())
 
@@ -269,6 +279,12 @@ async def match_orders(
     while buy_idx < len(buy_orders) and sell_idx < len(sell_orders):
         buy_order = buy_orders[buy_idx]
         sell_order = sell_orders[sell_idx]
+
+        # Prevent self-trading (wash trading)
+        if buy_order.agent_id == sell_order.agent_id:
+            # Skip: same agent on both sides. Try next sell order.
+            sell_idx += 1
+            continue
 
         buy_price = Decimal(str(buy_order.price))
         sell_price = Decimal(str(sell_order.price))
@@ -286,14 +302,14 @@ async def match_orders(
         # Match as much as possible
         fill_qty = min(buy_remaining, sell_remaining)
 
-        # --- Load buyer and seller agents ---
+        # --- Load buyer and seller agents (locked to prevent concurrent balance changes) ---
         buyer_result = await db.execute(
-            select(Agent).where(Agent.id == buy_order.agent_id)
+            select(Agent).where(Agent.id == buy_order.agent_id).with_for_update()
         )
         buyer = buyer_result.scalar_one_or_none()
 
         seller_result = await db.execute(
-            select(Agent).where(Agent.id == sell_order.agent_id)
+            select(Agent).where(Agent.id == sell_order.agent_id).with_for_update()
         )
         seller = seller_result.scalar_one_or_none()
 
@@ -444,7 +460,7 @@ async def cancel_order(
         raise ValueError(f"Invalid order ID: {order_id!r}")
 
     result = await db.execute(
-        select(MarketOrder).where(MarketOrder.id == order_uuid)
+        select(MarketOrder).where(MarketOrder.id == order_uuid).with_for_update()
     )
     order = result.scalar_one_or_none()
 
@@ -462,21 +478,30 @@ async def cancel_order(
     # Calculate how much to return
     unfilled_qty = order.quantity_total - order.quantity_filled
 
+    # Calculate 2% cancellation fee to discourage order spoofing
+    locked_value = Decimal(str(order.price)) * unfilled_qty
+    cancel_fee = (locked_value * CANCEL_FEE_RATE).quantize(Decimal("0.01"))
+
     if order.side == "sell":
         # Return unsold goods to inventory
         await add_to_inventory(db, "agent", agent.id, order.good_slug, unfilled_qty, settings)
+        # Deduct monetary fee from agent balance
+        agent.balance = Decimal(str(agent.balance)) - cancel_fee
         refund_info = {
             "type": "goods_returned",
             "good_slug": order.good_slug,
             "quantity": unfilled_qty,
+            "cancel_fee": float(cancel_fee),
         }
     else:  # buy
-        # Return locked funds (at order price per unit, for unfilled portion)
-        locked_funds = Decimal(str(order.price)) * unfilled_qty
-        agent.balance = Decimal(str(agent.balance)) + locked_funds
+        # Return locked funds minus 2% cancellation fee
+        locked_funds = locked_value
+        refund_amount = locked_funds - cancel_fee
+        agent.balance = Decimal(str(agent.balance)) + refund_amount
         refund_info = {
             "type": "funds_returned",
-            "amount": float(locked_funds),
+            "amount": float(refund_amount),
+            "cancel_fee": float(cancel_fee),
         }
 
     order.status = "cancelled"
