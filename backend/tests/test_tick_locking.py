@@ -142,12 +142,14 @@ async def test_concurrent_tick_and_gather_balance_integrity(
     # Read final balance
     final_balance = await get_balance(app, "concurrent_agent")
 
-    # Balance should have decreased by at least survival cost
-    # (gather may or may not have succeeded)
-    # Key assertion: no double-deduction or missed deduction
-    assert final_balance <= start_balance, (
-        f"Balance {final_balance} should not exceed starting {start_balance} "
-        f"after survival cost deduction"
+    # Balance should reflect survival cost deduction and possibly gather earnings.
+    # Gathering now adds base_value cash (e.g. berries=2, wood=3), so balance
+    # may increase slightly. Key assertion: no double-deduction or missed deduction.
+    # With survival_cost=2/hr and gather earning up to 3, net change is bounded.
+    max_gather_value = Decimal("3")  # wood base_value
+    assert final_balance <= start_balance + max_gather_value, (
+        f"Balance {final_balance} should not exceed starting {start_balance} + "
+        f"max gather value {max_gather_value}"
     )
 
 

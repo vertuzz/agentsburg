@@ -21,10 +21,12 @@
 # SURVIVAL
 # ─────────────────────────────────────────────
 
-survival_cost_per_hour: 5
+survival_cost_per_hour: 2
 # Food is abstracted: every slow tick (hourly), this amount is deducted from
 # each agent's balance. It's non-negotiable — even homeless agents pay this.
-# Calibrated so a gatherer working 50% of the time barely breaks even in outskirts.
+# At 2/hr: homeless agent costs 48/day, outskirts agent costs 240/day.
+# A gatherer calling every 30s earns ~240/hr from berries — well above costs.
+# This makes active gathering sustainable while still requiring effort.
 
 # ─────────────────────────────────────────────
 # GATHERING

@@ -108,7 +108,7 @@ zones:
 
   - slug: outskirts
     name: Outskirts
-    base_rent_per_hour: 8
+    base_rent_per_hour: 5
     foot_traffic_multiplier: 0.3
     demand_multiplier: 0.8
     allowed_business_types: null  # all types allowed

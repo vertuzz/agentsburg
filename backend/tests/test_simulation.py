@@ -80,7 +80,7 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
     7-day survival loop simulation with 8 agents.
 
     Agents:
-    - agent_0, agent_1: rent outskirts (cheapest housing, 8/hr)
+    - agent_0, agent_1: rent outskirts (cheapest housing, 5/hr)
     - agent_2, agent_3: rent suburbs (moderate, 25/hr)
     - agent_4, agent_5: homeless, actively gathering
     - agent_6, agent_7: homeless, idle (will go bankrupt)
@@ -160,8 +160,8 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
     # Wait — the design says agents start with nothing. But rent requires upfront payment.
     # This is a design tension: how do new agents afford first rent?
     #
-    # Looking at economy.yaml: survival_cost_per_hour 5/hr, outskirts 8/hr.
-    # A new agent CAN'T afford outskirts rent immediately (balance=0, need 8).
+    # Looking at economy.yaml: survival_cost_per_hour 2/hr, outskirts 5/hr.
+    # A new agent CAN'T afford outskirts rent immediately (balance=0, need 5).
     # They need to gather first.
     #
     # Let's test this: verify agents can't rent without funds, then
@@ -208,11 +208,11 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
 
     print("  Seeded agents with 200 starting balance (simulating prior earnings)")
 
-    # Now rent housing for agents 0-1 (outskirts: 8/hr)
+    # Now rent housing for agents 0-1 (outskirts: 5/hr)
     for i in [0, 1]:
         result = await agents[i].call("rent_housing", {"zone": "outskirts"})
         assert result["zone_slug"] == "outskirts"
-        assert result["rent_cost_per_hour"] == 8.0
+        assert result["rent_cost_per_hour"] == 5.0
         print(f"  {agents[i].name}: rented outskirts ({result['first_payment']:.2f} first payment)")
 
     # Rent housing for agents 2-3 (suburbs: 25/hr)
@@ -382,15 +382,15 @@ async def test_basic_survival_loop(client, app, clock, run_tick, db, redis_clien
 
     print_metrics("FINAL STATE", [s for s in final_statuses if s])
 
-    # 1. Survival cost calibration (corrected): survival_cost_per_hour = 5/hr
+    # 1. Survival cost calibration (corrected): survival_cost_per_hour = 2/hr
     # Costs per hour:
-    #   - Homeless idle agents (6,7):       5/hr food only
-    #   - Suburbs renters (2,3, no income): 5/hr food + 25/hr rent = 30/hr total
+    #   - Homeless idle agents (6,7):       2/hr food only
+    #   - Suburbs renters (2,3, no income): 2/hr food + 25/hr rent = 27/hr total
     #
     # With 200 starting balance:
-    #   - agents 2, 3 (suburbs, no income): bankrupt after 200/30 ≈ 6.7 hours ✓
-    #   - agents 6, 7 (homeless, no income): bankrupt after (200+50)/5 = 50 hours ✓
-    #   - agents 0, 1 (outskirts rent + active): 8/hr rent + 5/hr food = 13/hr, gathering helps
+    #   - agents 2, 3 (suburbs, no income): bankrupt after 200/27 ≈ 7.4 hours ✓
+    #   - agents 6, 7 (homeless, no income): bankrupt after (200+50)/2 = 125 hours ✓
+    #   - agents 0, 1 (outskirts rent + active): 5/hr rent + 2/hr food = 7/hr, gathering helps
     #
     # After 168 ticks: both suburbs renters and idle homeless agents go bankrupt.
 
@@ -567,7 +567,7 @@ async def test_housing_and_eviction(client, app, clock, run_tick, db):
             select(Agent).where(Agent.name == "housing_test")
         )
         ag = result.scalar_one()
-        ag.balance = Decimal("10")  # exactly enough for outskirts (8) with small buffer
+        ag.balance = Decimal("10")  # exactly enough for outskirts (5) with buffer
         await session.commit()
 
     # Verify can't afford suburbs (25/hr)
@@ -575,21 +575,21 @@ async def test_housing_and_eviction(client, app, clock, run_tick, db):
     assert error_code in ("RENT_FAILED", "INSUFFICIENT_FUNDS"), f"Expected RENT_FAILED or INSUFFICIENT_FUNDS, got {error_code}"
     print("  Can't afford suburbs with 10 balance ✓")
 
-    # CAN afford outskirts (8/hr)
+    # CAN afford outskirts (5/hr)
     result = await agent.call("rent_housing", {"zone": "outskirts"})
     assert result["zone_slug"] == "outskirts"
     print(f"  Rented outskirts, balance after: {result['new_balance']:.2f} ✓")
 
-    # After first payment, balance should be ~2 (10 - 8 = 2)
+    # After first payment, balance should be ~5 (10 - 5 = 5)
     status = await agent.status()
-    assert abs(status["balance"] - 2.0) < 0.01, f"Expected ~2.0, got {status['balance']}"
+    assert abs(status["balance"] - 5.0) < 0.01, f"Expected ~5.0, got {status['balance']}"
     assert status["housing"]["homeless"] is False
 
-    # Run one tick — rent deducted again (8/hr)
+    # Run one tick — rent + survival deducted (5 + 2 = 7/hr)
     await run_tick(hours=1)
 
     status = await agent.status()
-    # Balance after tick: 2 - 8 = -6. Below 0 but above -50 threshold.
+    # Balance after tick: 5 - 5 (rent) - 2 (survival) = -2. Below 0 but above -50 threshold.
     # Should be evicted because can't pay rent
     print(f"  After tick: balance={status['balance']:.2f}, homeless={status['housing']['homeless']}")
     assert status["housing"]["homeless"] is True, "Should be evicted when can't afford rent"
