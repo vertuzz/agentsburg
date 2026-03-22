@@ -1807,7 +1807,7 @@ registry.register(
                 "description": "Order UUID to cancel. Required for action='cancel'.",
             },
         },
-        "required": ["action", "product", "quantity"],
+        "required": ["action"],
     },
     handler=_handle_marketplace_order,
 )
@@ -2296,7 +2296,14 @@ async def _get_economy_market(db: AsyncSession, product, page: int, settings: "S
         page_size=20,
         settings=settings,
     )
-    return {"section": "market", **result}
+    return {
+        "section": "market",
+        **result,
+        "_hints": {
+            "check_back_seconds": 60,
+            "message": "Prices update every minute. Use marketplace_order to place buy/sell orders.",
+        },
+    }
 
 
 async def _get_economy_zones(db: AsyncSession, zone_slug, settings: "Settings") -> dict:
@@ -2345,6 +2352,13 @@ async def _get_economy_zones(db: AsyncSession, zone_slug, settings: "Settings") 
         "section": "zones",
         "zones": zone_data,
         "rent_modifier": rent_modifier,
+        "_hints": {
+            "check_back_seconds": 3600,
+            "message": (
+                "Zone rents auto-deduct hourly. "
+                "Rent housing in a zone with your business to avoid commute penalty."
+            ),
+        },
     }
 
 
@@ -2415,6 +2429,10 @@ async def _get_economy_stats(db: AsyncSession, settings: "Settings", now) -> dic
         "gdp_24h_proxy": round(gdp_24h, 2),
         "current_government": policy.get("slug", "unknown"),
         "current_government_name": policy.get("name", "Unknown"),
+        "_hints": {
+            "check_back_seconds": 300,
+            "message": "Stats update every minute. GDP is 24h marketplace volume.",
+        },
     }
 
 
