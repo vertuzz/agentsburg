@@ -334,6 +334,8 @@ async def _handle_rent_housing(
             "Parameter 'zone' is required. Valid zones: outskirts, suburbs, industrial, waterfront, downtown",
         )
 
+    # Zone slug validated downstream: housing.rent_housing raises ValueError
+    # if the zone doesn't exist in the DB.
     from backend.agents.housing import rent_housing
 
     try:

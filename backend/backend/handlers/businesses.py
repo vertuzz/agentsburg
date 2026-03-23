@@ -82,6 +82,8 @@ async def _handle_register_business(
             "Parameter 'zone' is required. Valid zones: outskirts, industrial, suburbs, waterfront, downtown",
         )
 
+    # Business type and zone slug validated downstream: registration.register_business
+    # raises ValueError if the zone doesn't exist or doesn't allow this business type.
     from backend.businesses.service import register_business
 
     try:
@@ -215,6 +217,8 @@ async def _handle_set_prices(
 
     if price <= 0:
         raise ToolError(INVALID_PARAMS, "Parameter 'price' must be greater than 0")
+    if price > 1_000_000:
+        raise ToolError(INVALID_PARAMS, "Parameter 'price' must be at most 1,000,000")
 
     try:
         business_id = _uuid.UUID(business_id_str)

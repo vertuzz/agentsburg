@@ -16,10 +16,11 @@ Lifespan handles:
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.clock import Clock, RealClock
@@ -46,8 +47,8 @@ async def lifespan(app: FastAPI):
     clock: Clock = app.state.clock
 
     logger.info("Starting Agent Economy backend")
-    logger.info("Database: %s", settings.database.url.split("@")[-1])  # hide credentials
-    logger.info("Redis: %s", settings.redis.url)
+    logger.info("Database configured")
+    logger.info("Redis configured")
 
     # --- Database setup ---
     engine = create_engine(settings.database)
@@ -151,7 +152,11 @@ def create_app(
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"] if settings.server.debug else prod_origins,
+        allow_origins=[
+            "http://localhost:5173",
+            "http://localhost:3000",
+            "http://localhost:8000",
+        ] if settings.server.debug else prod_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -176,8 +181,16 @@ def create_app(
 
     # Admin endpoint — trigger economy tick processing (dev/test only)
     @app.post("/admin/tick", tags=["infrastructure"])
-    async def trigger_tick():
-        """Manually trigger a fast tick. Dev/test use only."""
+    async def trigger_tick(authorization: str = Header(default=None)):
+        """Manually trigger a fast tick. Requires ADMIN_TOKEN."""
+        admin_token = os.environ.get("ADMIN_TOKEN")
+        if not admin_token:
+            raise HTTPException(status_code=503, detail="Admin endpoint not configured")
+        if not authorization or not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Missing or invalid authorization header")
+        if authorization[7:] != admin_token:
+            raise HTTPException(status_code=401, detail="Invalid admin token")
+
         from backend.economy.fast_tick import run_fast_tick
 
         async with app.state.session_factory() as db:

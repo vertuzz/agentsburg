@@ -28,6 +28,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class DatabaseSettings(BaseModel):
+    # Dev-only default — production must set DATABASE_URL env var or .env file
     url: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy"
     pool_size: int = 20
     max_overflow: int = 40
@@ -35,6 +36,7 @@ class DatabaseSettings(BaseModel):
 
 
 class RedisSettings(BaseModel):
+    # Dev-only default — production must set REDIS_URL env var or .env file
     url: str = "redis://redis:6379/0"
 
 
@@ -123,6 +125,7 @@ class _EnvLoader(BaseSettings):
     3. Model defaults below
     """
 
+    # Dev-only defaults — production deployments must set these via env vars or .env
     database_url: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy"
     redis_url: str = "redis://redis:6379/0"
     config_dir: str = "/app/config"

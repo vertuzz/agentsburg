@@ -89,6 +89,8 @@ async def _handle_manage_employees(
 
         if wage <= 0:
             raise ToolError(INVALID_PARAMS, "Parameter 'wage' must be greater than 0")
+        if wage > 1_000_000:
+            raise ToolError(INVALID_PARAMS, "Parameter 'wage' must be at most 1,000,000")
 
         product = params.get("product")
         if not product or not isinstance(product, str):
@@ -99,6 +101,10 @@ async def _handle_manage_employees(
             max_workers = int(raw_max_workers)
         except (TypeError, ValueError):
             raise ToolError(INVALID_PARAMS, "Parameter 'max_workers' must be an integer")
+        if max_workers < 1:
+            raise ToolError(INVALID_PARAMS, "Parameter 'max_workers' must be at least 1")
+        if max_workers > 100:
+            raise ToolError(INVALID_PARAMS, "Parameter 'max_workers' must be at most 100")
 
         from backend.businesses.employment import post_job
         try:

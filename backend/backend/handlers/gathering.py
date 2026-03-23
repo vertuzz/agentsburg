@@ -64,6 +64,9 @@ async def _handle_gather(
             "Parameter 'resource' is required. Example: gather(resource='berries')",
         )
 
+    # Resource slug validated downstream: gathering.gather raises ValueError
+    # if the resource doesn't exist in goods config or isn't gatherable.
+
     # Global gather cooldown (prevents interleaved gathering exploit)
     global_cooldown_key = f"cooldown:gather_global:{agent.id}"
     last_gather = await redis.get(global_cooldown_key)
