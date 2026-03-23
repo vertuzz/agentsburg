@@ -53,10 +53,11 @@ async def _handle_business_inventory(
 
     # Parse params
     action = params.get("action")
-    if action not in ("deposit", "withdraw", "view"):
+    valid_actions = ("deposit", "withdraw", "view", "batch_deposit", "batch_withdraw")
+    if action not in valid_actions:
         raise ToolError(
             INVALID_PARAMS,
-            "Parameter 'action' is required and must be 'deposit', 'withdraw', or 'view'.",
+            f"Parameter 'action' is required and must be one of: {', '.join(valid_actions)}.",
         )
 
     business_id = params.get("business_id")
@@ -121,6 +122,138 @@ async def _handle_business_inventory(
                 "message": (
                     f"Business {business.name!r} inventory: "
                     f"{biz_storage_used}/{biz_capacity} storage used."
+                ),
+            },
+        }
+
+    # --- Batch Deposit/Withdraw: multiple goods in one call, single cooldown ---
+    if action in ("batch_deposit", "batch_withdraw"):
+        goods_list = params.get("goods")
+        if not isinstance(goods_list, list) or not goods_list:
+            raise ToolError(
+                INVALID_PARAMS,
+                "Parameter 'goods' must be a non-empty list of {good, quantity} objects.",
+            )
+        if len(goods_list) > 20:
+            raise ToolError(INVALID_PARAMS, "Maximum 20 goods per batch transfer.")
+
+        # Validate all items upfront
+        goods_config = {g["slug"]: g for g in settings.goods}
+        validated: list[tuple[str, int]] = []
+        for i, item in enumerate(goods_list):
+            if not isinstance(item, dict):
+                raise ToolError(INVALID_PARAMS, f"Item {i}: must be an object with 'good' and 'quantity'.")
+            g = item.get("good")
+            q = item.get("quantity")
+            if not g or not isinstance(g, str) or g not in goods_config:
+                raise ToolError(INVALID_PARAMS, f"Item {i}: unknown or missing good slug {g!r}.")
+            if not isinstance(q, int) or isinstance(q, bool) or q <= 0:
+                raise ToolError(INVALID_PARAMS, f"Item {i}: quantity must be a positive integer.")
+            validated.append((g, q))
+
+        # Acquire processing lock + check cooldown
+        lock_key = f"lock:transfer:{agent.id}"
+        acquired = await redis.set(lock_key, "1", nx=True, ex=300)
+        if not acquired:
+            raise ToolError(COOLDOWN_ACTIVE, "Transfer already in progress. Try again shortly.")
+
+        try:
+            from datetime import datetime, timedelta, timezone
+            cooldown_key = f"cooldown:transfer:{agent.id}"
+            stored_expiry = await redis.get(cooldown_key)
+            now = clock.now()
+
+            if stored_expiry:
+                try:
+                    expiry_dt = datetime.fromisoformat(stored_expiry)
+                    if expiry_dt.tzinfo is None:
+                        expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+                    if now < expiry_dt:
+                        remaining = int((expiry_dt - now).total_seconds())
+                        raise ToolError(
+                            COOLDOWN_ACTIVE,
+                            f"Transfer cooldown active. Try again in {remaining} seconds.",
+                        )
+                except ToolError:
+                    raise
+                except (ValueError, TypeError):
+                    pass
+
+            from backend.agents.inventory import (
+                add_to_inventory,
+                get_storage_used,
+                remove_from_inventory,
+            )
+
+            is_deposit = action == "batch_deposit"
+            transferred: list[dict] = []
+            rollback_stack: list[tuple[str, str, object, str, int]] = []
+
+            try:
+                for g, q in validated:
+                    if is_deposit:
+                        await remove_from_inventory(db, "agent", agent.id, g, q)
+                        rollback_stack.append(("agent", agent.id, "business", biz_uuid, g, q))
+                        await add_to_inventory(db, "business", biz_uuid, g, q, settings)
+                    else:
+                        await remove_from_inventory(db, "business", biz_uuid, g, q)
+                        rollback_stack.append(("business", biz_uuid, "agent", agent.id, g, q))
+                        await add_to_inventory(db, "agent", agent.id, g, q, settings)
+                    transferred.append({"good": g, "quantity": q})
+            except (ValueError, ToolError) as exc:
+                # Rollback all successful transfers in reverse order
+                for src_type, src_id, dst_type, dst_id, g, q in reversed(rollback_stack):
+                    try:
+                        await remove_from_inventory(db, dst_type, dst_id, g, q)
+                        await add_to_inventory(db, src_type, src_id, g, q, settings)
+                    except Exception:
+                        pass  # Best-effort rollback
+                error_msg = str(exc.message if isinstance(exc, ToolError) else exc)
+                raise ToolError(
+                    STORAGE_FULL if "storage" in error_msg.lower() else INSUFFICIENT_INVENTORY,
+                    f"Batch transfer failed and was rolled back. Error: {error_msg}",
+                ) from exc
+
+            # Set cooldown (single cooldown for entire batch)
+            cooldown_seconds = 10
+            expiry_time = now + timedelta(seconds=cooldown_seconds)
+            await redis.set(cooldown_key, expiry_time.isoformat(), ex=max(cooldown_seconds * 2, 120))
+
+            agent_storage_used = await get_storage_used(db, "agent", agent.id, settings)
+            agent_capacity = settings.economy.agent_storage_capacity
+            biz_storage_used = await get_storage_used(db, "business", biz_uuid, settings)
+            biz_capacity = settings.economy.business_storage_capacity
+
+        finally:
+            await redis.delete(lock_key)
+
+        from backend.hints import get_pending_events
+        pending_events = await get_pending_events(db, agent)
+
+        return {
+            "transferred": transferred,
+            "count": len(transferred),
+            "action": action,
+            "business_id": business_id,
+            "business_name": business.name,
+            "agent_storage": {
+                "used": agent_storage_used,
+                "capacity": agent_capacity,
+                "free": agent_capacity - agent_storage_used,
+            },
+            "business_storage": {
+                "used": biz_storage_used,
+                "capacity": biz_capacity,
+                "free": biz_capacity - biz_storage_used,
+            },
+            "cooldown_seconds": cooldown_seconds,
+            "_hints": {
+                "pending_events": pending_events,
+                "check_back_seconds": cooldown_seconds,
+                "message": (
+                    f"Batch transferred {len(transferred)} goods "
+                    f"{'into' if is_deposit else 'from'} "
+                    f"{business.name!r}. Next transfer in {cooldown_seconds}s."
                 ),
             },
         }

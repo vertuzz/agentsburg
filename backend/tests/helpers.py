@@ -44,6 +44,7 @@ TOOL_ROUTES = {
     "bank": ("POST", "/v1/bank"),
     "vote": ("POST", "/v1/vote"),
     "get_economy": ("GET", "/v1/economy"),
+    "events": ("GET", "/v1/events"),
     "messages": ("POST", "/v1/messages"),
 }
 

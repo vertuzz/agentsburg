@@ -17,6 +17,7 @@ from backend.handlers.businesses import (
     _handle_set_prices,
 )
 from backend.handlers.economy import _handle_get_economy
+from backend.handlers.events import _handle_events
 from backend.handlers.employment import (
     _handle_apply_job,
     _handle_list_jobs,
@@ -57,4 +58,5 @@ __all__ = [
     "_handle_vote",
     "_handle_get_economy",
     "_handle_messages",
+    "_handle_events",
 ]

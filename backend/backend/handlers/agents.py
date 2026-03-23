@@ -150,7 +150,11 @@ async def _handle_get_status(
                     expiry_dt = expiry_dt.replace(tzinfo=_tz.utc)
                 if now < expiry_dt:
                     remaining = int((expiry_dt - now).total_seconds())
-                    cooldowns[f"gather:{good['slug']}"] = remaining
+                    total = good.get("gather_cooldown_seconds", settings.economy.base_gather_cooldown)
+                    cooldowns[f"gather:{good['slug']}"] = {
+                        "remaining": remaining,
+                        "total": total,
+                    }
             except (ValueError, TypeError):
                 pass
 
@@ -158,7 +162,7 @@ async def _handle_get_status(
     from backend.businesses.production import get_work_cooldown_remaining
     work_remaining = await get_work_cooldown_remaining(redis, agent, clock)
     if work_remaining is not None:
-        cooldowns["work"] = work_remaining
+        cooldowns["work"] = {"remaining": work_remaining}
 
     status["cooldowns"] = cooldowns
 
@@ -187,6 +191,7 @@ async def _handle_get_status(
             "hired_at": employment.hired_at.isoformat(),
         }
     else:
+        # Will be updated after we know owned_businesses count
         status["employment"] = None
 
     # Phase 3: Owned businesses list
@@ -216,6 +221,23 @@ async def _handle_get_status(
         for b in owned_businesses
     ]
 
+    # Self-employed flag: if agent has no employment but owns businesses
+    if status["employment"] is None and owned_businesses:
+        status["employment"] = {
+            "self_employed": True,
+            "business_count": len(owned_businesses),
+        }
+
+    # Credit score
+    from backend.banking.credit import calculate_credit
+    try:
+        credit_info = await calculate_credit(db, agent, clock, settings)
+        status["credit_score"] = credit_info.get("credit_score", 0)
+        status["max_loan_amount"] = float(credit_info.get("max_loan_amount", 0))
+    except Exception:
+        status["credit_score"] = None
+        status["max_loan_amount"] = None
+
     # Expenses breakdown — show hourly costs and time until broke
     food_cost = float(settings.economy.survival_cost_per_hour)
     rent_cost = 0.0
@@ -240,10 +262,17 @@ async def _handle_get_status(
     pending_events = await get_pending_events(db, agent)
     status["pending_events"] = pending_events
 
+    # Economy events count
+    from backend.events import count_events
+    economy_events = await count_events(redis, agent.id)
+    status["economy_events"] = economy_events
+
     # Determine check_back_seconds: minimum of next cooldown or 60s
     check_back = 60
     if cooldowns:
-        min_cd = min(cooldowns.values())
+        min_cd = min(
+            (v["remaining"] if isinstance(v, dict) else v) for v in cooldowns.values()
+        )
         check_back = max(5, min(check_back, min_cd))
 
     hints = {
@@ -257,6 +286,12 @@ async def _handle_get_status(
             f"Permanently deactivated after {agent.bankruptcy_count} bankruptcies. "
             "You can no longer perform actions in this economy."
         )
+
+    # Onboarding tips for new agents (< 24h old)
+    from backend.hints import get_onboarding_tips
+    tips = get_onboarding_tips(agent, owned_businesses, clock)
+    if tips:
+        hints["next_steps"] = tips
 
     status["_hints"] = hints
 

@@ -30,6 +30,7 @@ from backend.tools import (
     _handle_bank,
     _handle_vote,
     _handle_get_economy,
+    _handle_events,
     _handle_messages,
 )
 
@@ -263,6 +264,32 @@ async def get_economy(
         params["page"] = page
 
     result = await _handle_get_economy(
+        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+    )
+    return {"ok": True, "data": result}
+
+
+# -- Events ----------------------------------------------------------------
+
+@economy_router.get("/events", tags=["economy"])
+async def events(
+    request: Request,
+    agent=Depends(get_current_agent),
+    db: AsyncSession = Depends(get_db),
+    limit: Optional[int] = Query(None, description="Max events to return (default 20, max 50)"),
+):
+    """Retrieve recent economy events (rent, food, order fills, etc.)."""
+    clock = get_clock(request)
+    redis = get_redis(request)
+    settings = get_settings(request)
+
+    await check_rate_limit(request, redis, agent=agent)
+
+    params: dict = {}
+    if limit is not None:
+        params["limit"] = limit
+
+    result = await _handle_events(
         params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
     )
     return {"ok": True, "data": result}

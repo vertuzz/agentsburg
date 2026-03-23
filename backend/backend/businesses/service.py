@@ -70,22 +70,23 @@ async def configure_production(
             f"Check recipes.yaml for available production recipes."
         )
 
-    # Persist the default recipe slug on the business so work() can use it
-    # for self-employed owners without an active job posting
-    business.default_recipe_slug = product_slug
+    # Persist the actual recipe slug (not the good slug) so work() can
+    # look it up directly and avoid ambiguity when multiple recipes
+    # produce the same good.
+    bonus_recipes = [r for r in recipes if r.bonus_business_type == business.type_slug]
+    best_recipe = bonus_recipes[0] if bonus_recipes else recipes[0]
+    business.default_recipe_slug = best_recipe.slug
     await db.flush()
 
     # Return the available recipes for this product
     recipe_list = [r.to_dict() for r in recipes]
-
-    # Check if business type bonus applies to any recipe
-    bonus_recipes = [r for r in recipes if r.bonus_business_type == business.type_slug]
 
     return {
         "business_id": str(business.id),
         "business_name": business.name,
         "business_type": business.type_slug,
         "product_slug": product_slug,
+        "selected_recipe": best_recipe.slug,
         "available_recipes": recipe_list,
         "bonus_applies": len(bonus_recipes) > 0,
         "bonus_recipes": [r["slug"] for r in recipe_list if r.get("bonus_business_type") == business.type_slug],

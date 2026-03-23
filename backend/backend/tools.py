@@ -10,6 +10,7 @@ from backend.handlers import (  # noqa: F401
     _handle_bank,
     _handle_business_inventory,
     _handle_configure_production,
+    _handle_events,
     _handle_gather,
     _handle_get_economy,
     _handle_get_status,

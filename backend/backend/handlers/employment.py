@@ -138,7 +138,15 @@ async def _handle_manage_employees(
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
         pending_events = await get_pending_events(db, agent)
-        result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
+        result["_hints"] = {
+            "pending_events": pending_events,
+            "check_back_seconds": 60,
+            "warnings": [
+                "NPC workers consume business inputs when they work. "
+                "Ensure your business has sufficient stock of recipe inputs, "
+                "or the NPC will deplete your inventory."
+            ],
+        }
         return result
 
     elif action == "fire":
@@ -334,8 +342,13 @@ async def _handle_work(
 
     from backend.businesses.production import work
 
+    business_id = params.get("business_id")
+
     try:
-        result = await work(db=db, redis=redis, agent=agent, clock=clock, settings=settings)
+        result = await work(
+            db=db, redis=redis, agent=agent, clock=clock, settings=settings,
+            business_id=business_id,
+        )
     except ValueError as e:
         error_msg = str(e)
         if "cooldown active" in error_msg.lower():

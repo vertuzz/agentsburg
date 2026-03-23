@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
+    from backend.clock import Clock
     from backend.models.agent import Agent
 
 
@@ -70,6 +71,56 @@ async def get_pending_events(db: AsyncSession, agent: "Agent") -> int:
         pass
 
     return count
+
+
+def get_onboarding_tips(
+    agent: "Agent",
+    owned_businesses: list,
+    clock: "Clock",
+) -> list[str]:
+    """
+    Return contextual onboarding tips for agents less than 24 hours old.
+
+    Tips are based on what the agent hasn't done yet.
+    """
+    from datetime import timedelta
+
+    age = clock.now() - agent.created_at
+    if age > timedelta(hours=24):
+        return []
+
+    tips: list[str] = []
+
+    if agent.is_homeless():
+        tips.append(
+            "Rent housing immediately (POST /v1/housing, zone='outskirts' is cheapest) "
+            "to avoid 2x work cooldown penalty."
+        )
+
+    if float(agent.balance) < 50 and not owned_businesses:
+        tips.append(
+            "Gather resources in rotation to build capital. "
+            "Try: berries (25s), sand (20s), herbs (30s), wood (30s). "
+            "Each gather earns cash and goods you can sell."
+        )
+
+    if not owned_businesses and float(agent.balance) >= 200:
+        tips.append(
+            "You have enough to register a business (200 cost). "
+            "Use POST /v1/businesses with name, type, and zone."
+        )
+
+    if owned_businesses:
+        tips.append(
+            "Stock your business: POST /v1/businesses/inventory with action='batch_deposit'. "
+            "View inventory: action='view'. Set prices: POST /v1/businesses/prices."
+        )
+
+    tips.append(
+        "Check GET /v1/market/my-orders to view and cancel your marketplace orders."
+    )
+
+    return tips
 
 
 def make_hints(

@@ -45,7 +45,9 @@ class WorkContext:
     employment: Employment | None = None
 
 
-async def resolve_work_context(db: AsyncSession, agent: Agent) -> WorkContext:
+async def resolve_work_context(
+    db: AsyncSession, agent: Agent, business_id: str | None = None,
+) -> WorkContext:
     """Determine whether the agent is employed or self-employed."""
     emp_result = await db.execute(
         select(Employment).where(
@@ -70,12 +72,31 @@ async def resolve_work_context(db: AsyncSession, agent: Agent) -> WorkContext:
             is_employed=True, employment=employment,
         )
 
-    owned_result = await db.execute(
-        select(Business).where(
-            Business.owner_id == agent.id, Business.closed_at.is_(None),
-        ).limit(1)
-    )
-    business = owned_result.scalar_one_or_none()
+    if business_id is not None:
+        import uuid as _uuid
+        try:
+            biz_uuid = _uuid.UUID(business_id)
+        except ValueError:
+            raise ValueError(f"Invalid business_id: {business_id!r}")
+        owned_result = await db.execute(
+            select(Business).where(
+                Business.id == biz_uuid,
+                Business.owner_id == agent.id,
+                Business.closed_at.is_(None),
+            )
+        )
+        business = owned_result.scalar_one_or_none()
+        if business is None:
+            raise ValueError(
+                f"Business {business_id!r} not found, not owned by you, or closed."
+            )
+    else:
+        owned_result = await db.execute(
+            select(Business).where(
+                Business.owner_id == agent.id, Business.closed_at.is_(None),
+            ).limit(1)
+        )
+        business = owned_result.scalar_one_or_none()
     if business is None:
         raise ValueError(
             "You are not employed and have no open business. "
@@ -84,7 +105,17 @@ async def resolve_work_context(db: AsyncSession, agent: Agent) -> WorkContext:
         )
 
     if business.default_recipe_slug is not None:
-        product_slug = business.default_recipe_slug
+        # Try direct recipe slug lookup first (new format).
+        # Fall back to output_good lookup for backward compat with old data
+        # that stored good slugs instead of recipe slugs.
+        recipe_result = await db.execute(
+            select(Recipe).where(Recipe.slug == business.default_recipe_slug)
+        )
+        direct_recipe = recipe_result.scalar_one_or_none()
+        if direct_recipe is not None:
+            product_slug = direct_recipe.output_good
+        else:
+            product_slug = business.default_recipe_slug
     else:
         jp_result = await db.execute(
             select(JobPosting).where(

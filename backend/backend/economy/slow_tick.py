@@ -26,6 +26,8 @@ from backend.models.transaction import Transaction
 from backend.models.zone import Zone
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+
     from backend.clock import Clock
     from backend.config import Settings
 
@@ -37,6 +39,7 @@ async def process_survival_costs(
     clock: "Clock",
     settings: "Settings",
     hours: int = 1,
+    redis: "aioredis.Redis | None" = None,
 ) -> dict:
     """
     Deduct survival costs (food/living expenses) from all agents.
@@ -99,6 +102,16 @@ async def process_survival_costs(
         )
         db.add(txn)
 
+    # Emit food_charged events
+    if redis is not None:
+        from backend.events import emit_event
+        for agent_id in agent_ids:
+            await emit_event(
+                redis, agent_id, "food_charged",
+                {"amount": float(survival_cost), "hours": hours},
+                clock,
+            )
+
     await db.flush()
 
     total_deducted = survival_cost * agent_count
@@ -123,6 +136,7 @@ async def process_rent(
     clock: "Clock",
     settings: "Settings",
     hours: int = 1,
+    redis: "aioredis.Redis | None" = None,
 ) -> dict:
     """
     Deduct rent for all housed agents.
@@ -231,6 +245,16 @@ async def process_rent(
                 )
                 db.add(txn)
 
+            # Emit rent_charged events
+            if redis is not None:
+                from backend.events import emit_event
+                for agent_id in can_pay_ids:
+                    await emit_event(
+                        redis, agent_id, "rent_charged",
+                        {"amount": float(rent_due), "zone": zone.slug, "hours": hours},
+                        clock,
+                    )
+
         # Step 2: Evict active agents in this zone who CANNOT pay rent
         cant_pay_result = await db.execute(
             select(Agent.id, Agent.name).where(
@@ -257,6 +281,16 @@ async def process_rent(
                     zone.name,
                     float(rent_due),
                 )
+
+            # Emit evicted events
+            if redis is not None:
+                from backend.events import emit_event
+                for agent_id in cant_pay_ids:
+                    await emit_event(
+                        redis, agent_id, "evicted",
+                        {"zone": zone.slug, "rent_due": float(rent_due)},
+                        clock,
+                    )
 
     await db.flush()
 

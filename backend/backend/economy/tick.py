@@ -114,7 +114,7 @@ async def run_tick(
                 "Running slow tick at %s (catching up %d hours)",
                 now.isoformat(), elapsed_hours,
             )
-            slow_results = await _run_slow_tick(db, clock, settings, hours=elapsed_hours)
+            slow_results = await _run_slow_tick(db, clock, settings, hours=elapsed_hours, redis=redis)
             slow_results["_hours"] = elapsed_hours
             results["slow_tick"] = slow_results
             await redis.set(LAST_HOURLY_KEY, str(now_ts))
@@ -158,6 +158,7 @@ async def _run_slow_tick(
     clock: "Clock",
     settings: "Settings",
     hours: int = 1,
+    redis: "aioredis.Redis | None" = None,
 ) -> dict:
     """
     Run all hourly slow tick processing.
@@ -186,8 +187,8 @@ async def _run_slow_tick(
     except Exception:
         logger.exception("Banking tick processing failed — continuing")
 
-    survival = await process_survival_costs(db, clock, settings, hours=hours)
-    rent = await process_rent(db, clock, settings, hours=hours)
+    survival = await process_survival_costs(db, clock, settings, hours=hours, redis=redis)
+    rent = await process_rent(db, clock, settings, hours=hours, redis=redis)
 
     # Phase 7: NPC business simulation (auto-produce, close unprofitable, spawn new)
     npc_biz_results = {"type": "npc_businesses", "skipped": True}

@@ -8,11 +8,12 @@
 #   base_value      — estimated fair market value (calibration anchor)
 #   gatherable      — true only for tier-1 basics (free floor extraction)
 #   gather_cooldown_seconds — per-agent cooldown for gathering this good
+#   cash_on_gather — cash earned per gather (defaults to base_value if absent)
 #
 # Pricing rationale:
-#   - A gatherer working non-stop earns ~12 units/hr of their primary resource
-#   - Survival costs ~5/hr (food) + ~15-30/hr (rent depending on zone)
-#   - So gathering alone is marginally survivable; trade and production are needed to thrive
+#   - A gatherer working non-stop earns ~700/hr across all resources
+#   - Survival costs ~5/hr (food) + ~5-50/hr (rent depending on zone)
+#   - Gathering alone is survivable but slow; business production should be 2-3x more profitable
 
 goods:
 
@@ -25,6 +26,7 @@ goods:
     tier: 1
     storage_size: 2
     base_value: 3
+    cash_on_gather: 2
     gatherable: true
     gather_cooldown_seconds: 30
     description: "Basic lumber from nearby forests. Heavy, plentiful."
@@ -34,6 +36,7 @@ goods:
     tier: 1
     storage_size: 3
     base_value: 2
+    cash_on_gather: 1
     gatherable: true
     gather_cooldown_seconds: 40
     description: "Quarried rock. Dense and slow to gather."
@@ -43,6 +46,7 @@ goods:
     tier: 1
     storage_size: 1
     base_value: 2
+    cash_on_gather: 1
     gatherable: true
     gather_cooldown_seconds: 25
     description: "Wild berries. Fast to gather but low value. Can be sold or eaten."
@@ -52,6 +56,7 @@ goods:
     tier: 1
     storage_size: 2
     base_value: 2
+    cash_on_gather: 1
     gatherable: true
     gather_cooldown_seconds: 35
     description: "Wet clay from riverbanks. Moldable material."
@@ -61,6 +66,7 @@ goods:
     tier: 1
     storage_size: 3
     base_value: 5
+    cash_on_gather: 3
     gatherable: true
     gather_cooldown_seconds: 60
     description: "Raw iron ore. Hard to gather without tools; valuable."
@@ -70,6 +76,7 @@ goods:
     tier: 1
     storage_size: 1
     base_value: 3
+    cash_on_gather: 2
     gatherable: true
     gather_cooldown_seconds: 30
     description: "Medicinal and culinary herbs. Light but perishable."
@@ -79,6 +86,7 @@ goods:
     tier: 1
     storage_size: 1
     base_value: 3
+    cash_on_gather: 2
     gatherable: true
     gather_cooldown_seconds: 35
     description: "Raw cotton bolls. Soft and light."
@@ -88,6 +96,7 @@ goods:
     tier: 1
     storage_size: 2
     base_value: 3
+    cash_on_gather: 2
     gatherable: true
     gather_cooldown_seconds: 40
     description: "Grain crop. Staple of the food supply chain."
@@ -97,6 +106,7 @@ goods:
     tier: 1
     storage_size: 1
     base_value: 4
+    cash_on_gather: 2
     gatherable: true
     gather_cooldown_seconds: 45
     description: "Fresh catch. Only gatherable near waterfront zones."
@@ -106,6 +116,7 @@ goods:
     tier: 1
     storage_size: 2
     base_value: 1
+    cash_on_gather: 1
     gatherable: true
     gather_cooldown_seconds: 20
     description: "Fine sand for glassmaking. Very cheap, very plentiful."
@@ -115,6 +126,7 @@ goods:
     tier: 1
     storage_size: 3
     base_value: 6
+    cash_on_gather: 4
     gatherable: true
     gather_cooldown_seconds: 55
     description: "Raw copper ore. Rarer than iron, used in jewelry."

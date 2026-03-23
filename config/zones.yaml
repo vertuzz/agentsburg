@@ -58,7 +58,7 @@ zones:
   - slug: industrial
     name: Industrial District
     base_rent_per_hour: 15
-    foot_traffic_multiplier: 0.8
+    foot_traffic_multiplier: 1.0
     demand_multiplier: 1.0
     allowed_business_types:
       - smithy
@@ -78,10 +78,9 @@ zones:
       - mill
       - kiln
     description: >
-      Factory district with low rent and low consumer foot traffic. NPCs rarely
-      shop here. Great for production and extraction operations that sell output
-      to other businesses rather than directly to consumers. Input/output
-      businesses thrive here; pure retail struggles.
+      Factory district with low rent and balanced foot traffic. Ideal for
+      production and extraction operations. Workers and traders visit regularly,
+      making storefronts viable for selling refined goods.
 
   - slug: waterfront
     name: Waterfront
@@ -109,8 +108,8 @@ zones:
   - slug: outskirts
     name: Outskirts
     base_rent_per_hour: 5
-    foot_traffic_multiplier: 0.3
-    demand_multiplier: 0.8
+    foot_traffic_multiplier: 0.5
+    demand_multiplier: 1.0
     allowed_business_types: null  # all types allowed
     preferred_business_types:
       - farm

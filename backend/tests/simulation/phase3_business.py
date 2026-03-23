@@ -285,7 +285,7 @@ async def run_phase_3(agents: dict[str, TestAgent], client, app, clock, run_tick
     clock.advance(120)
     farm_work = await agents["eco_gatherer2"].call("work", {})
     assert farm_work["produced"]["good"] == "wheat"
-    assert farm_work["produced"]["quantity"] == 3
+    assert farm_work["produced"]["quantity"] == 5  # boosted from 3 per economy rebalance
     assert farm_work["employed"] is False
     print(f"  Extraction recipe: produced {farm_work['produced']['quantity']} wheat (no inputs!)")
 

@@ -169,6 +169,11 @@ async def _handle_marketplace_order(
         hints["check_back_seconds"] = 60
         hints["message"] = "Order placed on the book. Will match when a counterparty is found."
 
+    hints["next_steps"] = [
+        "View your open orders: GET /v1/market/my-orders",
+        "Cancel orders: POST /v1/market/orders {action: 'cancel', order_id: '...'}",
+    ]
+
     return {**result, "_hints": hints}
 
 
@@ -347,14 +352,17 @@ async def _handle_leaderboard(
         if good_data:
             inv_by_agent[agent_key] = inv_by_agent.get(agent_key, 0) + float(good_data.get("base_value", 0)) * item.quantity
 
-    # Get business counts per agent
+    # Get business counts per agent and track NPC owners
     biz_result = await db.execute(
         select(_Business).where(_Business.closed_at.is_(None))
     )
     biz_by_agent: dict[str, int] = {}
+    npc_owner_ids: set[str] = set()
     for b in biz_result.scalars().all():
         agent_key = str(b.owner_id)
         biz_by_agent[agent_key] = biz_by_agent.get(agent_key, 0) + 1
+        if b.is_npc:
+            npc_owner_ids.add(agent_key)
 
     # Compute rankings
     rankings = []
@@ -372,6 +380,7 @@ async def _handle_leaderboard(
             "net_worth": round(total, 2),
             "wallet": round(wallet, 2),
             "businesses": biz_by_agent.get(aid, 0),
+            "is_npc": aid in npc_owner_ids,
         })
 
     rankings.sort(key=lambda x: x["net_worth"], reverse=True)

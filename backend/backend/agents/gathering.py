@@ -152,9 +152,9 @@ async def gather(
 
         # Credit agent with cash — the "roadside sale" value.
         # This is the economic floor: even without a marketplace or business,
-        # gathering produces income. Set at base_value to make gathering
-        # sustainable in cheapest zones when done actively.
-        gather_cash = Decimal(str(good_data.get("base_value", 1)))
+        # gathering produces income. cash_on_gather is set lower than
+        # base_value so business production is more profitable than raw gathering.
+        gather_cash = Decimal(str(good_data.get("cash_on_gather", good_data.get("base_value", 1))))
         agent.balance = Decimal(str(agent.balance)) + gather_cash
 
         txn = Transaction(

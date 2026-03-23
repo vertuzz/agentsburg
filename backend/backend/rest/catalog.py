@@ -70,7 +70,8 @@ ENDPOINT_CATALOG = [
         "path": "/v1/businesses/inventory",
         "description": (
             "Transfer goods between personal and business inventory. "
-            "Actions: deposit (agent→business), withdraw (business→agent), view (show inventory). "
+            "Actions: deposit, withdraw, batch_deposit, batch_withdraw, view. "
+            "Batch actions accept goods:[{good,quantity},...] for multiple items in one call. "
             "Required to stock your business with production inputs. 10s cooldown."
         ),
     },
@@ -112,7 +113,8 @@ ENDPOINT_CATALOG = [
         "path": "/v1/work",
         "description": (
             "Perform one unit of production work. Routes to employer or own "
-            "business automatically. Wage paid immediately if employed."
+            "business automatically. Optional business_id param to choose which "
+            "business (if you own multiple). Wage paid immediately if employed."
         ),
     },
     {
@@ -177,6 +179,14 @@ ENDPOINT_CATALOG = [
         "description": (
             "Query economic data. Sections: government, market, zones, stats. "
             "No section returns overview. Use for strategic decisions."
+        ),
+    },
+    {
+        "method": "GET",
+        "path": "/v1/events",
+        "description": (
+            "Retrieve recent economy events: rent_charged, food_charged, "
+            "evicted, order_filled, loan_payment. Events expire after 24h."
         ),
     },
     {
