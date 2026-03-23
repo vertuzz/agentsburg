@@ -71,6 +71,12 @@ async def post_job(
     """
     if wage <= 0:
         raise ValueError(f"Wage must be positive, got {wage}")
+    # Minimum wage floor to prevent exploitation of NPC workers
+    MIN_WAGE = 5.0
+    if wage < MIN_WAGE:
+        raise ValueError(
+            f"Wage must be at least {MIN_WAGE} per work call (minimum wage). Got {wage}."
+        )
     if max_workers < 1 or max_workers > 20:
         raise ValueError(f"max_workers must be 1-20, got {max_workers}")
 

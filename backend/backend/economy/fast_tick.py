@@ -63,12 +63,19 @@ async def run_fast_tick(
     })
 
     # --- NPC marketplace demand (bank buys raw goods from sell orders) ---
-    from backend.economy.npc_marketplace import simulate_npc_marketplace_demand
+    from backend.economy.npc_marketplace import simulate_npc_marketplace_demand, place_npc_buy_orders
     npc_mkt_result = await simulate_npc_marketplace_demand(db, clock, settings)
     processed.append({
         "type": "npc_marketplace",
         "fills": npc_mkt_result["total_fills"],
         "spent": npc_mkt_result["total_spent"],
+    })
+
+    # --- NPC buy orders (visible demand on the marketplace) ---
+    npc_buy_result = await place_npc_buy_orders(db, clock, settings)
+    processed.append({
+        "type": "npc_buy_orders",
+        "orders_placed": npc_buy_result["orders_placed"],
     })
 
     # --- Marketplace order matching ---

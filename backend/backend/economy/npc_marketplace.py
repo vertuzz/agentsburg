@@ -232,6 +232,110 @@ async def simulate_npc_marketplace_demand(
     }
 
 
+async def place_npc_buy_orders(
+    db: AsyncSession,
+    clock: "Clock",
+    settings: "Settings",
+) -> dict:
+    """
+    Place visible NPC buy orders on the marketplace for tier-1 and tier-2 goods.
+
+    Without visible buy orders, agents see zero demand on the marketplace and
+    think it's dead.  This function ensures there are always standing buy orders
+    from the central bank at reference_price so agents can see that demand exists
+    and sell into it.
+
+    Runs every fast tick.  Orders placed by the bank use a sentinel agent_id and
+    are funded from bank reserves.  Old unfilled NPC orders are cleaned up first.
+    """
+    import uuid as _uuid
+    now = clock.now()
+
+    NPC_BUYER_SENTINEL = _uuid.UUID("00000000-0000-0000-0000-000000000002")
+
+    # Clean up old NPC buy orders (replace each tick with fresh ones)
+    old_result = await db.execute(
+        select(MarketOrder)
+        .where(
+            MarketOrder.agent_id == NPC_BUYER_SENTINEL,
+            MarketOrder.side == "buy",
+            MarketOrder.status.in_(["open", "partially_filled"]),
+        )
+        .with_for_update()
+    )
+    old_orders = list(old_result.scalars().all())
+    for old in old_orders:
+        old.status = "cancelled"
+
+    # Load central bank
+    bank_result = await db.execute(
+        select(CentralBank).where(CentralBank.id == 1).with_for_update()
+    )
+    central_bank = bank_result.scalar_one_or_none()
+    if central_bank is None:
+        return {"type": "npc_buy_orders", "orders_placed": 0}
+
+    bank_reserves = Decimal(str(central_bank.reserves))
+
+    # Build reference prices from npc_demand config
+    npc_demand_config = settings.npc_demand
+    demand_entries = npc_demand_config.get("npc_demand", [])
+    ref_prices: dict[str, Decimal] = {}
+    for entry in demand_entries:
+        good = entry.get("good")
+        ref_price = entry.get("reference_price")
+        if good and ref_price is not None:
+            ref_prices[good] = Decimal(str(ref_price))
+
+    # Place buy orders for tier 1 and tier 2 goods with NPC demand config
+    orders_placed = 0
+    total_locked = Decimal("0")
+
+    # Scale order size with active agent count
+    from sqlalchemy import func
+    active_count_result = await db.execute(
+        select(func.count(Agent.id)).where(Agent.is_active == True)  # noqa: E712
+    )
+    active_agents = active_count_result.scalar_one() or 0
+    base_qty = max(10, active_agents * 2)
+
+    for good_slug, ref_price in sorted(ref_prices.items()):
+        # Determine order quantity based on demand
+        qty = base_qty
+        cost = ref_price * qty
+
+        # Check bank can afford
+        if total_locked + cost > bank_reserves * Decimal("0.3"):
+            # Don't use more than 30% of reserves for standing orders
+            break
+
+        order = MarketOrder(
+            agent_id=NPC_BUYER_SENTINEL,
+            good_slug=good_slug,
+            side="buy",
+            price=float(ref_price),
+            quantity_total=qty,
+            quantity_filled=0,
+            status="open",
+        )
+        db.add(order)
+        total_locked += cost
+        orders_placed += 1
+
+    await db.flush()
+
+    logger.info(
+        "NPC buy orders: placed %d orders, total locked %.2f",
+        orders_placed, float(total_locked),
+    )
+
+    return {
+        "type": "npc_buy_orders",
+        "orders_placed": orders_placed,
+        "total_locked": float(total_locked),
+    }
+
+
 def _empty_result(now):
     return {
         "type": "npc_marketplace",

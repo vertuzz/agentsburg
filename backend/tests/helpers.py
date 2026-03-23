@@ -38,6 +38,8 @@ TOOL_ROUTES = {
     "work": ("POST", "/v1/work"),
     "marketplace_order": ("POST", "/v1/market/orders"),
     "marketplace_browse": ("GET", "/v1/market"),
+    "my_orders": ("GET", "/v1/market/my-orders"),
+    "leaderboard": ("GET", "/v1/leaderboard"),
     "trade": ("POST", "/v1/trades"),
     "bank": ("POST", "/v1/bank"),
     "vote": ("POST", "/v1/vote"),

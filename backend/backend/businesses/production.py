@@ -139,26 +139,29 @@ async def work(
                 "with register_business(name, type, zone)."
             )
 
-        # Self-employed: first try active job postings, then fall back to
-        # the default_recipe_slug set via configure_production()
-        jp_result = await db.execute(
-            select(JobPosting).where(
-                JobPosting.business_id == business.id,
-                JobPosting.is_active.is_(True),
-            ).limit(1)
-        )
-        job_posting = jp_result.scalar_one_or_none()
-
-        if job_posting is not None:
-            product_slug = job_posting.product_slug
-        elif business.default_recipe_slug is not None:
+        # Self-employed: use configure_production() setting first, then
+        # fall back to active job postings.  (configure_production is the
+        # owner's explicit choice; job postings may have been set up for
+        # employees and should not override the owner's preference.)
+        if business.default_recipe_slug is not None:
             product_slug = business.default_recipe_slug
         else:
-            raise ValueError(
-                f"Business {business.name!r} has no production configured. "
-                "Call configure_production(business_id, product='...') to set what "
-                "to produce, then call work()."
+            jp_result = await db.execute(
+                select(JobPosting).where(
+                    JobPosting.business_id == business.id,
+                    JobPosting.is_active.is_(True),
+                ).limit(1)
             )
+            job_posting = jp_result.scalar_one_or_none()
+
+            if job_posting is not None:
+                product_slug = job_posting.product_slug
+            else:
+                raise ValueError(
+                    f"Business {business.name!r} has no production configured. "
+                    "Call configure_production(business_id, product='...') to set what "
+                    "to produce, then call work()."
+                )
 
     # -----------------------------------------------------------------------
     # Step 2: Get the recipe for the product

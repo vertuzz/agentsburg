@@ -417,6 +417,13 @@ async def calculate_credit(
 
     net_worth = wallet + bank_balance + inventory_value + business_value
 
+    # Loan-eligible net worth: illiquid assets count fully, but cash/bank
+    # balances are capped at 50% to limit manipulation via cash transfers
+    # between colluding agents (fractional reserve loan exploit).
+    liquid_assets = wallet + bank_balance
+    illiquid_assets = inventory_value + business_value
+    loan_eligible_worth = illiquid_assets + min(liquid_assets, illiquid_assets + Decimal("200"))
+
     # --- Employment status ---
     emp_result = await db.execute(
         select(Employment).where(
@@ -463,8 +470,10 @@ async def calculate_credit(
     credit_score = int(max(MIN_CREDIT_SCORE, min(MAX_CREDIT_SCORE, float(score))))
 
     # --- Max loan amount ---
+    # Use loan-eligible worth (illiquid fully + capped liquid) to prevent
+    # manipulation via cash transfers between colluding agents.
     max_loan_multiplier = Decimal(str(settings.economy.max_loan_multiplier))
-    base_max = net_worth * max_loan_multiplier
+    base_max = loan_eligible_worth * max_loan_multiplier
 
     # Each bankruptcy halves the max loan
     for _ in range(agent.bankruptcy_count):

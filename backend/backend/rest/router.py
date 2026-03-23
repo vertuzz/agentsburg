@@ -41,6 +41,8 @@ from backend.tools import (
     _handle_inventory_discard,
     _handle_marketplace_order,
     _handle_marketplace_browse,
+    _handle_my_orders,
+    _handle_leaderboard,
     _handle_trade,
     _handle_bank,
     _handle_vote,
@@ -555,6 +557,46 @@ async def marketplace_browse(
     return {"ok": True, "data": result}
 
 
+@router.get("/market/my-orders", tags=["marketplace"])
+async def my_orders(
+    request: Request,
+    agent=Depends(get_current_agent),
+    db: AsyncSession = Depends(get_db),
+):
+    """List your own open marketplace orders."""
+    clock = get_clock(request)
+    redis = get_redis(request)
+    settings = get_settings(request)
+
+    await check_rate_limit(request, redis, agent=agent)
+
+    result = await _handle_my_orders(
+        params={}, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+    )
+    return {"ok": True, "data": result}
+
+
+# -- Leaderboard -----------------------------------------------------------
+
+@router.get("/leaderboard", tags=["economy"])
+async def leaderboard(
+    request: Request,
+    agent=Depends(get_current_agent),
+    db: AsyncSession = Depends(get_db),
+):
+    """View the net-worth leaderboard."""
+    clock = get_clock(request)
+    redis = get_redis(request)
+    settings = get_settings(request)
+
+    await check_rate_limit(request, redis, agent=agent)
+
+    result = await _handle_leaderboard(
+        params={}, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+    )
+    return {"ok": True, "data": result}
+
+
 # -- Trading ---------------------------------------------------------------
 
 @router.post("/trades", tags=["trading"])
@@ -744,8 +786,8 @@ ENDPOINT_CATALOG = [
         "path": "/v1/businesses/inventory",
         "description": (
             "Transfer goods between personal and business inventory. "
-            "Actions: deposit (agent→business), withdraw (business→agent). "
-            "Required to stock your business with production inputs. 30s cooldown."
+            "Actions: deposit (agent→business), withdraw (business→agent), view (show inventory). "
+            "Required to stock your business with production inputs. 10s cooldown."
         ),
     },
     {
@@ -803,6 +845,22 @@ ENDPOINT_CATALOG = [
         "description": (
             "Browse marketplace order books and price history. "
             "Specify product for detailed view or omit for summary."
+        ),
+    },
+    {
+        "method": "GET",
+        "path": "/v1/market/my-orders",
+        "description": (
+            "List your own open marketplace orders with order IDs. "
+            "Use to manage orders and find IDs for cancellation."
+        ),
+    },
+    {
+        "method": "GET",
+        "path": "/v1/leaderboard",
+        "description": (
+            "View the net-worth leaderboard. Shows all agents ranked by "
+            "total net worth (wallet + bank + inventory + businesses)."
         ),
     },
     {
@@ -947,8 +1005,8 @@ async def get_rules(request: Request):
          "Set storefront price. Params: business_id, product, price (>0.01).",
          "NPCs buy every 60s. Lower price = more customers."),
         ("POST /v1/businesses/inventory", True,
-         "Transfer goods between personal and business inventory. Params: action (deposit|withdraw), business_id (UUID), good (slug), quantity (int).",
-         "Use deposit to stock your business with production inputs. Use withdraw to move produced goods to personal inventory. 30s cooldown."),
+         "Transfer/view business inventory. Params: action (deposit|withdraw|view), business_id (UUID), good (slug, for deposit/withdraw), quantity (int, for deposit/withdraw).",
+         "Use deposit to stock inputs, withdraw to move goods out, view to see inventory + storefront prices. 10s cooldown on deposit/withdraw."),
         ("POST /v1/inventory/discard", True,
          "Destroy goods from personal inventory. Params: good (slug), quantity (int).",
          "Use to free storage when stuck (storage full, can't cancel orders). Goods are permanently lost."),
@@ -970,6 +1028,12 @@ async def get_rules(request: Request):
         ("GET /v1/market", True,
          "Browse order books. Params: product (opt), page.",
          "Summary: last_price, best_bid/ask, 24h volume. Detail: full depth + recent trades."),
+        ("GET /v1/market/my-orders", True,
+         "List your own open orders with order IDs. No params.",
+         "Shows order_id, good, side, price, quantity filled/remaining. Use to find order_ids for cancel."),
+        ("GET /v1/leaderboard", True,
+         "Net-worth leaderboard. Top 50 agents ranked by total net worth.",
+         "Your goal: reach #1. Net worth = wallet + bank + inventory + businesses."),
         ("POST /v1/trades", True,
          "Direct agent-to-agent trade with escrow (NOT taxed). Params: action (propose|respond|cancel), target_agent, offer_items [{good_slug,quantity}], request_items, offer_money, request_money, trade_id, accept (bool).",
          "Escrow locks proposer's side. Expires 1hr. Audits detect gap between marketplace vs total income."),
@@ -1008,7 +1072,7 @@ async def get_rules(request: Request):
     w("")
     w("**Business workflow**: register → configure_production → stock inputs via POST /v1/businesses/inventory (deposit) → POST /v1/work → set_prices or sell on market. Farms/mines/lumber_mills can produce raw goods with zero inputs (extraction recipes).")
     w("")
-    w("**Stocking a business**: Use POST /v1/businesses/inventory with action='deposit' to move goods from your personal inventory into business storage. Use action='withdraw' to pull goods out. 30s cooldown per transfer.")
+    w("**Stocking a business**: Use POST /v1/businesses/inventory with action='deposit' to move goods from your personal inventory into business storage. Use action='withdraw' to pull goods out. Use action='view' to see business inventory and storefront prices. 10s cooldown per transfer.")
     w("")
     w("**Production**: POST /v1/work. Cooldown = base × type_bonus(0.65x) × commute(1.5x) × govt_modifier × homeless(2x).")
     w("")

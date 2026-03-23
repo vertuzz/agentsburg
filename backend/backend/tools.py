@@ -251,6 +251,25 @@ async def _handle_get_status(
         for b in owned_businesses
     ]
 
+    # Expenses breakdown — show hourly costs and time until broke
+    food_cost = float(settings.economy.survival_cost_per_hour)
+    rent_cost = 0.0
+    if agent.housing_zone_id is not None:
+        from backend.models.zone import Zone as _Zone
+        zone_result = await db.execute(select(_Zone).where(_Zone.id == agent.housing_zone_id))
+        housing_zone = zone_result.scalar_one_or_none()
+        if housing_zone is not None:
+            rent_cost = float(housing_zone.rent_cost)
+    total_hourly = food_cost + rent_cost
+    balance_float = float(agent.balance)
+    hours_until_broke = balance_float / total_hourly if total_hourly > 0 else float("inf")
+    status["expenses"] = {
+        "food_per_hour": food_cost,
+        "rent_per_hour": rent_cost,
+        "total_per_hour": total_hourly,
+        "hours_until_broke": round(hours_until_broke, 1) if hours_until_broke != float("inf") else None,
+    }
+
     # Phase 8: pending events (unread messages + pending trades)
     from backend.hints import get_pending_events
     pending_events = await get_pending_events(db, agent)
@@ -1019,28 +1038,15 @@ async def _handle_business_inventory(
 
     # Parse params
     action = params.get("action")
-    if action not in ("deposit", "withdraw"):
+    if action not in ("deposit", "withdraw", "view"):
         raise ToolError(
             INVALID_PARAMS,
-            "Parameter 'action' is required and must be 'deposit' or 'withdraw'.",
+            "Parameter 'action' is required and must be 'deposit', 'withdraw', or 'view'.",
         )
 
     business_id = params.get("business_id")
     if not business_id or not isinstance(business_id, str):
         raise ToolError(INVALID_PARAMS, "Parameter 'business_id' (UUID string) is required.")
-
-    good_slug = params.get("good")
-    if not good_slug or not isinstance(good_slug, str):
-        raise ToolError(INVALID_PARAMS, "Parameter 'good' (good slug) is required.")
-
-    quantity = params.get("quantity")
-    if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity <= 0:
-        raise ToolError(INVALID_PARAMS, "Parameter 'quantity' must be a positive integer.")
-
-    # Validate good exists
-    goods_config = {g["slug"]: g for g in settings.goods}
-    if good_slug not in goods_config:
-        raise ToolError(INVALID_PARAMS, f"Unknown good: {good_slug!r}.")
 
     # Look up business and validate ownership
     import uuid as _uuid
@@ -1062,6 +1068,62 @@ async def _handle_business_inventory(
         raise ToolError(NOT_FOUND, f"Business not found: {business_id}")
     if business.closed_at is not None:
         raise ToolError(INVALID_PARAMS, f"Business {business.name!r} is closed.")
+
+    # --- View action: return business inventory without cooldown ---
+    if action == "view":
+        from backend.agents.inventory import get_inventory, get_storage_used
+        inventory_items = await get_inventory(db, "business", biz_uuid)
+        biz_storage_used = await get_storage_used(db, "business", biz_uuid, settings)
+        biz_capacity = settings.economy.business_storage_capacity
+
+        from backend.hints import get_pending_events
+        pending_events = await get_pending_events(db, agent)
+
+        # Also show storefront prices
+        from backend.models.business import StorefrontPrice
+        prices_result = await db.execute(
+            select(StorefrontPrice).where(StorefrontPrice.business_id == biz_uuid)
+        )
+        prices = list(prices_result.scalars().all())
+
+        return {
+            "business_id": business_id,
+            "business_name": business.name,
+            "business_type": business.type_slug,
+            "default_product": business.default_recipe_slug,
+            "inventory": [item.to_dict() for item in inventory_items],
+            "storage": {
+                "used": biz_storage_used,
+                "capacity": biz_capacity,
+                "free": biz_capacity - biz_storage_used,
+            },
+            "storefront_prices": [
+                {"good": p.good_slug, "price": float(p.price)}
+                for p in prices
+            ],
+            "_hints": {
+                "pending_events": pending_events,
+                "check_back_seconds": 60,
+                "message": (
+                    f"Business {business.name!r} inventory: "
+                    f"{biz_storage_used}/{biz_capacity} storage used."
+                ),
+            },
+        }
+
+    # --- Deposit/Withdraw: require good and quantity params ---
+    good_slug = params.get("good")
+    if not good_slug or not isinstance(good_slug, str):
+        raise ToolError(INVALID_PARAMS, "Parameter 'good' (good slug) is required.")
+
+    quantity = params.get("quantity")
+    if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity <= 0:
+        raise ToolError(INVALID_PARAMS, "Parameter 'quantity' must be a positive integer.")
+
+    # Validate good exists
+    goods_config = {g["slug"]: g for g in settings.goods}
+    if good_slug not in goods_config:
+        raise ToolError(INVALID_PARAMS, f"Unknown good: {good_slug!r}.")
 
     # Processing lock
     lock_key = f"lock:transfer:{agent.id}"
@@ -1123,8 +1185,8 @@ async def _handle_business_inventory(
                 await add_to_inventory(db, "business", biz_uuid, good_slug, quantity, settings)
                 raise ToolError(STORAGE_FULL, str(e)) from e
 
-        # Set cooldown
-        cooldown_seconds = 30
+        # Set cooldown (reduced from 30s to 10s per player feedback)
+        cooldown_seconds = 10
         expiry_time = now + timedelta(seconds=cooldown_seconds)
         await redis.set(cooldown_key, expiry_time.isoformat(), ex=max(cooldown_seconds * 2, 120))
 
@@ -1447,6 +1509,177 @@ async def _handle_marketplace_browse(
             "message": (
                 "Prices update every minute as orders match. "
                 "Use marketplace_order to place your own buy/sell orders."
+            ),
+        },
+    }
+
+
+async def _handle_my_orders(
+    params: dict,
+    agent: "Agent | None",
+    db: AsyncSession,
+    clock: "Clock",
+    redis: "aioredis.Redis",
+    settings: "Settings",
+) -> dict:
+    """
+    List the authenticated agent's open marketplace orders.
+
+    Returns all open/partially-filled orders belonging to the agent,
+    including order IDs needed for cancellation.
+    """
+    if agent is None:
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
+
+    from backend.models.marketplace import MarketOrder
+
+    orders_result = await db.execute(
+        select(MarketOrder)
+        .where(
+            MarketOrder.agent_id == agent.id,
+            MarketOrder.status.in_(["open", "partially_filled"]),
+        )
+        .order_by(MarketOrder.created_at.desc())
+    )
+    orders = list(orders_result.scalars().all())
+
+    items = []
+    for o in orders:
+        items.append({
+            "order_id": str(o.id),
+            "good_slug": o.good_slug,
+            "side": o.side,
+            "price": float(o.price),
+            "quantity_total": o.quantity_total,
+            "quantity_filled": o.quantity_filled,
+            "quantity_remaining": o.quantity_total - o.quantity_filled,
+            "status": o.status,
+            "created_at": o.created_at.isoformat() if o.created_at else None,
+        })
+
+    from backend.hints import get_pending_events
+    pending_events = await get_pending_events(db, agent)
+
+    return {
+        "orders": items,
+        "total": len(items),
+        "max_orders": settings.economy.marketplace_max_orders_per_agent,
+        "slots_remaining": max(0, settings.economy.marketplace_max_orders_per_agent - len(items)),
+        "_hints": {
+            "pending_events": pending_events,
+            "check_back_seconds": 60,
+            "message": (
+                f"You have {len(items)} open orders "
+                f"({settings.economy.marketplace_max_orders_per_agent - len(items)} slots remaining). "
+                "Use marketplace_order(action='cancel', order_id='...') to cancel."
+            ),
+        },
+    }
+
+
+async def _handle_leaderboard(
+    params: dict,
+    agent: "Agent | None",
+    db: AsyncSession,
+    clock: "Clock",
+    redis: "aioredis.Redis",
+    settings: "Settings",
+) -> dict:
+    """
+    View the net-worth leaderboard.
+
+    Shows all active agents ranked by net worth (balance + bank deposits +
+    inventory value + business value). The stated game goal is to reach #1.
+    """
+    from backend.models.agent import Agent as _Agent
+    from backend.models.banking import BankAccount
+    from backend.models.inventory import InventoryItem
+    from backend.models.business import Business as _Business
+
+    goods_config = {g["slug"]: g for g in settings.goods}
+    reg_cost = float(settings.economy.business_registration_cost)
+
+    # Get all active agents
+    agents_result = await db.execute(
+        select(_Agent).where(_Agent.is_active == True)  # noqa: E712
+    )
+    all_agents = list(agents_result.scalars().all())
+
+    # Get all bank accounts
+    bank_result = await db.execute(select(BankAccount))
+    bank_map = {str(a.agent_id): float(a.balance) for a in bank_result.scalars().all()}
+
+    # Get all agent inventories
+    inv_result = await db.execute(
+        select(InventoryItem).where(
+            InventoryItem.owner_type == "agent",
+            InventoryItem.quantity > 0,
+        )
+    )
+    inv_items = list(inv_result.scalars().all())
+    inv_by_agent: dict[str, float] = {}
+    for item in inv_items:
+        agent_key = str(item.owner_id)
+        good_data = goods_config.get(item.good_slug)
+        if good_data:
+            inv_by_agent[agent_key] = inv_by_agent.get(agent_key, 0) + float(good_data.get("base_value", 0)) * item.quantity
+
+    # Get business counts per agent
+    biz_result = await db.execute(
+        select(_Business).where(_Business.closed_at.is_(None))
+    )
+    biz_by_agent: dict[str, int] = {}
+    for b in biz_result.scalars().all():
+        agent_key = str(b.owner_id)
+        biz_by_agent[agent_key] = biz_by_agent.get(agent_key, 0) + 1
+
+    # Compute rankings
+    rankings = []
+    for a in all_agents:
+        aid = str(a.id)
+        wallet = float(a.balance)
+        bank = bank_map.get(aid, 0.0)
+        inv_val = inv_by_agent.get(aid, 0.0)
+        biz_val = biz_by_agent.get(aid, 0) * reg_cost
+        total = wallet + bank + inv_val + biz_val
+
+        rankings.append({
+            "agent_name": a.name,
+            "model": a.model,
+            "net_worth": round(total, 2),
+            "wallet": round(wallet, 2),
+            "businesses": biz_by_agent.get(aid, 0),
+        })
+
+    rankings.sort(key=lambda x: x["net_worth"], reverse=True)
+
+    # Add rank
+    for i, entry in enumerate(rankings, 1):
+        entry["rank"] = i
+
+    # Find requesting agent's rank
+    my_rank = None
+    if agent is not None:
+        for entry in rankings:
+            if entry["agent_name"] == agent.name:
+                my_rank = entry["rank"]
+                break
+
+    from backend.hints import get_pending_events
+    pending_events = 0
+    if agent is not None:
+        pending_events = await get_pending_events(db, agent)
+
+    return {
+        "leaderboard": rankings[:50],  # Top 50
+        "total_agents": len(rankings),
+        "your_rank": my_rank,
+        "_hints": {
+            "pending_events": pending_events,
+            "check_back_seconds": 300,
+            "message": (
+                f"Leaderboard shows {len(rankings)} active agents. "
+                + (f"Your rank: #{my_rank}." if my_rank else "")
             ),
         },
     }

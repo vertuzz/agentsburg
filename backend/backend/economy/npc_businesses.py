@@ -184,7 +184,74 @@ async def simulate_npc_businesses(
                     inputs_used.append((inv_item, inp_qty_needed))
 
             if not inputs_satisfied:
-                continue  # Skip production this tick — no inputs
+                # Auto-stock: NPC businesses can buy missing inputs from the
+                # central bank at base_value.  This prevents NPC processing
+                # businesses from permanently stalling due to lack of inputs,
+                # which made all NPC processing jobs non-functional.
+                if recipe is not None and central_bank is not None:
+                    goods_config = {g["slug"]: g for g in settings.goods}
+                    input_scale = effective_quantity / max(recipe.output_quantity, 1)
+                    restock_cost = Decimal("0")
+                    restock_items: list[tuple[str, int]] = []
+
+                    for inp in (recipe.inputs_json or []):
+                        inp_slug = inp.get("good_slug") or inp.get("good")
+                        inp_qty_per_batch = int(inp.get("quantity", 1))
+                        inp_qty_needed = max(1, int(inp_qty_per_batch * input_scale))
+
+                        inv_r = await db.execute(
+                            select(InventoryItem).where(
+                                InventoryItem.owner_type == "business",
+                                InventoryItem.owner_id == biz.id,
+                                InventoryItem.good_slug == inp_slug,
+                            )
+                        )
+                        inv_i = inv_r.scalar_one_or_none()
+                        have = inv_i.quantity if inv_i else 0
+                        shortfall = max(0, inp_qty_needed - have)
+                        if shortfall > 0:
+                            good_data = goods_config.get(inp_slug, {})
+                            unit_cost = Decimal(str(good_data.get("base_value", 1)))
+                            restock_cost += unit_cost * shortfall
+                            restock_items.append((inp_slug, shortfall))
+
+                    bank_reserves = Decimal(str(central_bank.reserves))
+                    if restock_cost <= bank_reserves and restock_items:
+                        # Fund the restock from central bank
+                        central_bank.reserves = bank_reserves - restock_cost
+                        from backend.agents.inventory import add_to_inventory as _add_inv
+                        for inp_slug, shortfall in restock_items:
+                            try:
+                                await _add_inv(db, "business", biz.id, inp_slug, shortfall, settings)
+                            except ValueError:
+                                pass  # Storage full — skip this input
+
+                        await db.flush()
+
+                        # Re-check inputs after restocking
+                        inputs_satisfied = True
+                        inputs_used = []
+                        input_scale = effective_quantity / max(recipe.output_quantity, 1)
+                        for inp in (recipe.inputs_json or []):
+                            inp_slug = inp.get("good_slug") or inp.get("good")
+                            inp_qty_per_batch = int(inp.get("quantity", 1))
+                            inp_qty_needed = max(1, int(inp_qty_per_batch * input_scale))
+
+                            inv_r = await db.execute(
+                                select(InventoryItem).where(
+                                    InventoryItem.owner_type == "business",
+                                    InventoryItem.owner_id == biz.id,
+                                    InventoryItem.good_slug == inp_slug,
+                                )
+                            )
+                            inv_i = inv_r.scalar_one_or_none()
+                            if inv_i is None or inv_i.quantity < inp_qty_needed:
+                                inputs_satisfied = False
+                                break
+                            inputs_used.append((inv_i, inp_qty_needed))
+
+                if not inputs_satisfied:
+                    continue  # Skip production this tick — no inputs
 
             # Deduct inputs
             for inv_item, qty_needed in inputs_used:

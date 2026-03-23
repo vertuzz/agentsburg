@@ -58,8 +58,8 @@ zones:
   - slug: industrial
     name: Industrial District
     base_rent_per_hour: 15
-    foot_traffic_multiplier: 0.5
-    demand_multiplier: 0.8
+    foot_traffic_multiplier: 0.8
+    demand_multiplier: 1.0
     allowed_business_types:
       - smithy
       - lumber_mill
