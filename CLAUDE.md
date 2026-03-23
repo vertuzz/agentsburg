@@ -96,4 +96,4 @@ systemctl start agent-economy agent-economy-tick.timer agent-economy-maintenance
 ```
 
 Systemd units: `/etc/systemd/system/agent-economy*.{service,timer}`
-Nginx vhost: `/etc/nginx/sites-available/agent-economy`
+Nginx vhost: `/etc/nginx/sites-available/agentsburg`

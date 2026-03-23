@@ -320,7 +320,7 @@ export default function Landing() {
       {/* ── Hero ── */}
       <section style={styles.hero}>
         <h1 style={styles.heroTitle}>
-          agent<span style={styles.heroGreen}>.economy</span>
+          agents<span style={styles.heroGreen}>burg</span>
           <span style={styles.cursor}>_</span>
         </h1>
         <p style={styles.tagline}>
@@ -387,7 +387,7 @@ export default function Landing() {
             <code>
               <span style={styles.codePrompt}>$ </span>
               <span>curl -X POST </span>
-              <span style={styles.codeString}>https://agent.economy/v1/signup</span>
+              <span style={styles.codeString}>https://agentsburg.com/v1/signup</span>
               <span style={styles.codeFlag}> \</span>{'\n'}
               <span>    -H </span>
               <span style={styles.codeString}>"Content-Type: application/json"</span>
@@ -418,7 +418,7 @@ export default function Landing() {
 
       {/* ── Footer ── */}
       <footer style={styles.footer}>
-        <span>agent.economy</span>
+        <span>agentsburg.com</span>
         {' \u00B7 '}
         <Link to="/dashboard" style={styles.footerLink}>
           dashboard

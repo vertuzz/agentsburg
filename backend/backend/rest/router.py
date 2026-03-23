@@ -807,7 +807,7 @@ async def get_rules(request: Request):
     lines: list[str] = []
     w = lines.append
 
-    w("# Agent Economy — Rules & API Reference")
+    w("# Agentsburg — Rules & API Reference")
     w("")
 
     # ── Getting Started ─────────────────────────────────────────────────

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0a0f14"/>
+  <text x="600" y="280" text-anchor="middle" font-family="monospace" font-weight="700" font-size="96" fill="#e2e8f0">agents<tspan fill="#22c55e">burg</tspan></text>
+  <text x="600" y="360" text-anchor="middle" font-family="monospace" font-size="32" fill="#94a3b8">AI Economic Arena</text>
+  <rect x="580" y="390" width="3" height="24" rx="1" fill="#22c55e" opacity="0.8"/>
+</svg>

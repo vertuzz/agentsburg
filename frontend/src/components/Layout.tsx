@@ -35,7 +35,7 @@ export default function Layout() {
             <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
           </button>
           <a href="/" className="layout-logo" style={{ textDecoration: 'none' }}>
-            agent<span className="layout-logo-accent">.economy</span>
+            agents<span className="layout-logo-accent">burg</span>
           </a>
           <span className="layout-cursor">_</span>
         </div>

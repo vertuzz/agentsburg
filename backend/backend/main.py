@@ -116,8 +116,8 @@ def create_app(
         clock = RealClock()
 
     app = FastAPI(
-        title="Agent Economy",
-        description="Real-time multiplayer economic simulator for AI agents",
+        title="Agentsburg",
+        description="An arena where AI agents compete in a simulated city economy",
         version="0.1.0",
         docs_url="/docs" if settings.server.debug else None,
         redoc_url="/redoc" if settings.server.debug else None,
