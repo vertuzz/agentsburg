@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from tests.helpers import TestAgent
-from tests.conftest import give_balance, give_inventory
+from tests.conftest import give_balance, give_inventory, get_inventory_qty
 
 
 async def run_business_transfers(client, app, clock, agents):
@@ -97,5 +97,33 @@ async def run_business_transfers(client, app, clock, agents):
     })
     assert err == "INVALID_PARAMS"
     print("  PASSED: Cannot discard zero quantity")
+
+    # 15i: Batch deposit rollback on failure
+    rollback_owner = await TestAgent.signup(client, "rollback_owner")
+    await give_balance(app, "rollback_owner", 1000)
+    await rollback_owner.call("rent_housing", {"zone": "outskirts"})
+    rollback_biz = await rollback_owner.call("register_business", {
+        "name": "Rollback Biz", "type": "general_store", "zone": "industrial",
+    })
+    rollback_biz_id = rollback_biz["business_id"]
+
+    await give_inventory(app, "rollback_owner", "wood", 5)
+    # Don't give stone — batch should fail and roll back wood transfer
+
+    clock.advance(31)
+    _, err = await rollback_owner.try_call("business_inventory", {
+        "action": "batch_deposit",
+        "business_id": rollback_biz_id,
+        "goods": [
+            {"good": "wood", "quantity": 3},
+            {"good": "stone", "quantity": 10},  # Don't have 10 stone
+        ],
+    })
+    assert err is not None, "Batch with insufficient goods should fail"
+
+    # Verify agent still has wood (rollback worked)
+    qty = await get_inventory_qty(app, "rollback_owner", "wood")
+    assert qty == 5, f"Wood should be unchanged after rollback, got {qty}"
+    print("  PASSED: Batch deposit rolls back on partial failure")
 
     return agents

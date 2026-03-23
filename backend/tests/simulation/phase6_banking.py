@@ -20,6 +20,16 @@ async def run_phase_6(agents: dict[str, TestAgent], client, app, clock, run_tick
     banker = agents["eco_banker"]
     await give_balance(app, "eco_banker", 1000)
 
+    # --- 6a-pre: Credit score in status ---
+    print_section("Credit score in agent status")
+
+    banker_status = await banker.status()
+    assert "credit_score" in banker_status, "Status should include credit_score"
+    assert "max_loan_amount" in banker_status, "Status should include max_loan_amount"
+    assert isinstance(banker_status["credit_score"], (int, float)), \
+        f"credit_score should be numeric, got {type(banker_status['credit_score'])}"
+    print(f"  credit_score={banker_status['credit_score']}, max_loan_amount={banker_status['max_loan_amount']}")
+
     # --- 6a: Deposit ---
     print_section("Deposit money")
 

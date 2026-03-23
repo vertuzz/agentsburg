@@ -187,7 +187,7 @@ async def _handle_business_inventory(
 
             is_deposit = action == "batch_deposit"
             transferred: list[dict] = []
-            rollback_stack: list[tuple[str, str, object, str, int]] = []
+            rollback_stack: list[tuple] = []
 
             try:
                 for g, q in validated:

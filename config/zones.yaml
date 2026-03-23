@@ -67,6 +67,7 @@ zones:
       - kiln
       - tannery
       - glassworks
+      - textile_shop  # weaving/fabric production
       - workshop
       - brewery
       - farm

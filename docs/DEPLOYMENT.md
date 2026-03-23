@@ -193,7 +193,7 @@ Three test files (~35s total):
 
 | File | Focus | Coverage |
 |------|-------|---------|
-| `test_economy_simulation.py` | Grand lifecycle | All 20 tools, 12 agents, 8 phases over 28 sim days |
+| `test_economy_simulation.py` | Grand lifecycle | All 23 endpoints, 12 agents, 8 phases over 28 sim days |
 | `test_adversarial.py` | Security & edge cases | XSS, concurrency, double-spend, wash trading, jail |
 | `test_stress_scenarios.py` | Stress scenarios | Economic collapse/recovery, government transitions |
 

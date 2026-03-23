@@ -317,6 +317,118 @@ async def run_phase_3(agents: dict[str, TestAgent], client, app, clock, run_tick
     assert err == "INSUFFICIENT_INVENTORY"
     print(f"  Cannot discard more than owned (error={err})")
 
+    # --- 3k: Self-employed flag ---
+    print_section("Self-employed flag")
+
+    miller_status = await agents["eco_miller"].status()
+    assert miller_status["employment"]["self_employed"] is True, \
+        "Business owner should show self_employed=True"
+    assert miller_status["employment"]["business_count"] >= 1, \
+        "Business owner should have business_count >= 1"
+    print(f"  Miller: self_employed={miller_status['employment']['self_employed']}, "
+          f"business_count={miller_status['employment']['business_count']}")
+
+    # --- 3l: Batch inventory transfers ---
+    print_section("Batch inventory transfers")
+
+    # Give gatherer1 some goods for batch deposit
+    await give_inventory(app, "eco_gatherer2", "wood", 10)
+    await give_inventory(app, "eco_gatherer2", "stone", 5)
+    await give_inventory(app, "eco_gatherer2", "berries", 8)
+
+    clock.advance(31)  # clear any prior cooldown
+    batch_dep = await agents["eco_gatherer2"].call("business_inventory", {
+        "action": "batch_deposit",
+        "business_id": farm_id,
+        "goods": [
+            {"good": "wood", "quantity": 3},
+            {"good": "stone", "quantity": 2},
+            {"good": "berries", "quantity": 4},
+        ],
+    })
+    assert batch_dep["count"] == 3, f"batch_deposit should transfer 3 goods, got {batch_dep['count']}"
+    assert len(batch_dep["transferred"]) == 3
+    assert batch_dep["cooldown_seconds"] == 10
+    print(f"  Batch deposited 3 goods to farm (cooldown={batch_dep['cooldown_seconds']}s)")
+
+    # Verify business got the goods
+    clock.advance(15)
+    farm_view = await agents["eco_gatherer2"].call("business_inventory", {
+        "action": "view",
+        "business_id": farm_id,
+    })
+    farm_inv_map = {item["good_slug"]: item["quantity"] for item in farm_view["inventory"]}
+    assert farm_inv_map.get("wood", 0) >= 3
+    assert farm_inv_map.get("stone", 0) >= 2
+    assert farm_inv_map.get("berries", 0) >= 4
+    print(f"  Farm inventory verified after batch deposit")
+
+    # Batch withdraw
+    clock.advance(15)
+    batch_wd = await agents["eco_gatherer2"].call("business_inventory", {
+        "action": "batch_withdraw",
+        "business_id": farm_id,
+        "goods": [
+            {"good": "wood", "quantity": 1},
+            {"good": "stone", "quantity": 1},
+        ],
+    })
+    assert batch_wd["count"] == 2
+    assert batch_wd["action"] == "batch_withdraw"
+    print(f"  Batch withdrew 2 goods from farm")
+
+    # --- 3m: set_production stores recipe slug + work uses it ---
+    print_section("Production recipe slug persistence")
+
+    # Register a mine for eco_gatherer1
+    await give_balance(app, "eco_gatherer1", 2000)
+    s = await agents["eco_gatherer1"].status()
+    if s["housing"]["homeless"]:
+        await agents["eco_gatherer1"].call("rent_housing", {"zone": "outskirts"})
+
+    mine_reg = await agents["eco_gatherer1"].call("register_business", {
+        "name": "Test Mine", "type": "mine", "zone": "industrial",
+    })
+    mine_id = mine_reg["business_id"]
+
+    prod_config = await agents["eco_gatherer1"].call("configure_production", {
+        "business_id": mine_id, "product": "copper_ore",
+    })
+    assert prod_config["selected_recipe"] == "mine_copper", \
+        f"Expected recipe mine_copper, got {prod_config['selected_recipe']}"
+    print(f"  Mine configured: recipe={prod_config['selected_recipe']}")
+
+    clock.advance(120)
+    mine_work = await agents["eco_gatherer1"].call("work", {"business_id": mine_id})
+    assert mine_work["produced"]["good"] == "copper_ore"
+    assert mine_work["recipe_slug"] == "mine_copper"
+    print(f"  Work produced {mine_work['produced']['good']} using recipe {mine_work['recipe_slug']}")
+
+    # --- 3n: Work with business_id routing ---
+    print_section("Work routing with business_id")
+
+    # eco_lumberjack already has lumber_id; configure a second business
+    await give_balance(app, "eco_lumberjack", 2000)
+    lj_farm_reg = await agents["eco_lumberjack"].call("register_business", {
+        "name": "LJ Farm", "type": "farm", "zone": "outskirts",
+    })
+    lj_farm_id = lj_farm_reg["business_id"]
+    await agents["eco_lumberjack"].call("configure_production", {
+        "business_id": lj_farm_id, "product": "wheat",
+    })
+
+    clock.advance(120)
+    lj_work_lumber = await agents["eco_lumberjack"].call("work", {"business_id": lumber_id})
+    assert lj_work_lumber["produced"]["good"] == "lumber"
+    assert lj_work_lumber["business_id"] == lumber_id
+    print(f"  Lumberjack worked at lumber mill: produced {lj_work_lumber['produced']['good']}")
+
+    clock.advance(120)
+    lj_work_farm = await agents["eco_lumberjack"].call("work", {"business_id": lj_farm_id})
+    assert lj_work_farm["produced"]["good"] == "wheat"
+    assert lj_work_farm["business_id"] == lj_farm_id
+    print(f"  Lumberjack worked at farm: produced {lj_work_farm['produced']['good']}")
+
     # Run 2 days of ticks
     await run_tick(hours=48)
     print("  Ran 2 days of ticks")

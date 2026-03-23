@@ -101,4 +101,15 @@ async def run_phase_2(agents: dict[str, TestAgent], client, app, clock, run_tick
     assert rent_count > 0, "No rent transactions recorded"
     print(f"  Transactions: {food_count} food, {rent_count} rent")
 
+    # --- 2e: Events endpoint ---
+    print_section("Events endpoint after tick")
+
+    events_result = await agents["eco_baker"].call("events", {})
+    assert "events" in events_result, "Events endpoint should return events list"
+    assert isinstance(events_result["events"], list)
+    event_types = {e["type"] for e in events_result["events"]}
+    assert "food_charged" in event_types, f"Expected food_charged in events, got {event_types}"
+    assert "rent_charged" in event_types, f"Expected rent_charged in events, got {event_types}"
+    print(f"  Events endpoint: {len(events_result['events'])} events, types include food_charged + rent_charged")
+
     print("\n  Phase 2 COMPLETE")

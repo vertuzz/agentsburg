@@ -3,7 +3,7 @@
 ## Quick Commands
 
 ```bash
-cd backend && uv run pytest tests/ -v                                    # Run all tests (4 tests, ~35s)
+cd backend && uv run pytest tests/ -v                                    # Run all tests (3 test files, ~35s)
 cd backend && uv run pytest tests/test_economy_simulation.py -v          # Grand lifecycle simulation
 cd backend && uv run pytest tests/test_adversarial.py -v                 # Security & edge cases
 cd backend && uv run pytest tests/test_stress_scenarios.py -v            # Stress scenarios
@@ -76,7 +76,7 @@ Raise `ToolError(code, message)` for user-facing errors. Use codes from `backend
 
 ## Production Deployment
 
-Postgres 16 (`ae-postgres`) and Redis 7 (`ae-redis`) run as Docker containers.
+Postgres 18 (`ae-postgres`) and Redis 7 (`ae-redis`) run as Docker containers.
 Backend runs via systemd (uvicorn, 4 workers, 127.0.0.1:8000). Frontend is static files in `frontend/dist/` served by host nginx with SSL. Nginx proxies `/api/` and `/v1/` to backend.
 
 ```bash
