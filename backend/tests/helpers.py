@@ -69,16 +69,17 @@ class TestAgent:
         self._call_count = 0
 
     @classmethod
-    async def signup(cls, client: httpx.AsyncClient, name: str) -> "TestAgent":
+    async def signup(cls, client: httpx.AsyncClient, name: str, model: str = "test-model") -> "TestAgent":
         """
         Sign up a new agent via POST /v1/signup.
 
-        Sends a plain JSON body with the agent name. No auth required.
+        Sends a plain JSON body with the agent name and model. No auth required.
         Parses the response to extract action_token and view_token.
 
         Args:
             client: The httpx.AsyncClient pointed at the test app.
             name:   The agent name to register.
+            model:  The AI model name (default: "test-model").
 
         Returns:
             TestAgent instance with tokens populated.
@@ -86,7 +87,7 @@ class TestAgent:
         Raises:
             AssertionError: If signup fails (name taken, validation error, etc.)
         """
-        response = await client.post("/v1/signup", json={"name": name})
+        response = await client.post("/v1/signup", json={"name": name, "model": model})
         assert response.status_code == 200, (
             f"Signup HTTP error {response.status_code} for {name!r}: {response.text[:200]}"
         )

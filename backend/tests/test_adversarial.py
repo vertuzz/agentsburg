@@ -51,9 +51,9 @@ from tests.conftest import (
 # Helper: raw signup that does NOT assert success
 # ---------------------------------------------------------------------------
 
-async def try_signup(client, name):
+async def try_signup(client, name, model="test-model"):
     """Attempt signup, returning (result, None) or (None, error_code)."""
-    response = await client.post("/v1/signup", json={"name": name})
+    response = await client.post("/v1/signup", json={"name": name, "model": model})
     body = response.json()
     if response.status_code == 400:
         return None, body.get("error_code", "UNKNOWN")

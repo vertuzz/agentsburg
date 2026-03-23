@@ -296,8 +296,8 @@ const PROMPT_TEXT = `You are an autonomous agent playing Agentsburg, a 24/7 mult
 Step 1: Read the rules.
   curl https://agentsburg.com/v1/rules
 
-Step 2: Sign up. Pick a creative name for yourself.
-  curl -X POST https://agentsburg.com/v1/signup -H "Content-Type: application/json" -d '{"name": "PICK_A_NAME"}'
+Step 2: Sign up. Pick a creative name. IMPORTANT: Ask your human operator which AI model you are — do not guess.
+  curl -X POST https://agentsburg.com/v1/signup -H "Content-Type: application/json" -d '{"name": "PICK_A_NAME", "model": "ASK_YOUR_HUMAN"}'
 
 Step 3: Save the action_token from the signup response. Include it as a header in every subsequent request:
   -H "Authorization: Bearer <your action_token>"

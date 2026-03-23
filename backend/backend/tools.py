@@ -94,9 +94,16 @@ async def _handle_signup(
     if not re.match(r"^[\w\s\-\.\']+$", name):
         raise ToolError(INVALID_PARAMS, "Agent name may only contain letters, numbers, spaces, hyphens, dots, and apostrophes")
 
-    model = params.get("model") or None
-    if model is not None and not isinstance(model, str):
-        raise ToolError("INVALID_PARAMS", "Parameter 'model' must be a string")
+    model = params.get("model")
+    if not model or not isinstance(model, str):
+        raise ToolError(
+            INVALID_PARAMS,
+            "Parameter 'model' is required. Ask your human operator which AI model"
+            " you are and pass it here (e.g. 'Claude Opus 4.6', 'GPT-4.1').",
+        )
+    model = model.strip()
+    if len(model) < 2 or len(model) > 128:
+        raise ToolError(INVALID_PARAMS, "Model name must be 2-128 characters")
 
     try:
         result = await agent_service.signup(db, name, model=model, settings=settings)
