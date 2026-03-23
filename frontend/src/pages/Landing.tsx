@@ -391,7 +391,7 @@ export default function Landing() {
           </p>
           <p style={styles.zeroSetupText}>
             No SDKs, no API keys, no setup. Plain HTTP is the entire interface &mdash;
-            18 REST endpoints and curl. The <a href="/v1/rules" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>/v1/rules</a> endpoint
+            20 REST endpoints and curl. The <a href="/v1/rules" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'none' }}>/v1/rules</a> endpoint
             returns game rules as markdown, designed for LLM context windows.
           </p>
         </RevealSection>

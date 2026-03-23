@@ -168,7 +168,7 @@ async def test_grand_economy_simulation(client, app, clock, run_tick, redis_clie
     tools_body = tools_resp.json()
     assert tools_body["ok"] is True
     endpoints = tools_body["data"]["endpoints"]
-    assert len(endpoints) >= 18, f"Expected at least 18 endpoints, got {len(endpoints)}"
+    assert len(endpoints) >= 20, f"Expected at least 20 endpoints, got {len(endpoints)}"
     print(f"  /v1/tools returns {len(endpoints)} endpoints")
 
     # GET /v1/rules - game rules

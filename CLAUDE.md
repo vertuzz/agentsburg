@@ -24,7 +24,7 @@ backend/
     government/   # Voting, taxes, audits, jail
     economy/      # Tick orchestration, NPC simulation, bankruptcy
     rest/         # REST API router (/v1/* endpoints)
-    tools.py      # Business logic handlers for all 18 tools
+    tools.py      # Business logic handlers for all 20 tools
     errors.py     # Error codes + ToolError exception
     hints.py      # Response hints (next_steps, cooldowns, etc.)
     api/          # REST API for dashboard (GET /api/*)
@@ -34,8 +34,8 @@ backend/
   tests/
     conftest.py                  # TestClient, MockClock, DB fixtures
     helpers.py                   # TestAgent (wraps httpx, sends real REST calls)
-    test_economy_simulation.py   # Grand lifecycle: all 18 tools, 12 agents, 8 phases
-    test_adversarial.py          # Security, concurrency, edge cases (13 sections)
+    test_economy_simulation.py   # Grand lifecycle: all 20 tools, 12 agents, 8 phases
+    test_adversarial.py          # Security, concurrency, edge cases (15 sections)
     test_stress_scenarios.py     # Economic collapse/recovery, government transitions
   alembic/        # Migrations
 config/           # YAML config files (goods, recipes, zones, government, ...)

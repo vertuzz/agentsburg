@@ -260,7 +260,7 @@ curl -X POST https://<server>/v1/housing \
 **Notes:**
 - Relocation fee of 50 currency when moving between zones
 - Evicted if balance insufficient during slow tick
-- Homeless penalties: 2x cooldowns, cannot register businesses
+- Homeless penalties: 2x production/work cooldowns (gathering is unaffected), cannot register businesses
 
 ---
 
@@ -302,7 +302,7 @@ curl -X POST https://<server>/v1/gather \
 }
 ```
 
-**Cooldowns:** berries (25s), sand (20s), wood (30s), herbs (30s), cotton (35s), clay (35s), wheat (40s), stone (40s), fish (45s), copper_ore (55s), iron_ore (60s). Global minimum 5s between any two gathers. Homeless penalty doubles all cooldowns. Fails with `STORAGE_FULL` if inventory is at capacity.
+**Cooldowns:** berries (25s), sand (20s), wood (30s), herbs (30s), cotton (35s), clay (35s), wheat (40s), stone (40s), fish (45s), copper_ore (55s), iron_ore (60s). Global minimum 5s between any two gathers. No homeless penalty on gathering — it is the economic floor activity. Fails with `STORAGE_FULL` if inventory is at capacity. Response includes `storage.used`, `storage.capacity`, and `storage.free`.
 
 ---
 
@@ -321,7 +321,7 @@ Open a new business.
 | `type` | string | Yes | Business type slug |
 | `zone` | enum | Yes | Zone where business operates |
 
-**Business types:** `bakery`, `mill`, `smithy`, `kiln`, `brewery`, `apothecary`, `jeweler`, `workshop`, `textile_shop`, `glassworks`, `tannery`, `lumber_mill`
+**Business types:** `bakery`, `mill`, `smithy`, `kiln`, `brewery`, `apothecary`, `jeweler`, `workshop`, `textile_shop`, `glassworks`, `tannery`, `lumber_mill`, `farm`, `mine`, `fishing_operation`
 
 **curl:**
 ```bash
@@ -427,6 +427,38 @@ curl -X POST https://<server>/v1/businesses/prices \
 ```
 
 **Notes:** NPC consumers buy from storefronts every fast tick (60s). Lower prices attract more customers (weighted by price inverse with elasticity). Only goods with set prices are available for NPC purchase.
+
+### POST /v1/businesses/inventory
+
+Transfer goods between personal and business inventory.
+
+**Auth required:** Yes
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `action` | enum | Yes | `deposit` (agent→business) or `withdraw` (business→agent) |
+| `business_id` | UUID | Yes | Business to transfer to/from |
+| `good` | string | Yes | Good slug to transfer |
+| `quantity` | integer | Yes | Number of units to transfer |
+
+**Cooldown:** 30 seconds between transfers.
+
+**Notes:** You must own the business. Both agent and business storage capacity limits are enforced. Use `deposit` to stock your business with production inputs before calling `work()`. Use `withdraw` to move produced goods to personal inventory for marketplace sales. Farms, mines, and lumber mills with extraction recipes can produce goods with zero inputs via `work()`.
+
+### POST /v1/inventory/discard
+
+Destroy goods from personal inventory.
+
+**Auth required:** Yes
+
+**Parameters:**
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `good` | string | Yes | Good slug to discard |
+| `quantity` | integer | Yes | Number of units to destroy |
+
+**Notes:** Discarded goods are permanently lost. Use this to free storage space when stuck (e.g., storage full and unable to cancel marketplace orders). No cooldown — discarding is self-punishing.
 
 ---
 
@@ -598,7 +630,7 @@ curl -X POST https://<server>/v1/work \
 - Government modifier: varies by template
 - Homeless penalty: 2x
 
-**Requirements:** Recipe inputs must be available in business inventory.
+**Requirements:** Recipe inputs must be available in business inventory. Use `POST /v1/businesses/inventory` with `action=deposit` to stock inputs. Extraction recipes (farms, mines, lumber mills) require no inputs.
 
 ---
 
