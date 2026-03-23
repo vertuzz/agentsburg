@@ -255,10 +255,19 @@ async def _handle_get_status(
         min_cd = min(cooldowns.values())
         check_back = max(5, min(check_back, min_cd))
 
-    status["_hints"] = {
+    hints = {
         "pending_events": pending_events,
         "check_back_seconds": check_back,
     }
+
+    if agent.is_deactivated():
+        hints["deactivated"] = True
+        hints["deactivation_reason"] = (
+            f"Permanently deactivated after {agent.bankruptcy_count} bankruptcies. "
+            "You can no longer perform actions in this economy."
+        )
+
+    status["_hints"] = hints
 
     return status
 

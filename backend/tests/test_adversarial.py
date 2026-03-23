@@ -15,6 +15,7 @@ Covers:
   11. Serial bankruptcy loan denial
   12. Vote persistence across elections
   13. Money supply conservation & negative inventory check
+  14. Agent deactivation after max bankruptcies
 
 All tests use real HTTP through the REST API. The only mock is MockClock.
 """
@@ -41,6 +42,8 @@ from tests.conftest import (
     jail_agent,
     give_inventory,
     get_inventory_qty,
+    deactivate_agent,
+    get_agent_field,
 )
 
 
@@ -608,34 +611,35 @@ async def test_adversarial_scenarios(client, app, clock, run_tick, db, redis_cli
         clock.advance(3700)
         await run_tick(seconds=1)
 
-    # Verify 3 bankruptcies
+    # Verify serial bankruptcies and deactivation (agent gets deactivated at 2,
+    # so the 3rd loop's bankruptcy is skipped — deactivated agents aren't processed)
     async with app.state.session_factory() as session:
         agent_result = await session.execute(
             select(Agent).where(Agent.name == "adv_serial")
         )
         serial_agent = agent_result.scalar_one()
-        assert serial_agent.bankruptcy_count >= 3, (
-            f"Expected >= 3 bankruptcies, got {serial_agent.bankruptcy_count}"
+        assert serial_agent.bankruptcy_count >= 2, (
+            f"Expected >= 2 bankruptcies, got {serial_agent.bankruptcy_count}"
         )
+        assert serial_agent.is_active is False, "Agent should be deactivated after 2+ bankruptcies"
 
     # Give them enough balance to try a loan
     await give_balance(app, "adv_serial", 500)
 
-    # Try to take a loan after multiple bankruptcies
+    # Try to take a loan — should be denied (deactivated or poor credit)
     _, loan_err = await adv_serial.try_call("bank", {
         "action": "take_loan",
         "amount": 10,
     })
 
-    # Should be denied due to poor credit from serial bankruptcies
     assert loan_err is not None, (
-        "Expected loan denial after 3 bankruptcies, but loan was approved"
+        "Expected loan denial after serial bankruptcies, but loan was approved"
     )
-    assert loan_err in ("NOT_ELIGIBLE", "INSUFFICIENT_FUNDS", "INVALID_PARAMS"), (
+    assert loan_err in ("NOT_ELIGIBLE", "INSUFFICIENT_FUNDS", "INVALID_PARAMS", "AGENT_DEACTIVATED"), (
         f"Expected NOT_ELIGIBLE or similar for serial bankrupt, got {loan_err}"
     )
 
-    print(f"  PASSED: Loan denied after 3 bankruptcies (error={loan_err})")
+    print(f"  PASSED: Loan denied after serial bankruptcies (error={loan_err})")
 
     # ===================================================================
     # Section 12: Vote Persistence Across Elections
@@ -742,6 +746,60 @@ async def test_adversarial_scenarios(client, app, clock, run_tick, db, redis_cli
         print(f"  No negative inventory found")
 
     print("  PASSED: Money supply and inventory integrity verified")
+
+    # ===================================================================
+    # Section 14: Agent Deactivation After Max Bankruptcies
+    # ===================================================================
+    print("\n--- Section 14: Agent Deactivation After Max Bankruptcies ---")
+
+    # --- 14a: Deactivation triggers after 2nd bankruptcy ---
+    deact_agent = await TestAgent.signup(client, "deact_test")
+
+    # First bankruptcy: push below threshold, advance clock sufficiently, run tick
+    await give_balance(app, "deact_test", -250)
+    clock.advance(3700)
+    await run_tick(seconds=1)
+
+    # Should still be active after 1st bankruptcy
+    status = await deact_agent.status()
+    assert status["bankruptcy_count"] == 1, f"Expected 1 bankruptcy, got {status['bankruptcy_count']}"
+    assert status["is_active"] is True, "Agent should still be active after 1st bankruptcy"
+
+    # Second bankruptcy: push below threshold again, advance clock, run tick
+    await give_balance(app, "deact_test", -250)
+    clock.advance(3700)
+    await run_tick(seconds=1)
+
+    # Should now be deactivated — but /me still works
+    status = await deact_agent.status()
+    assert status["bankruptcy_count"] == 2, f"Expected 2 bankruptcies, got {status['bankruptcy_count']}"
+    assert status["is_active"] is False, "Agent should be deactivated after 2nd bankruptcy"
+    assert status["_hints"].get("deactivated") is True, "Deactivation hint should be set"
+
+    print("  PASSED: Agent deactivated after 2nd bankruptcy, /me still works")
+
+    # --- 14b: Deactivated agent blocked from actions ---
+    _, err = await deact_agent.try_call("gather", {"resource": "berries"})
+    assert err == "AGENT_DEACTIVATED", f"Expected AGENT_DEACTIVATED, got {err}"
+
+    _, err = await deact_agent.try_call("rent_housing", {"zone": "outskirts"})
+    assert err == "AGENT_DEACTIVATED", f"Expected AGENT_DEACTIVATED for housing, got {err}"
+
+    _, err = await deact_agent.try_call("bank", {"action": "deposit", "amount": 10})
+    assert err == "AGENT_DEACTIVATED", f"Expected AGENT_DEACTIVATED for bank, got {err}"
+
+    print("  PASSED: Deactivated agent blocked from gather, housing, bank")
+
+    # --- 14c: Deactivated agent not charged on subsequent ticks ---
+    balance_before = await get_balance(app, "deact_test")
+    clock.advance(3700)
+    await run_tick(seconds=1)
+    balance_after = await get_balance(app, "deact_test")
+    assert balance_after == balance_before, (
+        f"Deactivated agent was charged: {balance_before} -> {balance_after}"
+    )
+
+    print("  PASSED: Deactivated agent not charged survival costs")
 
     # ===================================================================
     # Summary

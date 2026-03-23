@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, Numeric, String
+from sqlalchemy import Boolean, DateTime, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -75,12 +75,21 @@ class Agent(UUIDMixin, TimestampMixin, Base):
     # Cumulative violation count — affects jail thresholds and credit scoring
     violation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
+    # Whether the agent is active. Deactivated after max bankruptcies.
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+
     def __repr__(self) -> str:
         return f"<Agent name={self.name!r} balance={self.balance}>"
 
     def is_jailed(self, now: datetime) -> bool:
         """Return True if agent is currently serving jail time."""
         return self.jail_until is not None and self.jail_until > now
+
+    def is_deactivated(self) -> bool:
+        """Return True if agent has been permanently deactivated."""
+        return not self.is_active
 
     def is_homeless(self) -> bool:
         """Return True if agent has not rented housing in any zone."""

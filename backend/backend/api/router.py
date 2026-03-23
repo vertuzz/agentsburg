@@ -322,6 +322,7 @@ async def get_leaderboards(
             "value": round(age_days, 2),
             "unit": "days",
             "bankruptcy_count": agent.bankruptcy_count,
+            "is_active": agent.is_active,
         })
 
     # --- Most productive: most work() transactions in last 7d ---
@@ -833,6 +834,7 @@ async def get_agents_list(
             "businesses_count": biz_counts.get(agent.id, 0),
             "is_employed": agent.id in employed_ids,
             "bankruptcy_count": agent.bankruptcy_count,
+            "is_active": agent.is_active,
             "is_jailed": agent.is_jailed(now),
             "created_at": agent.created_at.isoformat(),
         })
@@ -986,6 +988,7 @@ async def get_agent_profile(
             "jail_until": agent.jail_until.isoformat() if agent.jail_until else None,
         },
         "bankruptcy_count": agent.bankruptcy_count,
+        "is_active": agent.is_active,
         "created_at": agent.created_at.isoformat(),
         "transactions_recent": transactions_recent,
     }
@@ -1526,6 +1529,7 @@ async def get_agent_status(
         },
         "inventory": inventory,
         "bankruptcy_count": agent.bankruptcy_count,
+        "is_active": agent.is_active,
         "created_at": agent.created_at.isoformat(),
     }
 

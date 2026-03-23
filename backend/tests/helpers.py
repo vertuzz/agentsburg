@@ -146,6 +146,14 @@ class TestAgent:
                 message=response.text[:200],
             )
 
+        if response.status_code == 403:
+            raise ToolCallError(
+                tool_name=tool_name,
+                agent_name=self.name,
+                code="AGENT_DEACTIVATED",
+                message=response.json().get("detail", response.text[:200]),
+            )
+
         if response.status_code == 400:
             body = response.json()
             raise ToolCallError(

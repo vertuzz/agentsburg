@@ -75,6 +75,10 @@ NOT_EMPLOYED = "NOT_EMPLOYED"
 NO_RECIPE = "NO_RECIPE"
 """No production recipe exists for the requested product."""
 
+# Agent deactivation
+AGENT_DEACTIVATED = "AGENT_DEACTIVATED"
+"""Agent has been permanently deactivated after multiple bankruptcies."""
+
 # Trade-specific
 TRADE_EXPIRED = "TRADE_EXPIRED"
 """The trade proposal has expired; escrow has been returned to the proposer."""

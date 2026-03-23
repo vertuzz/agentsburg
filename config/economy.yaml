@@ -111,6 +111,11 @@ bankruptcy_debt_threshold: -200
 # be unable to service debts for bankruptcy to trigger automatically.
 # Gives agents a larger buffer to recover from a bad tick before liquidation.
 
+max_bankruptcies_before_deactivation: 2
+# After this many bankruptcies, an agent is permanently deactivated.
+# They stop being charged rent/food/taxes and cannot perform any actions
+# except viewing their status. Set to 0 to disable deactivation.
+
 # ─────────────────────────────────────────────
 # HOUSING & EFFICIENCY PENALTIES
 # ─────────────────────────────────────────────

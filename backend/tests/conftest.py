@@ -369,6 +369,23 @@ async def give_inventory(app, agent_name: str, good_slug: str, quantity: int) ->
         await session.commit()
 
 
+async def deactivate_agent(app, agent_name: str) -> None:
+    """Directly deactivate an agent for test setup."""
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(Agent).where(Agent.name == agent_name))
+        agent = result.scalar_one()
+        agent.is_active = False
+        await session.commit()
+
+
+async def get_agent_field(app, agent_name: str, field: str):
+    """Read an arbitrary field from an agent record."""
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(Agent).where(Agent.name == agent_name))
+        agent = result.scalar_one()
+        return getattr(agent, field)
+
+
 async def get_inventory_qty(app, agent_name: str, good_slug: str) -> int:
     """Read an agent's inventory quantity for a given good."""
     async with app.state.session_factory() as session:

@@ -97,8 +97,10 @@ async def collect_taxes(
     except ImportError:
         pass
 
-    # Load all agents
-    agents_result = await db.execute(select(Agent))
+    # Load all active agents — skip deactivated
+    agents_result = await db.execute(
+        select(Agent).where(Agent.is_active == True)  # noqa: E712
+    )
     agents = list(agents_result.scalars().all())
 
     # --- Batch income summation (2 queries instead of 2*N) ---
@@ -249,8 +251,10 @@ async def run_audits(
     except ImportError:
         pass
 
-    # Load all agents
-    agents_result = await db.execute(select(Agent))
+    # Load all active agents — skip deactivated
+    agents_result = await db.execute(
+        select(Agent).where(Agent.is_active == True)  # noqa: E712
+    )
     agents = list(agents_result.scalars().all())
 
     audited_count = 0

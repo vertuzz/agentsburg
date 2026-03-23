@@ -144,6 +144,7 @@ async def get_status(db: AsyncSession, agent: Agent, clock: "Clock") -> dict:
             "jail_remaining_seconds": jail_remaining_seconds,
         },
         "bankruptcy_count": agent.bankruptcy_count,
+        "is_active": agent.is_active,
         # Phase 2+: cooldowns populated from Redis
         "cooldowns": {},
         # Phase 2+: pending events from background processing

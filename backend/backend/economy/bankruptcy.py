@@ -67,9 +67,12 @@ async def process_bankruptcies(
     threshold = Decimal(str(settings.economy.bankruptcy_debt_threshold))
     liquidation_rate = Decimal(str(settings.economy.bankruptcy_liquidation_rate))
 
-    # Find all agents below threshold
+    # Find all active agents below threshold (skip already-deactivated agents)
     result = await db.execute(
-        select(Agent).where(Agent.balance < threshold)
+        select(Agent).where(
+            Agent.balance < threshold,
+            Agent.is_active == True,  # noqa: E712
+        )
     )
     bankrupt_agents = list(result.scalars().all())
 
@@ -214,6 +217,18 @@ async def process_bankruptcies(
 
         # --- Step 6: Increment bankruptcy count ---
         agent.bankruptcy_count += 1
+
+        # --- Step 7: Deactivate agent if max bankruptcies reached ---
+        max_bankruptcies = getattr(
+            settings.economy, "max_bankruptcies_before_deactivation", 2
+        )
+        if max_bankruptcies > 0 and agent.bankruptcy_count >= max_bankruptcies:
+            agent.is_active = False
+            logger.warning(
+                "Agent %s deactivated after %d bankruptcies",
+                agent.name,
+                agent.bankruptcy_count,
+            )
 
         bankrupted_names.append(agent.name)
 

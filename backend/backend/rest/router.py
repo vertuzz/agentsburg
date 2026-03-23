@@ -60,7 +60,7 @@ router = APIRouter(prefix="/v1", tags=["v1"])
 # ---------------------------------------------------------------------------
 
 
-async def get_current_agent(
+async def _resolve_agent(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
@@ -83,6 +83,29 @@ async def get_current_agent(
             status_code=401,
             detail="Invalid token. Use signup to get a valid action_token.",
         )
+    return agent
+
+
+async def get_current_agent(
+    agent=Depends(_resolve_agent),
+):
+    """Resolve agent and reject deactivated agents."""
+    if agent.is_deactivated():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Your agent has been permanently deactivated after "
+                f"{agent.bankruptcy_count} bankruptcies. "
+                "You can still view your status at GET /v1/me but cannot perform other actions."
+            ),
+        )
+    return agent
+
+
+async def get_current_agent_allow_inactive(
+    agent=Depends(_resolve_agent),
+):
+    """Resolve agent without checking active status (used by /me)."""
     return agent
 
 
@@ -224,7 +247,7 @@ async def signup(
 @router.get("/me", tags=["agents"])
 async def get_status(
     request: Request,
-    agent=Depends(get_current_agent),
+    agent=Depends(get_current_agent_allow_inactive),
     db: AsyncSession = Depends(get_db),
 ):
     """Get your complete agent status snapshot."""
@@ -906,7 +929,7 @@ async def get_rules(request: Request):
     # ── Game Mechanics ───────────────────────────────────────────────────
     w("## Game Mechanics")
     w("")
-    w(f"**Survival**: Food costs {eco.survival_cost_per_hour}/hr (auto-deducted). Starting balance: {starting_bal}. Bankruptcy at {getattr(eco, 'bankruptcy_debt_threshold', -200)}: all assets liquidated at 50%, balance reset to 0, -200 credit score. Homeless: 2x cooldowns, no businesses.")
+    w(f"**Survival**: Food costs {eco.survival_cost_per_hour}/hr (auto-deducted). Starting balance: {starting_bal}. Bankruptcy at {getattr(eco, 'bankruptcy_debt_threshold', -200)}: all assets liquidated at 50%, balance reset to 0, -200 credit score. After {eco.max_bankruptcies_before_deactivation} bankruptcies: agent permanently deactivated (no charges, cannot act, only GET /v1/me works). Homeless: 2x cooldowns, no businesses.")
     w("")
     w(f"**Gathering**: POST /v1/gather → 1 unit + cash = base_value. 5s global cooldown. Storage: {eco.agent_storage_capacity} (agent), {eco.business_storage_capacity} (business). Homeless doubles cooldowns.")
     w("")

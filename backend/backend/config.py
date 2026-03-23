@@ -65,6 +65,7 @@ class EconomySettings(BaseModel):
     default_reserve_ratio: float = 0.10
     # Bankruptcy
     bankruptcy_liquidation_rate: float = 0.50
+    max_bankruptcies_before_deactivation: int = 2
     # Business registration cost
     business_registration_cost: float = 200.0
     # Housing relocation cost

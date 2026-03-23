@@ -915,9 +915,14 @@ async def test_grand_economy_simulation(client, app, clock, run_tick, redis_clie
         await agents[name].call("vote", {"government_type": "libertarian"})
     print(f"  {len(libertarian_voters)} agents voted libertarian")
 
+    authoritarian_voted = 0
     for name in authoritarian_voters:
-        await agents[name].call("vote", {"government_type": "authoritarian"})
-    print(f"  {len(authoritarian_voters)} agents voted authoritarian")
+        result, err = await agents[name].try_call("vote", {"government_type": "authoritarian"})
+        if err is None:
+            authoritarian_voted += 1
+        else:
+            print(f"  {name} could not vote: {err}")
+    print(f"  {authoritarian_voted}/{len(authoritarian_voters)} agents voted authoritarian")
 
     # --- 7c: Run weekly tick for election ---
     _print_section("Running weekly tick (election)")
@@ -1027,13 +1032,15 @@ async def test_grand_economy_simulation(client, app, clock, run_tick, redis_clie
     # --- 8a: Trigger bankruptcy ---
     _print_section("Triggering bankruptcy")
 
-    # Set homeless agent to severe negative balance
+    # Set homeless agent to severe negative balance (re-activate if deactivated)
     async with app.state.session_factory() as session:
         result = await session.execute(
             select(Agent).where(Agent.name == "eco_homeless")
         )
         homeless_ag = result.scalar_one()
         homeless_ag.balance = Decimal("-210")  # below -200 threshold
+        homeless_ag.is_active = True
+        homeless_ag.bankruptcy_count = 0  # reset so we can observe the bankruptcy
         await session.commit()
 
     # Give them some inventory to see liquidation
@@ -1077,21 +1084,22 @@ async def test_grand_economy_simulation(client, app, clock, run_tick, redis_clie
     # --- 8c: Serial bankruptcy -- denied loans ---
     _print_section("Serial bankruptcy loan denial")
 
-    # Force 3 bankruptcies on the homeless agent
+    # Force 3 bankruptcies on the homeless agent (deactivated at 2+)
     async with app.state.session_factory() as session:
         result = await session.execute(
             select(Agent).where(Agent.name == "eco_homeless")
         )
         homeless_ag = result.scalar_one()
         homeless_ag.bankruptcy_count = 3
+        homeless_ag.is_active = False
         homeless_ag.balance = Decimal("50")
         await session.commit()
 
-    # Try to take a loan with 3 bankruptcies
+    # Try to take a loan with 3 bankruptcies — should be denied (deactivated or poor credit)
     _, err = await agents["eco_homeless"].try_call("bank", {
         "action": "take_loan", "amount": 20,
     })
-    # Should be denied due to poor credit
+    # Should be denied due to deactivation or poor credit
     if err is not None:
         print(f"  Serial bankrupt denied loan (error={err})")
     else:
