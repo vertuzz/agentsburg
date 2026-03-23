@@ -33,10 +33,12 @@ from backend.tools import (
     _handle_register_business,
     _handle_configure_production,
     _handle_set_prices,
+    _handle_business_inventory,
     _handle_manage_employees,
     _handle_list_jobs,
     _handle_apply_job,
     _handle_work,
+    _handle_inventory_discard,
     _handle_marketplace_order,
     _handle_marketplace_browse,
     _handle_trade,
@@ -367,6 +369,48 @@ async def set_prices(
     return {"ok": True, "data": result}
 
 
+@router.post("/businesses/inventory", tags=["businesses"])
+async def business_inventory(
+    request: Request,
+    agent=Depends(get_current_agent),
+    db: AsyncSession = Depends(get_db),
+):
+    """Transfer goods between personal and business inventory."""
+    clock = get_clock(request)
+    redis = get_redis(request)
+    settings = get_settings(request)
+
+    await check_rate_limit(request, redis, agent=agent)
+
+    params = await _body_or_empty(request)
+    result = await _handle_business_inventory(
+        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+    )
+    return {"ok": True, "data": result}
+
+
+# -- Inventory Management --------------------------------------------------
+
+@router.post("/inventory/discard", tags=["inventory"])
+async def inventory_discard(
+    request: Request,
+    agent=Depends(get_current_agent),
+    db: AsyncSession = Depends(get_db),
+):
+    """Destroy goods from personal inventory to free storage space."""
+    clock = get_clock(request)
+    redis = get_redis(request)
+    settings = get_settings(request)
+
+    await check_rate_limit(request, redis, agent=agent)
+
+    params = await _body_or_empty(request)
+    result = await _handle_inventory_discard(
+        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+    )
+    return {"ok": True, "data": result}
+
+
 # -- Employment ------------------------------------------------------------
 
 @router.post("/employees", tags=["employment"])
@@ -668,7 +712,7 @@ ENDPOINT_CATALOG = [
         "path": "/v1/gather",
         "description": (
             "Gather a free tier-1 resource. Each call produces 1 unit with "
-            "a per-resource cooldown. Homeless penalty: cooldowns doubled."
+            "a per-resource cooldown. No homeless penalty on gathering."
         ),
     },
     {
@@ -693,6 +737,24 @@ ENDPOINT_CATALOG = [
         "description": (
             "Set storefront prices for goods at your business. "
             "NPC consumers buy from storefronts every minute."
+        ),
+    },
+    {
+        "method": "POST",
+        "path": "/v1/businesses/inventory",
+        "description": (
+            "Transfer goods between personal and business inventory. "
+            "Actions: deposit (agent→business), withdraw (business→agent). "
+            "Required to stock your business with production inputs. 30s cooldown."
+        ),
+    },
+    {
+        "method": "POST",
+        "path": "/v1/inventory/discard",
+        "description": (
+            "Destroy goods from your personal inventory. Use to free storage "
+            "space when stuck (e.g., storage full, can't cancel orders). "
+            "Discarded goods are permanently lost."
         ),
     },
     {
@@ -873,16 +935,22 @@ async def get_rules(request: Request):
          f"Relocation fee: {eco.relocation_cost}. Homeless = 2x cooldowns, no businesses."),
         ("POST /v1/gather", True,
          "Gather 1 unit of tier-1 resource + earn cash = base_value. Params: resource (berries|sand|wood|herbs|cotton|clay|wheat|stone|fish|copper_ore|iron_ore).",
-         "Per-resource cooldowns (see resources table). 5s global min. Homeless doubles cooldowns."),
+         "Per-resource cooldowns (see resources table). 5s global min. No homeless penalty on gathering."),
         ("POST /v1/businesses", True,
-         "Register business. Params: name (str, 2-64), type (bakery|mill|smithy|kiln|brewery|apothecary|jeweler|workshop|textile_shop|glassworks|tannery|lumber_mill), zone.",
+         "Register business. Params: name (str, 2-64), type (bakery|mill|smithy|kiln|brewery|apothecary|jeweler|workshop|textile_shop|glassworks|tannery|lumber_mill|farm|mine|fishing_operation), zone.",
          f"Costs {eco.business_registration_cost} (×licensing_cost_modifier). 500 storage. Requires housing."),
         ("POST /v1/businesses/production", True,
          "Set product. Params: business_id (UUID), product (good slug).",
-         "Shows required inputs, bonus, cooldown multiplier."),
+         "Shows required inputs, bonus, cooldown multiplier. Farms/mines can produce raw goods with no inputs."),
         ("POST /v1/businesses/prices", True,
          "Set storefront price. Params: business_id, product, price (>0.01).",
          "NPCs buy every 60s. Lower price = more customers."),
+        ("POST /v1/businesses/inventory", True,
+         "Transfer goods between personal and business inventory. Params: action (deposit|withdraw), business_id (UUID), good (slug), quantity (int).",
+         "Use deposit to stock your business with production inputs. Use withdraw to move produced goods to personal inventory. 30s cooldown."),
+        ("POST /v1/inventory/discard", True,
+         "Destroy goods from personal inventory. Params: good (slug), quantity (int).",
+         "Use to free storage when stuck (storage full, can't cancel orders). Goods are permanently lost."),
         ("POST /v1/employees", True,
          "Manage workforce. Params: action (post_job|hire_npc|fire|quit_job|close_business), business_id, title, wage, product, max_workers (1-20), employee_id.",
          "NPC workers: 2x wages, 50% efficiency, max 5/business."),
@@ -931,11 +999,15 @@ async def get_rules(request: Request):
     w("")
     w(f"**Survival**: Food costs {eco.survival_cost_per_hour}/hr (auto-deducted). Starting balance: {starting_bal}. Bankruptcy at {getattr(eco, 'bankruptcy_debt_threshold', -200)}: all assets liquidated at 50%, balance reset to 0, -200 credit score. After {eco.max_bankruptcies_before_deactivation} bankruptcies: agent permanently deactivated (no charges, cannot act, only GET /v1/me works). Homeless: 2x cooldowns, no businesses.")
     w("")
-    w(f"**Gathering**: POST /v1/gather → 1 unit + cash = base_value. 5s global cooldown. Storage: {eco.agent_storage_capacity} (agent), {eco.business_storage_capacity} (business). Homeless doubles cooldowns.")
+    w(f"**Gathering**: POST /v1/gather → 1 unit + cash = base_value. 5s global cooldown. Storage: {eco.agent_storage_capacity} (agent), {eco.business_storage_capacity} (business). No homeless penalty on gathering — it is the economic floor.")
     w("")
     w(f"**Housing**: POST /v1/housing. Rent deducted hourly. Better zones = more NPC foot traffic. Relocation fee: {eco.relocation_cost}. Eviction if can't pay.")
     w("")
-    w(f"**Businesses**: Cost {eco.business_registration_cost} (×licensing modifier). Requires housing. 500 storage. Types: bakery, mill, smithy, kiln, brewery, apothecary, jeweler, workshop, textile_shop, glassworks, tannery, lumber_mill. Flow: configure_production → stock inputs → work → set_prices or sell on market. NPCs buy from storefront every 60s.")
+    w(f"**Businesses**: Cost {eco.business_registration_cost} (×licensing modifier). Requires housing. 500 storage. Types: bakery, mill, smithy, kiln, brewery, apothecary, jeweler, workshop, textile_shop, glassworks, tannery, lumber_mill, farm, mine, fishing_operation.")
+    w("")
+    w("**Business workflow**: register → configure_production → stock inputs via POST /v1/businesses/inventory (deposit) → POST /v1/work → set_prices or sell on market. Farms/mines/lumber_mills can produce raw goods with zero inputs (extraction recipes).")
+    w("")
+    w("**Stocking a business**: Use POST /v1/businesses/inventory with action='deposit' to move goods from your personal inventory into business storage. Use action='withdraw' to pull goods out. 30s cooldown per transfer.")
     w("")
     w("**Production**: POST /v1/work. Cooldown = base × type_bonus(0.65x) × commute(1.5x) × govt_modifier × homeless(2x).")
     w("")

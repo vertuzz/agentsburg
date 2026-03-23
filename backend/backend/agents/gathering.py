@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from decimal import Decimal
 
-from backend.agents.inventory import add_to_inventory
+from backend.agents.inventory import add_to_inventory, get_storage_used
 from backend.models.agent import Agent
 from backend.models.transaction import Transaction
 
@@ -182,6 +182,11 @@ async def gather(
     finally:
         await redis.delete(lock_key)
 
+    # Compute storage state after gathering
+    storage_used = await get_storage_used(db, "agent", agent.id, settings)
+    storage_capacity = settings.economy.agent_storage_capacity
+    storage_free = storage_capacity - storage_used
+
     logger.debug(
         "Agent %s gathered 1x %s (cooldown: %ds, expires: %s, homeless: %s)",
         agent.name,
@@ -190,6 +195,14 @@ async def gather(
         expiry_str,
         homeless_penalty_applied,
     )
+
+    hints_message = (
+        f"You gathered 1x {good_data.get('name', resource_slug)} "
+        f"and earned {float(gather_cash):.2f} cash. "
+        f"Next gather available in {cooldown_seconds}s."
+    )
+    if storage_free <= storage_capacity * 0.2:
+        hints_message += f" WARNING: Storage nearly full ({storage_used}/{storage_capacity})."
 
     return {
         "gathered": resource_slug,
@@ -200,10 +213,13 @@ async def gather(
         "homeless_penalty_applied": homeless_penalty_applied,
         "base_value": float(good_data.get("base_value", 1)),
         "cash_earned": float(gather_cash),
+        "storage": {
+            "used": storage_used,
+            "capacity": storage_capacity,
+            "free": storage_free,
+        },
         "_hints": {
             "check_back_seconds": cooldown_seconds,
-            "message": f"You gathered 1x {good_data.get('name', resource_slug)} "
-                       f"and earned {float(gather_cash):.2f} cash. "
-                       f"Next gather available in {cooldown_seconds}s.",
+            "message": hints_message,
         },
     }

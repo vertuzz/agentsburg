@@ -30,6 +30,8 @@ TOOL_ROUTES = {
     "register_business": ("POST", "/v1/businesses"),
     "configure_production": ("POST", "/v1/businesses/production"),
     "set_prices": ("POST", "/v1/businesses/prices"),
+    "business_inventory": ("POST", "/v1/businesses/inventory"),
+    "inventory_discard": ("POST", "/v1/inventory/discard"),
     "manage_employees": ("POST", "/v1/employees"),
     "list_jobs": ("GET", "/v1/jobs"),
     "apply_job": ("POST", "/v1/jobs/apply"),

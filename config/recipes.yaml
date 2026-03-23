@@ -23,6 +23,122 @@
 recipes:
 
   # ═══════════════════════════════════════════
+  # EXTRACTION — Raw resource production at businesses
+  # Zero-input recipes for farms, mines, lumber mills, and fishing operations.
+  # Higher throughput than personal gathering but requires business registration.
+  # ═══════════════════════════════════════════
+
+  - slug: grow_wheat
+    name: "Grow Wheat"
+    output_good: wheat
+    output_quantity: 3
+    inputs: []
+    cooldown_seconds: 90
+    bonus_business_type: farm
+    bonus_cooldown_multiplier: 0.65
+    description: "Farm wheat. No material inputs required."
+
+  - slug: grow_herbs
+    name: "Grow Herbs"
+    output_good: herbs
+    output_quantity: 3
+    inputs: []
+    cooldown_seconds: 80
+    bonus_business_type: farm
+    bonus_cooldown_multiplier: 0.65
+    description: "Cultivate medicinal and culinary herbs."
+
+  - slug: grow_berries
+    name: "Pick Berries"
+    output_good: berries
+    output_quantity: 4
+    inputs: []
+    cooldown_seconds: 70
+    bonus_business_type: farm
+    bonus_cooldown_multiplier: 0.65
+    description: "Harvest wild and farmed berries."
+
+  - slug: grow_cotton
+    name: "Grow Cotton"
+    output_good: cotton
+    output_quantity: 3
+    inputs: []
+    cooldown_seconds: 80
+    bonus_business_type: farm
+    bonus_cooldown_multiplier: 0.65
+    description: "Cultivate raw cotton."
+
+  - slug: mine_iron
+    name: "Mine Iron Ore"
+    output_good: iron_ore
+    output_quantity: 2
+    inputs: []
+    cooldown_seconds: 100
+    bonus_business_type: mine
+    bonus_cooldown_multiplier: 0.65
+    description: "Extract iron ore from the earth."
+
+  - slug: mine_copper
+    name: "Mine Copper Ore"
+    output_good: copper_ore
+    output_quantity: 2
+    inputs: []
+    cooldown_seconds: 100
+    bonus_business_type: mine
+    bonus_cooldown_multiplier: 0.65
+    description: "Extract copper ore deposits."
+
+  - slug: quarry_stone
+    name: "Quarry Stone"
+    output_good: stone
+    output_quantity: 3
+    inputs: []
+    cooldown_seconds: 90
+    bonus_business_type: mine
+    bonus_cooldown_multiplier: 0.70
+    description: "Quarry raw stone blocks."
+
+  - slug: dig_clay
+    name: "Dig Clay"
+    output_good: clay
+    output_quantity: 3
+    inputs: []
+    cooldown_seconds: 80
+    bonus_business_type: mine
+    bonus_cooldown_multiplier: 0.70
+    description: "Dig riverbank clay."
+
+  - slug: dig_sand
+    name: "Dig Sand"
+    output_good: sand
+    output_quantity: 4
+    inputs: []
+    cooldown_seconds: 60
+    bonus_business_type: mine
+    bonus_cooldown_multiplier: 0.75
+    description: "Dig and sift sand for glassmaking."
+
+  - slug: chop_wood
+    name: "Chop Wood"
+    output_good: wood
+    output_quantity: 3
+    inputs: []
+    cooldown_seconds: 80
+    bonus_business_type: lumber_mill
+    bonus_cooldown_multiplier: 0.65
+    description: "Fell trees and chop raw wood."
+
+  - slug: catch_fish
+    name: "Catch Fish"
+    output_good: fish
+    output_quantity: 2
+    inputs: []
+    cooldown_seconds: 90
+    bonus_business_type: fishing_operation
+    bonus_cooldown_multiplier: 0.65
+    description: "Cast nets and catch fresh fish."
+
+  # ═══════════════════════════════════════════
   # RAW → INTERMEDIATE
   # ═══════════════════════════════════════════
 

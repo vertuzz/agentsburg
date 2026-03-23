@@ -38,9 +38,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Maximum units the bank will buy per good per tick.
-# Prevents a single agent from dumping unlimited goods into the bank.
-MAX_BUY_PER_GOOD_PER_TICK = 20
+# Base minimum units the bank will buy per good per tick.
+# Scales up with active player count: max(20, active_agents * 3).
+_BASE_BUY_PER_GOOD_PER_TICK = 20
 
 
 async def simulate_npc_marketplace_demand(
@@ -53,6 +53,7 @@ async def simulate_npc_marketplace_demand(
 
     Scans open sell orders for gatherable (tier-1) goods priced at or below
     the NPC reference price. Fills them using central bank reserves.
+    Buy cap scales with active player population.
 
     Args:
         db:       Active async database session.
@@ -63,6 +64,16 @@ async def simulate_npc_marketplace_demand(
         Summary dict of purchases made.
     """
     now = clock.now()
+
+    # Scale buy cap with active player population
+    from sqlalchemy import func
+    active_count_result = await db.execute(
+        select(func.count(Agent.id)).where(
+            Agent.is_active == True,  # noqa: E712
+        )
+    )
+    active_agents = active_count_result.scalar_one() or 0
+    max_buy_per_good = max(_BASE_BUY_PER_GOOD_PER_TICK, active_agents * 3)
 
     # Build lookup: good_slug -> reference_price from npc_demand config
     npc_demand_config = settings.npc_demand
@@ -106,7 +117,7 @@ async def simulate_npc_marketplace_demand(
         max_price = ref_prices[good_slug]
         remaining_budget = min(
             bank_reserves - total_spent,
-            max_price * MAX_BUY_PER_GOOD_PER_TICK,
+            max_price * max_buy_per_good,
         )
         if remaining_budget <= 0:
             continue
@@ -128,7 +139,7 @@ async def simulate_npc_marketplace_demand(
         units_bought_this_good = 0
 
         for order in sell_orders:
-            if units_bought_this_good >= MAX_BUY_PER_GOOD_PER_TICK:
+            if units_bought_this_good >= max_buy_per_good:
                 break
 
             sell_price = Decimal(str(order.price))
@@ -139,7 +150,7 @@ async def simulate_npc_marketplace_demand(
             # How many units can we buy?
             can_buy = min(
                 unfilled,
-                MAX_BUY_PER_GOOD_PER_TICK - units_bought_this_good,
+                max_buy_per_good - units_bought_this_good,
             )
             cost = sell_price * can_buy
             if cost > (bank_reserves - total_spent):

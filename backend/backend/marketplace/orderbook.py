@@ -511,7 +511,14 @@ async def cancel_order(
 
     if order.side == "sell":
         # Return unsold goods to inventory
-        await add_to_inventory(db, "agent", agent.id, order.good_slug, unfilled_qty, settings)
+        try:
+            await add_to_inventory(db, "agent", agent.id, order.good_slug, unfilled_qty, settings)
+        except ValueError:
+            raise ValueError(
+                f"Cannot cancel: returning {unfilled_qty}x {order.good_slug} would exceed your "
+                f"storage capacity. Free up space first by discarding goods via "
+                f"POST /v1/inventory/discard, then retry the cancel."
+            )
         # Deduct monetary fee from agent balance (cap at available balance to avoid negative)
         agent_bal = Decimal(str(agent.balance))
         cancel_fee = min(cancel_fee, max(agent_bal, Decimal("0")))

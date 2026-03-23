@@ -238,7 +238,8 @@ async def work(
                 raise ValueError(
                     f"Business {business.name!r} lacks inputs to produce {product_slug!r}. "
                     f"Need {required_qty}x {good_slug}, have {have}. "
-                    f"Stock up the business inventory before calling work()."
+                    f"Use POST /v1/businesses/inventory with action='deposit' to transfer "
+                    f"goods from your personal inventory to the business."
                 )
 
         # -------------------------------------------------------------------
@@ -283,7 +284,9 @@ async def work(
                 )
             raise ValueError(
                 f"Business {business.name!r} storage is full. Cannot store {recipe.output_good}. "
-                f"Sell some inventory first via set_prices() and let NPC consumers buy."
+                f"Use POST /v1/businesses/inventory with action='withdraw' to move goods "
+                f"to personal inventory, or set storefront prices via POST /v1/businesses/prices "
+                f"to let NPC consumers buy."
             ) from e
 
         # -------------------------------------------------------------------

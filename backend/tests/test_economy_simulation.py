@@ -127,7 +127,13 @@ async def test_grand_economy_simulation(client, app, clock, run_tick, redis_clie
     assert result["gathered"] == "berries"
     assert result["quantity"] == 1
     assert result["cooldown_seconds"] == 25
-    print(f"  Gathered berries: qty=1, cooldown=25s")
+    # Verify storage info in gather response
+    assert "storage" in result, "Gather response should include storage info"
+    assert "used" in result["storage"]
+    assert "capacity" in result["storage"]
+    assert "free" in result["storage"]
+    assert result["storage"]["capacity"] == 100  # default agent storage
+    print(f"  Gathered berries: qty=1, cooldown=25s, storage={result['storage']['used']}/{result['storage']['capacity']}")
 
     # Immediate retry: COOLDOWN_ACTIVE
     _, err = await g1.try_call("gather", {"resource": "berries"})
@@ -396,28 +402,60 @@ async def test_grand_economy_simulation(client, app, clock, run_tick, redis_clie
     assert len(jobs_list["items"]) > 0
     print(f"  list_jobs shows {len(jobs_list['items'])} job postings")
 
-    # --- 3f: Workers work ---
+    # --- 3f: Stock businesses via transfer endpoint ---
+    _print_section("Stocking businesses via POST /v1/businesses/inventory")
+
+    # Give agents raw materials in personal inventory
+    await give_inventory(app, "eco_miller", "wheat", 60)
+    await give_inventory(app, "eco_baker", "flour", 40)
+    await give_inventory(app, "eco_baker", "berries", 20)
+    await give_inventory(app, "eco_lumberjack", "wood", 60)
+
+    # Deposit wheat into mill via API
+    deposit_mill = await agents["eco_miller"].call("business_inventory", {
+        "action": "deposit", "business_id": mill_id, "good": "wheat", "quantity": 30,
+    })
+    assert deposit_mill["transferred"] == 30
+    assert deposit_mill["good"] == "wheat"
+    assert deposit_mill["action"] == "deposit"
+    assert deposit_mill["business_storage"]["used"] > 0
+    assert deposit_mill["agent_storage"]["free"] >= 0
+    print(f"  Miller deposited 30 wheat (biz storage: {deposit_mill['business_storage']['used']}/{deposit_mill['business_storage']['capacity']})")
+
+    # Transfer cooldown enforced
+    _, err = await agents["eco_miller"].try_call("business_inventory", {
+        "action": "deposit", "business_id": mill_id, "good": "wheat", "quantity": 10,
+    })
+    assert err == "COOLDOWN_ACTIVE"
+    print("  Transfer cooldown enforced (30s)")
+
+    # Advance past cooldown and deposit more
+    clock.advance(31)
+    await agents["eco_miller"].call("business_inventory", {
+        "action": "deposit", "business_id": mill_id, "good": "wheat", "quantity": 30,
+    })
+    print("  Miller deposited remaining 30 wheat after cooldown")
+
+    # Stock bakery (flour + berries)
+    clock.advance(31)
+    await agents["eco_baker"].call("business_inventory", {
+        "action": "deposit", "business_id": bakery_id, "good": "flour", "quantity": 40,
+    })
+    clock.advance(31)
+    await agents["eco_baker"].call("business_inventory", {
+        "action": "deposit", "business_id": bakery_id, "good": "berries", "quantity": 20,
+    })
+    print("  Baker deposited 40 flour + 20 berries")
+
+    # Stock lumber mill
+    clock.advance(31)
+    await agents["eco_lumberjack"].call("business_inventory", {
+        "action": "deposit", "business_id": lumber_id, "good": "wood", "quantity": 60,
+    })
+    print("  Lumberjack deposited 60 wood")
+
+    # --- 3g: Workers work ---
     _print_section("Workers producing goods")
-
-    # Seed business inventories with raw materials
-    async with app.state.session_factory() as session:
-        mill_uuid = _uuid.UUID(mill_id)
-        bakery_uuid = _uuid.UUID(bakery_id)
-        lumber_uuid = _uuid.UUID(lumber_id)
-
-        # Mill: wheat for flour
-        session.add(InventoryItem(owner_type="business", owner_id=mill_uuid,
-                                  good_slug="wheat", quantity=60))
-        # Bakery: flour + berries for bread (bake_bread: 2 flour + 1 berries -> 3 bread)
-        session.add(InventoryItem(owner_type="business", owner_id=bakery_uuid,
-                                  good_slug="flour", quantity=40))
-        session.add(InventoryItem(owner_type="business", owner_id=bakery_uuid,
-                                  good_slug="berries", quantity=20))
-        # Lumber mill: wood for lumber
-        session.add(InventoryItem(owner_type="business", owner_id=lumber_uuid,
-                                  good_slug="wood", quantity=60))
-        await session.commit()
-    print("  Business inventories seeded")
 
     # Worker1 works at mill
     worker1_balance_before = await get_balance(app, "eco_worker1")
@@ -466,7 +504,8 @@ async def test_grand_economy_simulation(client, app, clock, run_tick, redis_clie
     else:
         print(f"  Worker1 cooldown={work1['cooldown_seconds']}s (may include commute)")
 
-    # Verify business inventory
+    # Verify business inventory via DB
+    mill_uuid = _uuid.UUID(mill_id)
     async with app.state.session_factory() as session:
         flour_item = (await session.execute(
             select(InventoryItem).where(
@@ -478,6 +517,82 @@ async def test_grand_economy_simulation(client, app, clock, run_tick, redis_clie
         flour_qty = flour_item.quantity if flour_item else 0
     assert flour_qty > 0, "Mill should have produced flour"
     print(f"  Mill business inventory: {flour_qty} flour")
+
+    # --- 3h: Withdraw goods from business ---
+    _print_section("Withdrawing goods from business")
+
+    clock.advance(31)  # past transfer cooldown
+    withdraw_result = await agents["eco_miller"].call("business_inventory", {
+        "action": "withdraw", "business_id": mill_id, "good": "flour", "quantity": 2,
+    })
+    assert withdraw_result["transferred"] == 2
+    assert withdraw_result["action"] == "withdraw"
+    miller_status = await agents["eco_miller"].status()
+    miller_flour = [i for i in miller_status["inventory"] if i["good_slug"] == "flour"]
+    assert len(miller_flour) > 0 and miller_flour[0]["quantity"] >= 2
+    print(f"  Miller withdrew 2 flour to personal inventory")
+
+    # --- 3i: Extraction recipes (zero-input production at farm) ---
+    _print_section("Testing extraction recipes at farm")
+
+    # gatherer2 registers a farm (allowed in industrial zone)
+    await give_balance(app, "eco_gatherer2", 500)
+    s = await agents["eco_gatherer2"].status()
+    if s["housing"]["homeless"]:
+        await agents["eco_gatherer2"].call("rent_housing", {"zone": "outskirts"})
+
+    farm_reg = await agents["eco_gatherer2"].call("register_business", {
+        "name": "Test Farm", "type": "farm", "zone": "industrial",
+    })
+    farm_id = farm_reg["business_id"]
+    print(f"  Registered: Test Farm (farm, industrial) id={farm_id[:8]}...")
+
+    # Configure production for wheat (extraction recipe, no inputs needed)
+    config_farm = await agents["eco_gatherer2"].call("configure_production", {
+        "business_id": farm_id, "product": "wheat",
+    })
+    assert config_farm["product_slug"] == "wheat"
+    assert config_farm["bonus_applies"] is True  # farm gets bonus on grow_wheat
+    print(f"  Farm configured for wheat (bonus={config_farm['bonus_applies']})")
+
+    # Work at own farm — should produce wheat with zero inputs
+    clock.advance(120)  # clear any work cooldown
+    farm_work = await agents["eco_gatherer2"].call("work", {})
+    assert farm_work["produced"]["good"] == "wheat"
+    assert farm_work["produced"]["quantity"] == 3  # grow_wheat: 0 inputs → 3 wheat
+    assert farm_work["employed"] is False  # self-employed
+    print(f"  Extraction recipe: produced {farm_work['produced']['quantity']} wheat (no inputs!)")
+
+    # Withdraw the wheat from farm to personal inventory
+    clock.advance(31)
+    withdraw_wheat = await agents["eco_gatherer2"].call("business_inventory", {
+        "action": "withdraw", "business_id": farm_id, "good": "wheat", "quantity": 2,
+    })
+    assert withdraw_wheat["transferred"] == 2
+    print(f"  Withdrew 2 wheat from farm to personal inventory")
+
+    # --- 3j: Inventory discard ---
+    _print_section("Testing inventory discard")
+
+    # Give gatherer1 some stone to discard
+    await give_inventory(app, "eco_gatherer1", "stone", 10)
+    g1_before = await agents["eco_gatherer1"].status()
+    storage_before = g1_before["storage"]["used"]
+
+    discard_result = await agents["eco_gatherer1"].call("inventory_discard", {
+        "good": "stone", "quantity": 5,
+    })
+    assert discard_result["discarded"]["good"] == "stone"
+    assert discard_result["discarded"]["quantity"] == 5
+    assert discard_result["storage"]["used"] < storage_before
+    print(f"  Discarded 5 stone, storage: {discard_result['storage']['used']}/{discard_result['storage']['capacity']}")
+
+    # Cannot discard more than owned
+    _, err = await agents["eco_gatherer1"].try_call("inventory_discard", {
+        "good": "stone", "quantity": 9999,
+    })
+    assert err == "INSUFFICIENT_INVENTORY"
+    print(f"  Cannot discard more than owned (error={err})")
 
     # Run 2 days of ticks
     await run_tick(hours=48)
