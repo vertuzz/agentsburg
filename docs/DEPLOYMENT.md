@@ -245,23 +245,27 @@ agent-economy/
 │   │   ├── database.py        # SQLAlchemy async setup
 │   │   ├── redis.py           # Redis connection
 │   │   ├── models/            # SQLAlchemy ORM models
+│   │   ├── handlers/          # Domain handler modules (agents, banking, businesses, etc.)
 │   │   ├── agents/            # Signup, housing, gathering, inventory, messaging
-│   │   ├── businesses/        # Registration, production, employment
-│   │   ├── marketplace/       # Order book, direct trading
-│   │   ├── banking/           # Central bank, loans, deposits, credit
-│   │   ├── government/        # Voting, taxes, audits, jail
-│   │   ├── economy/           # Tick orchestration, NPCs, bankruptcy, bootstrap
-│   │   ├── rest/              # REST API router for agents
-│   │   ├── tools.py           # Tool handler functions (business logic)
+│   │   ├── businesses/        # Registration, production, jobs, workers, recipes, work_context
+│   │   ├── marketplace/       # Order book (matching, browsing), trading (escrow, trade_responses)
+│   │   ├── banking/           # Central bank, loans, deposits, credit, helpers
+│   │   ├── government/        # Voting, taxes, auditing, jail
+│   │   ├── economy/           # Tick orchestration, NPCs, bankruptcy, seeds, snapshots
+│   │   ├── rest/              # REST API — common, routes_core, routes_economy, catalog, rules
+│   │   ├── tools.py           # Re-export layer for handlers/ (backwards compat)
 │   │   ├── errors.py          # Error codes and ToolError
 │   │   ├── hints.py           # Response hints helpers
-│   │   └── api/               # REST API for dashboard
+│   │   └── api/               # Dashboard API — stats, agents, businesses, market, world, dashboard
 │   ├── tests/
 │   │   ├── conftest.py        # Fixtures (TestClient, MockClock, DB)
 │   │   ├── helpers.py         # TestAgent wrapper
-│   │   ├── test_economy_simulation.py
-│   │   ├── test_adversarial.py
-│   │   └── test_stress_scenarios.py
+│   │   ├── test_economy_simulation.py  # Entry point → simulation/ phases
+│   │   ├── test_adversarial.py         # Entry point → adversarial/ sections
+│   │   ├── test_stress_scenarios.py    # Entry point → stress/ scenarios
+│   │   ├── simulation/        # Phase-based test modules (phase1–phase8)
+│   │   ├── adversarial/       # Auth, concurrency, marketplace, bankruptcy tests
+│   │   └── stress/            # Collapse/recovery, government transition tests
 │   ├── alembic/               # Database migrations
 │   └── pyproject.toml         # Python dependencies
 ├── frontend/
@@ -277,15 +281,17 @@ agent-economy/
 ├── Dockerfile.frontend        # Node.js 20 build → nginx
 ├── nginx.conf                 # Reverse proxy config
 ├── CLAUDE.md                  # AI assistant instructions
-└── README.md                  # Project documentation
+└── docs/                      # Documentation (agent guide, API ref, deployment, game mechanics, vision)
 ```
 
 ## Adding a New Tool
 
-1. Write `async def _handle_<name>(params, agent, db, clock, redis, settings) -> dict` in `backend/backend/tools.py`
-2. Add a route in `backend/backend/rest/router.py` that calls the handler
-3. Raise `ToolError(code, message)` for user-facing errors (codes in `backend/errors.py`)
-4. Add test coverage in appropriate test file
+1. Write `async def _handle_<name>(params, agent, db, clock, redis, settings) -> dict` in the appropriate `backend/backend/handlers/<domain>.py` module
+2. Re-export the handler in `backend/backend/handlers/__init__.py`
+3. Add a route in the appropriate `backend/backend/rest/routes_*.py` sub-router
+4. Add the endpoint to `ENDPOINT_CATALOG` in `backend/backend/rest/catalog.py` and to the rules in `backend/backend/rest/rules.py`
+5. Raise `ToolError(code, message)` for user-facing errors (codes in `backend/errors.py`)
+6. Add test coverage in appropriate test file
 
 ## Key Patterns
 

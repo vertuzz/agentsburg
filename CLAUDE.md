@@ -18,25 +18,29 @@ cd backend && uv run alembic revision --autogenerate -m "desc"           # New m
 backend/
   backend/
     agents/       # Signup, identity, gathering, housing, inventory
-    businesses/   # Registration, production, employment
-    marketplace/  # Order book, direct trading (escrow)
-    banking/      # Central bank, loans, deposits, credit scoring
-    government/   # Voting, taxes, audits, jail
-    economy/      # Tick orchestration, NPC simulation, bankruptcy
-    rest/         # REST API router (/v1/* endpoints)
-    tools.py      # Business logic handlers for all 20 tools
+    handlers/     # Domain handler modules (agents, banking, businesses, etc.)
+    businesses/   # Registration, production, employment, jobs, workers, recipes
+    marketplace/  # Order book (matching, browsing), trading (escrow, trade_responses)
+    banking/      # Central bank, loans, deposits, credit scoring, helpers
+    government/   # Voting, taxes, auditing, jail
+    economy/      # Tick orchestration, NPC simulation, bankruptcy, seeds, snapshots
+    rest/         # REST API router — common, routes_core, routes_economy, catalog, rules
+    tools.py      # Re-export layer for handlers/ (backwards compat)
     errors.py     # Error codes + ToolError exception
     hints.py      # Response hints (next_steps, cooldowns, etc.)
-    api/          # REST API for dashboard (GET /api/*)
+    api/          # Dashboard API — stats, agents, businesses, market, world, dashboard
     models/       # SQLAlchemy async ORM models
     clock.py      # Clock protocol — RealClock + MockClock
     config.py     # YAML loader + pydantic-settings
   tests/
     conftest.py                  # TestClient, MockClock, DB fixtures
     helpers.py                   # TestAgent (wraps httpx, sends real REST calls)
-    test_economy_simulation.py   # Grand lifecycle: all 20 tools, 12 agents, 8 phases
-    test_adversarial.py          # Security, concurrency, edge cases (15 sections)
-    test_stress_scenarios.py     # Economic collapse/recovery, government transitions
+    test_economy_simulation.py   # Entry point — imports simulation/ phases
+    test_adversarial.py          # Entry point — imports adversarial/ sections
+    test_stress_scenarios.py     # Entry point — imports stress/ scenarios
+    simulation/                  # Phase-based test modules (phase1–phase8)
+    adversarial/                 # Auth, concurrency, marketplace, bankruptcy tests
+    stress/                      # Collapse/recovery, government transition tests
   alembic/        # Migrations
 config/           # YAML config files (goods, recipes, zones, government, ...)
 frontend/         # React + TypeScript + Vite
@@ -54,9 +58,10 @@ frontend/         # React + TypeScript + Vite
 
 ## Adding a Tool
 
-1. Write `async def _handle_<name>(params, agent, db, clock, redis, settings) -> dict` in `backend/tools.py`
-2. Add a route in `backend/rest/router.py` that calls the handler
-3. Add the endpoint to the `ENDPOINT_CATALOG` list in `router.py` and to the `/v1/rules` response
+1. Write `async def _handle_<name>(params, agent, db, clock, redis, settings) -> dict` in the appropriate `backend/handlers/<domain>.py` module
+2. Re-export the handler in `backend/handlers/__init__.py`
+3. Add a route in the appropriate `backend/rest/routes_*.py` sub-router
+4. Add the endpoint to `ENDPOINT_CATALOG` in `backend/rest/catalog.py` and to the rules in `backend/rest/rules.py`
 
 Raise `ToolError(code, message)` for user-facing errors. Use codes from `backend/errors.py`.
 
