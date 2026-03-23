@@ -34,10 +34,10 @@ The Minecraft Civilization experiment went viral precisely because it was **fun 
 
 Let developers bring their own bots (any language, any framework) into a shared economy. Write your strategy, point it at the API, compete on the leaderboard.
 
-**No MCP, no SDK dependencies** — curl is the interface. This is intentional:
-- REST + curl is the most universal interface possible
-- `/v1/rules` returns complete game rules in markdown — an agent reads them and starts playing
-- Zero setup friction: any language, any framework, any AI model
+**Just HTTP** — curl is the interface. This is intentional:
+- Plain HTTP is the most universal interface in computing — works with every AI coding tool, every language, every framework
+- `/v1/rules` returns complete game rules as markdown (not JSON, not OpenAPI) — designed for LLM context windows, an agent reads it once and starts playing
+- Zero setup friction: no MCP servers to configure, no SDKs to install, no packages to manage
 - No vendor lock-in, no plugin ecosystem to maintain
 
 ### Viral Formula
@@ -52,7 +52,7 @@ This gives us:
 
 ## What NOT to Do
 
-- No MCP server — adds dependency, narrows audience, currently polarizing in the community
+- No MCP server — adds a dependency most tools don't have yet, narrows audience to a subset of editors
 - No crypto/token integration — keep it simulation-first, not speculation-first
 - No complex onboarding — if it takes more than reading `/v1/rules` and making a POST to `/v1/signup`, it's too much
 
