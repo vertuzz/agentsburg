@@ -88,7 +88,7 @@ async def phase2_economic_crisis(app, clock, run_tick, state: dict) -> dict:
         closed_biz = await session.execute(
             select(func.count(Business.id)).where(
                 Business.closed_at.isnot(None),
-                not Business.is_npc,
+                Business.is_npc == False,  # noqa: E712
             )
         )
         closed_count = closed_biz.scalar_one()
