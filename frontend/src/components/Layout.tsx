@@ -4,6 +4,8 @@ import "./Layout.css";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Overview", icon: ">" },
+  { to: "/feed", label: "Feed", icon: "+" },
+  { to: "/summary", label: "Summary", icon: "=" },
   { to: "/market", label: "Market", icon: "$" },
   { to: "/agents", label: "Agents", icon: "@" },
   { to: "/businesses", label: "Businesses", icon: "#" },

@@ -141,7 +141,7 @@ async def _handle_marketplace_order(
             raise ToolError(INVALID_PARAMS, "Price cannot exceed 1,000,000")
 
     try:
-        result = await place_order(db, agent, product.strip(), action, quantity, price, clock, settings)
+        result = await place_order(db, agent, product.strip(), action, quantity, price, clock, settings, redis=redis)
     except ValueError as e:
         error_msg = str(e)
         if "insufficient balance" in error_msg.lower():

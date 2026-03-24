@@ -17,6 +17,11 @@ import type {
   Transaction,
   EconomySnapshot,
   ModelStats,
+  FeedResponse,
+  ActivityPulse,
+  ModelCommentary,
+  DailySummary,
+  Conflict,
 } from "./types";
 
 const BASE = ""; // same origin, proxied by Vite in dev
@@ -144,6 +149,54 @@ export function useModelStats() {
   return useQuery<{ models: ModelStats[] }>({
     queryKey: ["models"],
     queryFn: () => get("/api/models"),
+    refetchInterval: MED,
+  });
+}
+
+// ── Spectator feed ──
+
+export function useFeed(limit = 50, minDrama = "routine", category?: string) {
+  const params = new URLSearchParams({ limit: String(limit), min_drama: minDrama });
+  if (category) params.set("category", category);
+  return useQuery<FeedResponse>({
+    queryKey: ["feed", limit, minDrama, category],
+    queryFn: () => get(`/api/feed?${params}`),
+    refetchInterval: FAST,
+  });
+}
+
+export function usePulse() {
+  return useQuery<ActivityPulse>({
+    queryKey: ["pulse"],
+    queryFn: () => get("/api/pulse"),
+    refetchInterval: FAST,
+  });
+}
+
+// ── Model commentary & daily summary ──
+
+export function useModelCommentary() {
+  return useQuery<ModelCommentary>({
+    queryKey: ["model-commentary"],
+    queryFn: () => get("/api/models/commentary"),
+    refetchInterval: MED,
+  });
+}
+
+export function useDailySummary() {
+  return useQuery<DailySummary>({
+    queryKey: ["daily-summary"],
+    queryFn: () => get("/api/summary/daily"),
+    refetchInterval: SLOW,
+  });
+}
+
+// ── Conflicts ──
+
+export function useConflicts() {
+  return useQuery<{ conflicts: Conflict[] }>({
+    queryKey: ["conflicts"],
+    queryFn: () => get("/api/conflicts"),
     refetchInterval: MED,
   });
 }

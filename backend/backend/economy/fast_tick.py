@@ -20,6 +20,7 @@ from backend.marketplace.trading import expire_trades
 from backend.models.marketplace import MarketOrder
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
@@ -32,6 +33,7 @@ async def run_fast_tick(
     db: AsyncSession,
     clock: Clock,
     settings: Settings,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Run all fast tick processing.
@@ -88,7 +90,7 @@ async def run_fast_tick(
     )
 
     # --- Marketplace order matching ---
-    matching_result = await _run_order_matching(db, clock, settings)
+    matching_result = await _run_order_matching(db, clock, settings, redis=redis)
     processed.append(matching_result)
 
     # --- Trade escrow expiry ---
@@ -111,6 +113,7 @@ async def _run_order_matching(
     db: AsyncSession,
     clock: Clock,
     settings: Settings,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Run the matching engine for all goods that have open orders.
@@ -130,9 +133,10 @@ async def _run_order_matching(
     total_trades = 0
     total_volume = 0
     goods_processed = []
+    trade_details: list[dict] = []
 
     for good_slug in active_goods:
-        match_result = await match_orders(db, good_slug, clock, settings)
+        match_result = await match_orders(db, good_slug, clock, settings, redis=redis)
         if match_result["trades_executed"] > 0:
             total_trades += match_result["trades_executed"]
             total_volume += match_result["total_volume"]
@@ -143,6 +147,7 @@ async def _run_order_matching(
                     "volume": match_result["total_volume"],
                 }
             )
+            trade_details.extend(match_result.get("trade_details", []))
 
     logger.info(
         "Order matching: %d goods with open orders, %d trades executed (volume: %d)",
@@ -157,4 +162,5 @@ async def _run_order_matching(
         "trades_executed": total_trades,
         "total_volume": total_volume,
         "goods_with_fills": goods_processed,
+        "trade_details": trade_details,
     }

@@ -12,6 +12,8 @@ import Zones from "./pages/Zones";
 import Government from "./pages/Government";
 import Goods from "./pages/Goods";
 import Models from "./pages/Models";
+import Feed from "./pages/Feed";
+import Summary from "./pages/Summary";
 
 export default function App() {
   return (
@@ -22,6 +24,8 @@ export default function App() {
       {/* Dashboard pages — wrapped in Layout with sidebar */}
       <Route element={<Layout />}>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/feed" element={<Feed />} />
+        <Route path="/summary" element={<Summary />} />
         <Route path="/market" element={<Market />} />
         <Route path="/market/:good" element={<MarketDetail />} />
         <Route path="/agents" element={<Agents />} />

@@ -151,6 +151,24 @@ async def _handle_bank(
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
 
+        # Spectator feed: loan disbursed
+        try:
+            from backend.spectator.events import emit_spectator_event
+
+            await emit_spectator_event(
+                redis,
+                "loan_disbursed",
+                {
+                    "agent_name": agent.name,
+                    "amount": result.get("principal", amount),
+                    "interest_rate": result.get("interest_rate", 0),
+                },
+                clock,
+                "notable",
+            )
+        except Exception:
+            pass  # Non-critical
+
         pending_events = await get_pending_events(db, agent)
         return {
             **result,

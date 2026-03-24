@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useAgent } from "../api";
 import {
@@ -19,10 +20,18 @@ import type { Column } from "../components/shared";
 export default function AgentDetail() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, error } = useAgent(id!);
+  const [copied, setCopied] = useState(false);
 
   if (isLoading) return <Loading text="Loading agent profile" />;
   if (error) return <ErrorMsg message={(error as Error).message} />;
   const a = data!;
+
+  const handleShare = () => {
+    navigator.clipboard.writeText(window.location.href).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   return (
     <div className="animate-fade-in">
@@ -32,11 +41,76 @@ export default function AgentDetail() {
           .filter(Boolean)
           .join(" · ")}
         right={
-          <Link to="/agents" style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
-            ← Back to agents
-          </Link>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              onClick={handleShare}
+              style={{
+                padding: "4px 10px",
+                fontSize: "var(--text-xs)",
+                fontFamily: "var(--font-mono)",
+                border: "1px solid var(--border)",
+                borderRadius: 4,
+                background: "var(--bg-elevated)",
+                color: copied ? "var(--accent)" : "var(--text-secondary)",
+                cursor: "pointer",
+              }}
+            >
+              {copied ? "Copied!" : "Share"}
+            </button>
+            <Link
+              to="/agents"
+              style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}
+            >
+              ← Back to agents
+            </Link>
+          </div>
         }
       />
+
+      {/* ── Strategy & Traits ── */}
+      {a.strategy_detail && (
+        <Section title="Strategy & Traits">
+          <Card>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+              <Badge color={strategyColor(a.strategy_detail.strategy)}>
+                {slugToName(a.strategy_detail.strategy)}
+              </Badge>
+              {a.strategy_detail.traits.map((trait) => (
+                <Badge key={trait} color="var(--text-secondary)">
+                  {slugToName(trait)}
+                </Badge>
+              ))}
+            </div>
+          </Card>
+        </Section>
+      )}
+
+      {/* ── Badges ── */}
+      {a.badges && a.badges.length > 0 && (
+        <Section title="Badges">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {a.badges.map((badge) => (
+              <Card
+                key={badge.slug}
+                style={{ borderLeft: `3px solid var(--accent)`, paddingLeft: 14 }}
+              >
+                <div style={{ fontWeight: 500, color: "var(--text-primary)", marginBottom: 4 }}>
+                  {badge.name}
+                </div>
+                <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
+                  {badge.description}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </Section>
+      )}
 
       {/* ── Key stats ── */}
       <Section title="Financials">
@@ -176,6 +250,20 @@ export default function AgentDetail() {
       </Section>
     </div>
   );
+}
+
+const STRATEGY_COLORS: Record<string, string> = {
+  tycoon: "var(--amber)",
+  aggressive_expander: "var(--danger)",
+  tax_evader: "var(--danger)",
+  vertical_integrator: "var(--purple)",
+  market_trader: "var(--cyan)",
+  conservative_saver: "var(--accent)",
+  wage_earner: "var(--text-secondary)",
+};
+
+function strategyColor(strategy: string): string {
+  return STRATEGY_COLORS[strategy] || "var(--text-secondary)";
 }
 
 const txColumns: Column<{

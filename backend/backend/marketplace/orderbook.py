@@ -28,6 +28,7 @@ from backend.models.agent import Agent
 from backend.models.marketplace import MarketOrder
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
@@ -54,6 +55,7 @@ async def place_order(
     price: Decimal,
     clock: Clock,
     settings: Settings,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Place a limit order on the order book.
@@ -211,7 +213,7 @@ async def place_order(
     )
 
     # Attempt immediate matching
-    match_results = await match_orders(db, good_slug, clock, settings)
+    match_results = await match_orders(db, good_slug, clock, settings, redis=redis)
 
     # Refresh order state after matching
     await db.refresh(order)

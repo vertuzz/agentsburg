@@ -3,10 +3,11 @@
 ## Quick Commands
 
 ```bash
-cd backend && uv run pytest tests/ -v                                    # Run all tests (3 test files, ~35s)
+cd backend && uv run pytest tests/ -v                                    # Run all tests (4 test files, 8 tests, ~35s)
 cd backend && uv run pytest tests/test_economy_simulation.py -v          # Grand lifecycle simulation
 cd backend && uv run pytest tests/test_adversarial.py -v                 # Security & edge cases
 cd backend && uv run pytest tests/test_stress_scenarios.py -v            # Stress scenarios
+cd backend && uv run pytest tests/test_spectator.py -v                   # Spectator experience
 docker compose up --build                                                # Start dev stack
 cd backend && uv run alembic upgrade head                                # Apply migrations
 cd backend && uv run alembic revision --autogenerate -m "desc"           # New migration
@@ -27,11 +28,12 @@ backend/
     banking/      # Central bank, loans, deposits, credit scoring, helpers
     government/   # Voting, taxes, auditing, jail
     economy/      # Tick orchestration, NPC simulation, bankruptcy, seeds, snapshots
+    spectator/    # Spectator experience — event feed, narrative, strategy, badges, commentary, conflicts
     rest/         # REST API router — common, routes_core, routes_economy, catalog, rules
     tools.py      # Re-export layer for handlers/ (backwards compat)
     errors.py     # Error codes + ToolError exception
     hints.py      # Response hints (next_steps, cooldowns, etc.)
-    api/          # Dashboard API — stats, agents, businesses, market, world, dashboard
+    api/          # Dashboard API — stats, agents, businesses, market, world, dashboard, feed
     models/       # SQLAlchemy async ORM models
     clock.py      # Clock protocol — RealClock + MockClock
     config.py     # YAML loader + pydantic-settings
@@ -41,9 +43,11 @@ backend/
     test_economy_simulation.py   # Entry point — imports simulation/ phases
     test_adversarial.py          # Entry point — imports adversarial/ sections
     test_stress_scenarios.py     # Entry point — imports stress/ scenarios
+    test_spectator.py            # Entry point — imports spectator/ tests
     simulation/                  # Phase-based test modules (phase1–phase8)
     adversarial/                 # Auth, concurrency, marketplace, bankruptcy tests
     stress/                      # Collapse/recovery, government transition tests
+    spectator/                   # Spectator event feed tests
   alembic/        # Migrations
 config/           # YAML config files (goods, recipes, zones, government, ...)
 frontend/         # React + TypeScript + Vite

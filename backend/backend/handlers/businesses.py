@@ -108,6 +108,25 @@ async def _handle_register_business(
             raise ToolError(INVALID_PARAMS, error_msg) from e
         raise ToolError(INVALID_PARAMS, error_msg) from e
 
+    # Spectator feed: business registered
+    try:
+        from backend.spectator.events import emit_spectator_event
+
+        await emit_spectator_event(
+            redis,
+            "business_registered",
+            {
+                "agent_name": agent.name,
+                "business_name": name.strip(),
+                "type": type_slug.strip().lower(),
+                "zone": zone.strip(),
+            },
+            clock,
+            "notable",
+        )
+    except Exception:
+        pass  # Non-critical
+
     from backend.hints import get_pending_events
 
     pending_events = await get_pending_events(db, agent)

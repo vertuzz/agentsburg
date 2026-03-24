@@ -22,6 +22,7 @@ from backend.models.marketplace import MarketOrder, MarketTrade
 from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
@@ -37,6 +38,7 @@ async def match_orders(
     good_slug: str,
     clock: Clock,
     settings: Settings,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Run the matching engine for a specific good.
@@ -59,6 +61,7 @@ async def match_orders(
     now = clock.now()
     trades_executed = 0
     total_volume = 0
+    trade_details: list[dict] = []
 
     # Load all open buy orders for this good, sorted by price DESC then created_at ASC
     # (highest bidder first; earliest order breaks ties)
@@ -89,7 +92,7 @@ async def match_orders(
     sell_orders = list(sell_result.scalars().all())
 
     if not buy_orders or not sell_orders:
-        return {"trades_executed": 0, "total_volume": 0}
+        return {"trades_executed": 0, "total_volume": 0, "trade_details": []}
 
     buy_idx = 0
     sell_idx = 0
@@ -239,6 +242,25 @@ async def match_orders(
 
         trades_executed += 1
         total_volume += fill_qty
+        trade_detail = {
+            "buyer_name": buyer.name,
+            "seller_name": seller.name,
+            "good_slug": good_slug,
+            "quantity": fill_qty,
+            "price": float(exec_price),
+            "total_value": float(exec_price * fill_qty),
+        }
+        trade_details.append(trade_detail)
+
+        # Emit spectator event for each fill
+        if redis is not None:
+            try:
+                from backend.spectator.events import emit_spectator_event
+
+                drama = "notable" if trade_detail["total_value"] > 50 else "routine"
+                await emit_spectator_event(redis, "marketplace_fill", trade_detail, clock, drama)
+            except Exception:
+                pass
 
         logger.info(
             "Trade executed: %dx %s @ %.2f (buyer: %s, seller: %s)",
@@ -249,4 +271,4 @@ async def match_orders(
             seller.name,
         )
 
-    return {"trades_executed": trades_executed, "total_volume": total_volume}
+    return {"trades_executed": trades_executed, "total_volume": total_volume, "trade_details": trade_details}

@@ -89,7 +89,7 @@ async def run_tick(
 
     try:
         # --- Always run fast tick ---
-        fast_result = await run_fast_tick(db, clock, settings)
+        fast_result = await run_fast_tick(db, clock, settings, redis=redis)
         results["fast_tick"] = fast_result
 
         # --- Check hourly boundary ---
@@ -126,7 +126,7 @@ async def run_tick(
 
         if now_ts - last_daily >= DAILY_INTERVAL + random.uniform(0, 60):
             logger.info("Running daily tick at %s", now.isoformat())
-            daily_results = await _run_daily_tick(db, clock, settings)
+            daily_results = await _run_daily_tick(db, clock, settings, redis=redis)
             results["daily_tick"] = daily_results
             await redis.set(LAST_DAILY_KEY, str(now_ts))
 
@@ -139,6 +139,9 @@ async def run_tick(
             weekly_results = await _run_weekly_tick(db, clock, settings)
             results["weekly_tick"] = weekly_results
             await redis.set(LAST_WEEKLY_KEY, str(now_ts))
+
+            # Spectator feed: election results
+            await _emit_election_spectator_event(redis, clock, settings, weekly_results)
 
         # Commit all changes from this tick cycle
         await db.commit()
@@ -207,6 +210,19 @@ async def _run_slow_tick(
     # Flush to ensure consistency before bankruptcy check
     await db.flush()
 
+    # --- Spectator feed: emit narrative events for notable tick results ---
+    if redis is not None:
+        await _emit_slow_tick_spectator_events(
+            redis,
+            clock,
+            survival,
+            rent,
+            tax_results,
+            audit_results,
+            loan_payments,
+            bankruptcy,
+        )
+
     return {
         "tax_collection": tax_results,
         "audits": audit_results,
@@ -223,6 +239,7 @@ async def _run_daily_tick(
     db: AsyncSession,
     clock: Clock,
     settings: Settings,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Run all daily tick processing.
@@ -243,6 +260,15 @@ async def _run_daily_tick(
         processed.append("data_maintenance")
     except Exception:
         logger.exception("Daily maintenance (snapshot/downsampling) failed — continuing")
+
+    # Spectator: snapshot wealth data for daily summary trends
+    if redis is not None:
+        try:
+            from backend.spectator.summary import snapshot_wealth_data
+
+            await snapshot_wealth_data(db, redis, clock)
+        except Exception:
+            logger.warning("Failed to snapshot wealth data", exc_info=True)
 
     return {"processed": processed, "maintenance": snapshot_result}
 
@@ -272,3 +298,87 @@ async def _run_weekly_tick(
     except Exception:
         logger.exception("Election tally failed — continuing")
         return {"type": "election_tally", "error": "failed"}
+
+
+async def _emit_slow_tick_spectator_events(
+    redis: aioredis.Redis,
+    clock: Clock,
+    survival: dict,
+    rent: dict,
+    tax_results: dict,
+    audit_results: dict,
+    loan_payments: dict,
+    bankruptcy: dict,
+) -> None:
+    """Emit spectator feed events for slow tick results."""
+    from backend.spectator.events import emit_spectator_event
+
+    try:
+        # Survival costs (routine — always happens)
+        if survival.get("agents_charged", 0) > 0:
+            await emit_spectator_event(redis, "survival_costs", survival, clock, "routine")
+
+        # Rent (notable if evictions happened)
+        if rent.get("agents_charged", 0) > 0 or rent.get("agents_evicted", 0) > 0:
+            drama = "notable" if rent.get("agents_evicted", 0) > 0 else "routine"
+            await emit_spectator_event(redis, "rent_summary", rent, clock, drama)
+
+        # Tax collection (routine)
+        if not tax_results.get("skipped") and tax_results.get("total_collected", 0) > 0:
+            await emit_spectator_event(redis, "tax_summary", tax_results, clock, "routine")
+
+        # Audits (notable if violations found)
+        if not audit_results.get("skipped"):
+            drama = "notable" if audit_results.get("violations_found", 0) > 0 else "routine"
+            if audit_results.get("agents_audited", 0) > 0:
+                await emit_spectator_event(redis, "audit_summary", audit_results, clock, drama)
+
+        # Loan defaults (notable)
+        if not loan_payments.get("skipped") and loan_payments.get("defaults", 0) > 0:
+            await emit_spectator_event(redis, "loan_default", loan_payments, clock, "notable")
+
+        # Bankruptcies (critical!)
+        if bankruptcy.get("count", 0) > 0:
+            await emit_spectator_event(redis, "bankruptcy_summary", bankruptcy, clock, "critical")
+    except Exception:
+        logger.warning("Failed to emit slow tick spectator events", exc_info=True)
+
+
+async def _emit_election_spectator_event(
+    redis: aioredis.Redis,
+    clock: Clock,
+    settings: Settings,
+    election_result: dict,
+) -> None:
+    """Emit a spectator event for election results."""
+    from backend.spectator.events import emit_spectator_event
+
+    if election_result.get("error"):
+        return
+
+    try:
+        total_votes = election_result.get("total_votes", 0)
+        vote_counts = election_result.get("vote_counts", {})
+        winner = election_result.get("winner", "")
+        winner_votes = vote_counts.get(winner, 0)
+        vote_pct = round(winner_votes / total_votes * 100) if total_votes > 0 else 0
+
+        # Look up template names
+        templates = settings.government.get("templates", [])
+        name_map = {t["slug"]: t.get("name", t["slug"]) for t in templates}
+
+        detail = {
+            "winner": winner,
+            "winner_name": name_map.get(winner, winner),
+            "previous": election_result.get("previous", ""),
+            "previous_name": name_map.get(election_result.get("previous", ""), ""),
+            "changed": election_result.get("changed", False),
+            "total_votes": total_votes,
+            "vote_pct": vote_pct,
+            "vote_counts": vote_counts,
+        }
+
+        drama = "critical" if election_result.get("changed") else "notable"
+        await emit_spectator_event(redis, "election", detail, clock, drama)
+    except Exception:
+        logger.warning("Failed to emit election spectator event", exc_info=True)

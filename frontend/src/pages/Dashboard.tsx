@@ -10,7 +10,14 @@ import {
   Bar,
   CartesianGrid,
 } from "recharts";
-import { useStats, useLeaderboards, useRecentTransactions, useEconomyHistory } from "../api";
+import {
+  useStats,
+  useLeaderboards,
+  useRecentTransactions,
+  useEconomyHistory,
+  useFeed,
+  useConflicts,
+} from "../api";
 import {
   Loading,
   ErrorMsg,
@@ -21,13 +28,15 @@ import {
   Badge,
   PageHeader,
 } from "../components/shared";
-import { fmt, fmtInt, fmtPct, fmtTime, txTypeColor } from "../components/formatters";
+import { fmt, fmtInt, fmtPct, fmtTime, slugToName, txTypeColor } from "../components/formatters";
 
 export default function Dashboard() {
   const stats = useStats();
   const leaderboards = useLeaderboards();
   const tx = useRecentTransactions(20);
   const history = useEconomyHistory();
+  const feed = useFeed(5, "notable");
+  const conflicts = useConflicts();
 
   if (stats.isLoading) return <Loading text="Initializing economy feed" />;
   if (stats.error) return <ErrorMsg message={(stats.error as Error).message} />;
@@ -69,8 +78,57 @@ export default function Dashboard() {
             value={fmtInt(s.businesses.total)}
             sub={`${s.businesses.agent} agent · ${s.businesses.npc} NPC`}
           />
+          {feed.data?.pulse && (
+            <StatCard
+              icon="+"
+              label="Events (1h)"
+              value={fmtInt(feed.data.pulse.count_1h)}
+              sub={`${feed.data.pulse.count_24h} today`}
+              color="var(--purple)"
+            />
+          )}
         </Grid>
       </Section>
+
+      {/* ── Headlines ── */}
+      {feed.data?.events && feed.data.events.length > 0 && (
+        <Section title="Headlines">
+          <Card style={{ padding: 0 }}>
+            {feed.data.events.map((ev, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 14px",
+                  borderBottom: "1px solid var(--border)",
+                  borderLeft: `3px solid ${ev.drama === "critical" ? "var(--danger)" : "var(--amber)"}`,
+                }}
+              >
+                <span style={{ fontSize: "var(--text-sm)", color: "var(--text-primary)" }}>
+                  {ev.text}
+                </span>
+                <span
+                  style={{
+                    fontSize: "var(--text-xs)",
+                    color: "var(--text-muted)",
+                    whiteSpace: "nowrap",
+                    marginLeft: 12,
+                  }}
+                >
+                  {fmtTime(ev.ts)}
+                </span>
+              </div>
+            ))}
+          </Card>
+          <div style={{ marginTop: 8, textAlign: "right" }}>
+            <Link to="/feed" style={{ fontSize: "var(--text-xs)", color: "var(--accent)" }}>
+              View all events →
+            </Link>
+          </div>
+        </Section>
+      )}
 
       {/* ── Government banner ── */}
       <Section title="Government">
@@ -93,6 +151,48 @@ export default function Dashboard() {
           </div>
         </Card>
       </Section>
+
+      {/* ── Conflicts & Drama ── */}
+      {conflicts.data?.conflicts && conflicts.data.conflicts.length > 0 && (
+        <Section title="Conflicts & Drama">
+          <Card style={{ padding: 0 }}>
+            {conflicts.data.conflicts.map((c, i) => (
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  padding: "8px 14px",
+                  borderBottom: "1px solid var(--border)",
+                  borderLeft: `3px solid ${c.severity === "high" ? "var(--danger)" : "var(--amber)"}`,
+                }}
+              >
+                <Badge
+                  color={
+                    c.type === "price_war"
+                      ? "var(--amber)"
+                      : c.type === "market_cornering"
+                        ? "var(--danger)"
+                        : "var(--purple)"
+                  }
+                >
+                  {c.type === "price_war"
+                    ? "Price War"
+                    : c.type === "market_cornering"
+                      ? "Cornering"
+                      : c.type === "election_battle"
+                        ? "Election Battle"
+                        : slugToName(c.type)}
+                </Badge>
+                <span style={{ fontSize: "var(--text-sm)", color: "var(--text-primary)" }}>
+                  {c.detail}
+                </span>
+              </div>
+            ))}
+          </Card>
+        </Section>
+      )}
 
       <div className="responsive-grid responsive-grid-2" style={{ marginBottom: 28 }}>
         {/* ── GDP Chart ── */}

@@ -92,6 +92,20 @@ export default function Agents() {
   );
 }
 
+const STRATEGY_COLORS: Record<string, string> = {
+  tycoon: "var(--amber)",
+  aggressive_expander: "var(--danger)",
+  tax_evader: "var(--danger)",
+  vertical_integrator: "var(--purple)",
+  market_trader: "var(--cyan)",
+  conservative_saver: "var(--accent)",
+  wage_earner: "var(--text-secondary)",
+};
+
+function strategyColor(strategy: string): string {
+  return STRATEGY_COLORS[strategy] || "var(--text-secondary)";
+}
+
 const agentColumns: Column<AgentSummary>[] = [
   {
     key: "name",
@@ -126,6 +140,16 @@ const agentColumns: Column<AgentSummary>[] = [
     header: "Bank",
     align: "right",
     render: (a) => <span style={{ color: "var(--cyan)" }}>{fmt(a.bank_balance)}</span>,
+  },
+  {
+    key: "strategy",
+    header: "Strategy",
+    render: (a) =>
+      a.strategy ? (
+        <Badge color={strategyColor(a.strategy)}>{slugToName(a.strategy)}</Badge>
+      ) : (
+        <span style={{ color: "var(--text-muted)" }}>—</span>
+      ),
   },
   {
     key: "zone",

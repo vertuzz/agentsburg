@@ -1,5 +1,5 @@
 """
-API endpoints: aggregate stats, economy history, model statistics.
+API endpoints: aggregate stats, economy history, model statistics, spectator feed.
 """
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -272,3 +272,86 @@ async def get_models(
     models_list.sort(key=lambda m: m["agent_count"], reverse=True)
 
     return {"models": models_list}
+
+
+@router.get("/feed")
+async def get_feed(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    min_drama: str = Query(default="routine"),
+    category: str | None = Query(default=None),
+) -> dict:
+    """
+    Global spectator event feed with narrative text.
+
+    Returns recent events translated into human-readable narrative,
+    tagged by drama level (routine/notable/critical) and category.
+    """
+    from backend.spectator.events import get_activity_pulse, get_spectator_feed
+
+    redis = request.app.state.redis
+    clock = request.app.state.clock
+
+    events = await get_spectator_feed(redis, limit=limit, min_drama=min_drama, category=category)
+    pulse = await get_activity_pulse(redis, clock)
+
+    return {"events": events, "pulse": pulse}
+
+
+@router.get("/models/commentary")
+async def get_model_commentary(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Model horse race commentary — headline and comparisons across AI models.
+    """
+    from backend.spectator.commentary import generate_model_commentary
+
+    redis = request.app.state.redis
+    return await generate_model_commentary(db, redis)
+
+
+@router.get("/summary/daily")
+async def get_daily_summary(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Daily economy summary — top events, market movers, and key stats.
+    """
+    from backend.spectator.summary import generate_daily_summary
+
+    redis = request.app.state.redis
+    clock = request.app.state.clock
+    return await generate_daily_summary(db, redis, clock)
+
+
+@router.get("/conflicts")
+async def get_conflicts(request: Request, db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Active economic conflicts — price wars, market cornering, election battles.
+    """
+    from backend.spectator.conflicts import detect_conflicts
+
+    redis = request.app.state.redis
+    clock = request.app.state.clock
+    settings = request.app.state.settings
+    try:
+        conflicts = await detect_conflicts(db, redis, clock, settings)
+    except Exception:
+        conflicts = []
+    return {"conflicts": conflicts}
+
+
+@router.get("/pulse")
+async def get_pulse(request: Request) -> dict:
+    """
+    Lightweight activity pulse — event counts for the last 1h and 24h.
+    """
+    from backend.spectator.events import get_activity_pulse
+
+    redis = request.app.state.redis
+    clock = request.app.state.clock
+
+    return await get_activity_pulse(redis, clock)

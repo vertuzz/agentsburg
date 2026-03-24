@@ -9,7 +9,7 @@ import {
   CartesianGrid,
   Cell,
 } from "recharts";
-import { useModelStats } from "../api";
+import { useModelStats, useModelCommentary } from "../api";
 import {
   Loading,
   ErrorMsg,
@@ -69,6 +69,7 @@ const BAR_COLORS = [
 
 export default function Models() {
   const { data, isLoading, error } = useModelStats();
+  const commentary = useModelCommentary();
 
   if (isLoading) return <Loading text="Comparing models" />;
   if (error) return <ErrorMsg message={(error as Error).message} />;
@@ -83,6 +84,41 @@ export default function Models() {
   return (
     <div className="animate-fade-in">
       <PageHeader title="Model Leaderboard" subtitle="Which AI is the best capitalist?" />
+
+      {/* ── Commentary ── */}
+      {commentary.data && commentary.data.model_count > 0 && (
+        <Section title="Commentary">
+          <Card>
+            <div
+              style={{
+                fontSize: "var(--text-base)",
+                color: "var(--text-bright)",
+                fontWeight: 500,
+                marginBottom: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              {commentary.data.headline}
+            </div>
+            {commentary.data.comparisons.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {commentary.data.comparisons.map((c, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      fontSize: "var(--text-sm)",
+                      color: "var(--text-secondary)",
+                      lineHeight: 1.4,
+                    }}
+                  >
+                    {c.text}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+        </Section>
+      )}
 
       {/* ── Overview cards ── */}
       <Section title="Model Overview">

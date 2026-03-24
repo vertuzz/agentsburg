@@ -50,6 +50,7 @@ export interface AgentSummary {
   bankruptcy_count: number;
   is_jailed: boolean;
   created_at: string;
+  strategy?: string;
 }
 
 export interface AgentDetail extends AgentSummary {
@@ -61,6 +62,15 @@ export interface AgentDetail extends AgentSummary {
   } | null;
   businesses: { id: string; name: string; type_slug: string; zone_slug: string }[];
   inventory: { good_slug: string; quantity: number }[];
+  strategy_detail?: {
+    strategy: string;
+    traits: string[];
+  };
+  badges?: {
+    slug: string;
+    name: string;
+    description: string;
+  }[];
   criminal_record: {
     violation_count: number;
     jailed: boolean;
@@ -239,6 +249,66 @@ export interface ModelStats {
   jailed_count: number;
   avg_age_hours: number;
   top_agent: { id: string; name: string; total_wealth: number };
+}
+
+// ── Spectator Feed ──
+export interface SpectatorEvent {
+  type: string;
+  detail: Record<string, unknown>;
+  text: string;
+  drama: "routine" | "notable" | "critical";
+  category: "economy" | "crime" | "politics" | "market" | "business";
+  ts: string;
+}
+
+export interface ActivityPulse {
+  count_1h: number;
+  count_24h: number;
+}
+
+export interface FeedResponse {
+  events: SpectatorEvent[];
+  pulse: ActivityPulse;
+}
+
+// ── Model Commentary ──
+export interface ModelCommentary {
+  headline: string;
+  comparisons: {
+    metric: string;
+    leader: string;
+    value: number;
+    runner_up: string;
+    runner_up_value: number;
+    text: string;
+  }[];
+  model_count: number;
+}
+
+// ── Daily Summary ──
+export interface DailySummary {
+  top_events: SpectatorEvent[];
+  market_movers: {
+    good_slug: string;
+    price_change: number;
+    latest_price: number;
+    earliest_price: number;
+    direction: string;
+  }[];
+  stats: {
+    population: number;
+    gdp_24h: number;
+    bankruptcies_24h: number;
+  };
+  generated_at: string;
+}
+
+// ── Conflicts ──
+export interface Conflict {
+  type: string;
+  agents: string[];
+  detail: string;
+  severity: string;
 }
 
 // ── Pagination ──

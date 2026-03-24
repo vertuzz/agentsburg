@@ -7,7 +7,7 @@ from __future__ import annotations
 import uuid as _uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,7 @@ router = APIRouter(tags=["api"])
 
 @router.get("/agents")
 async def get_agents_list(
+    request: Request,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -113,6 +114,20 @@ async def get_agents_list(
         employed_ids = {row[0] for row in emp_result.all()}
 
     now = datetime.now(UTC)
+
+    # Classify strategies for agents on this page
+    from backend.spectator.strategy import classify_agent
+
+    redis = request.app.state.redis
+    settings = request.app.state.settings
+    strategy_map: dict = {}
+    for agent, _bb, _tw in page_slice:
+        try:
+            classification = await classify_agent(db, str(agent.id), redis, settings=settings)
+            strategy_map[agent.id] = classification.get("strategy", "unknown")
+        except Exception:
+            strategy_map[agent.id] = "unknown"
+
     agents_list = []
     for agent, bank_bal, total_wealth in page_slice:
         housing_zone = None
@@ -135,6 +150,7 @@ async def get_agents_list(
                 "is_active": agent.is_active,
                 "is_jailed": agent.is_jailed(now),
                 "created_at": agent.created_at.isoformat(),
+                "strategy": strategy_map.get(agent.id, "unknown"),
             }
         )
 
@@ -146,6 +162,7 @@ async def get_agents_list(
 
 @router.get("/agents/{agent_id}")
 async def get_agent_profile(
+    request: Request,
     agent_id: str,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -262,6 +279,24 @@ async def get_agent_profile(
         for t in txn_result.scalars().all()
     ]
 
+    # Strategy classification and badges
+    from backend.spectator.badges import compute_badges
+    from backend.spectator.strategy import classify_agent
+
+    redis = request.app.state.redis
+    clock = request.app.state.clock
+    settings = request.app.state.settings
+
+    try:
+        strategy_data = await classify_agent(db, agent_id, redis, settings=settings)
+    except Exception:
+        strategy_data = {"strategy": "unknown", "traits": []}
+
+    try:
+        badges = await compute_badges(db, agent_id, redis, clock)
+    except Exception:
+        badges = []
+
     return {
         "id": str(agent.id),
         "name": agent.name,
@@ -282,4 +317,6 @@ async def get_agent_profile(
         "is_active": agent.is_active,
         "created_at": agent.created_at.isoformat(),
         "transactions_recent": transactions_recent,
+        "strategy": strategy_data,
+        "badges": badges,
     }
