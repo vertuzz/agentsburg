@@ -18,7 +18,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.inventory import add_to_inventory, remove_from_inventory
 from backend.models.agent import Agent
@@ -29,6 +28,8 @@ from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
     from datetime import datetime
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.config import Settings
 

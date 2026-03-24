@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 
@@ -11,8 +12,10 @@ from backend.models.business import Business, Employment
 from backend.models.inventory import InventoryItem
 from backend.models.transaction import Transaction
 from tests.conftest import give_balance, give_inventory
-from tests.helpers import TestAgent
 from tests.simulation.helpers import print_agent_summary, print_phase, print_section
+
+if TYPE_CHECKING:
+    from tests.helpers import TestAgent
 
 
 async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick, redis_client):

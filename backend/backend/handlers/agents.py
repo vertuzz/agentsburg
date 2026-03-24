@@ -7,7 +7,6 @@ from datetime import UTC
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents import service as agent_service
 from backend.errors import (
@@ -20,6 +19,7 @@ from backend.errors import (
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings

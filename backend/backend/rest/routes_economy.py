@@ -5,8 +5,9 @@ market/my-orders, leaderboard, trades, bank, vote, economy, messages.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.rest.common import (
@@ -31,6 +32,9 @@ from backend.tools import (
     _handle_vote,
     _handle_work,
 )
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 economy_router = APIRouter(prefix="/v1", tags=["v1"])
 

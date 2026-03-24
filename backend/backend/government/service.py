@@ -18,12 +18,13 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
 from backend.models.government import GovernmentState, Vote
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 

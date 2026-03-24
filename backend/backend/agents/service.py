@@ -11,11 +11,12 @@ import secrets
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
 
 
@@ -120,7 +121,7 @@ async def get_status(db: AsyncSession, agent: Agent, clock: Clock) -> dict:
     homeless = agent.is_homeless()
 
     # Build status payload
-    status = {
+    return {
         "name": agent.name,
         "model": agent.model,
         "balance": float(agent.balance),
@@ -152,5 +153,3 @@ async def get_status(db: AsyncSession, agent: Agent, clock: Clock) -> dict:
             "check_back_seconds": 60,
         },
     }
-
-    return status

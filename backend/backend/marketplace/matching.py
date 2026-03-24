@@ -15,7 +15,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.inventory import add_to_inventory
 from backend.models.agent import Agent
@@ -23,6 +22,8 @@ from backend.models.marketplace import MarketOrder, MarketTrade
 from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 

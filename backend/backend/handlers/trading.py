@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.errors import (
     IN_JAIL,
     INSUFFICIENT_FUNDS,
@@ -20,6 +18,7 @@ from backend.errors import (
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings
@@ -124,12 +123,11 @@ async def _handle_trade(
             error_msg = str(e)
             if "insufficient balance" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
-            elif "insufficient inventory" in error_msg.lower():
+            if "insufficient inventory" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_INVENTORY, error_msg) from e
-            elif "not found" in error_msg.lower():
+            if "not found" in error_msg.lower():
                 raise ToolError(NOT_FOUND, error_msg) from e
-            else:
-                raise ToolError(INVALID_PARAMS, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
 
         pending_events = await get_pending_events(db, agent)
         return {
@@ -161,16 +159,15 @@ async def _handle_trade(
             error_msg = str(e)
             if "insufficient balance" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
-            elif "insufficient inventory" in error_msg.lower():
+            if "insufficient inventory" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_INVENTORY, error_msg) from e
-            elif "not found" in error_msg.lower():
+            if "not found" in error_msg.lower():
                 raise ToolError(NOT_FOUND, error_msg) from e
-            elif "expired" in error_msg.lower():
+            if "expired" in error_msg.lower():
                 raise ToolError(TRADE_EXPIRED, error_msg) from e
-            elif "storage" in error_msg.lower():
+            if "storage" in error_msg.lower():
                 raise ToolError(STORAGE_FULL, error_msg) from e
-            else:
-                raise ToolError(INVALID_PARAMS, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
 
         pending_events = await get_pending_events(db, agent)
         result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
@@ -187,8 +184,7 @@ async def _handle_trade(
             error_msg = str(e)
             if "not found" in error_msg.lower():
                 raise ToolError(NOT_FOUND, error_msg) from e
-            else:
-                raise ToolError(INVALID_PARAMS, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
 
         pending_events = await get_pending_events(db, agent)
         result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}

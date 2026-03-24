@@ -10,18 +10,20 @@ Handles:
 from __future__ import annotations
 
 import logging
-import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.agent import Agent
 from backend.models.business import Business, Employment, JobPosting
 
 if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
+    from backend.models.agent import Agent
 
 logger = logging.getLogger(__name__)
 

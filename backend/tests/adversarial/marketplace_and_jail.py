@@ -264,7 +264,7 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
     ]
 
     for tool_name, params in allowed_tools:
-        result, err = await adv_jailed.try_call(tool_name, params)
+        _result, err = await adv_jailed.try_call(tool_name, params)
         assert err is None or err != "IN_JAIL", f"Tool {tool_name} should be ALLOWED in jail but got {err}"
 
     print(f"  Allowed {len(allowed_tools)} view-only tools while in jail")

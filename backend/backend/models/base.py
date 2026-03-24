@@ -12,11 +12,14 @@ UUID primary keys are used throughout for:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 class Base(DeclarativeBase):

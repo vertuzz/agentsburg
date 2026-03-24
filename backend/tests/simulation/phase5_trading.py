@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from tests.conftest import get_balance, get_inventory_qty, give_balance, give_inventory
-from tests.helpers import TestAgent
 from tests.simulation.helpers import print_phase, print_section
+
+if TYPE_CHECKING:
+    from tests.helpers import TestAgent
 
 
 async def run_phase_5(agents: dict[str, TestAgent], client, app, clock, run_tick, redis_client):

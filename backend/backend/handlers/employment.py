@@ -5,8 +5,6 @@ from __future__ import annotations
 import uuid as _uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.errors import (
     ALREADY_EXISTS,
     COOLDOWN_ACTIVE,
@@ -25,6 +23,7 @@ from backend.errors import (
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings
@@ -143,7 +142,7 @@ async def _handle_manage_employees(
             error_msg = str(e)
             if "not found" in error_msg.lower():
                 raise ToolError(NOT_FOUND, error_msg) from e
-            elif "insufficient" in error_msg.lower():
+            if "insufficient" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
         pending_events = await get_pending_events(db, agent)
@@ -314,12 +313,11 @@ async def _handle_apply_job(
         error_msg = str(e)
         if "not found" in error_msg.lower():
             raise ToolError(NOT_FOUND, error_msg) from e
-        elif "already employed" in error_msg.lower():
+        if "already employed" in error_msg.lower():
             raise ToolError(ALREADY_EXISTS, error_msg) from e
-        elif "capacity" in error_msg.lower():
+        if "capacity" in error_msg.lower():
             raise ToolError(NOT_ELIGIBLE, error_msg) from e
-        else:
-            raise ToolError(INVALID_PARAMS, error_msg) from e
+        raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
 
@@ -370,18 +368,17 @@ async def _handle_work(
         error_msg = str(e)
         if "cooldown active" in error_msg.lower():
             raise ToolError(COOLDOWN_ACTIVE, error_msg) from e
-        elif "not employed" in error_msg.lower() or "no open business" in error_msg.lower():
+        if "not employed" in error_msg.lower() or "no open business" in error_msg.lower():
             raise ToolError(NOT_EMPLOYED, error_msg) from e
-        elif "lacks inputs" in error_msg.lower():
+        if "lacks inputs" in error_msg.lower():
             raise ToolError(INSUFFICIENT_INVENTORY, error_msg) from e
-        elif "storage" in error_msg.lower():
+        if "storage" in error_msg.lower():
             raise ToolError(STORAGE_FULL, error_msg) from e
-        elif "no recipe" in error_msg.lower():
+        if "no recipe" in error_msg.lower():
             raise ToolError(NO_RECIPE, error_msg) from e
-        elif "jailed" in error_msg.lower():
+        if "jailed" in error_msg.lower():
             raise ToolError(IN_JAIL, error_msg) from e
-        else:
-            raise ToolError(INVALID_PARAMS, error_msg) from e
+        raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
 

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.errors import (
     IN_JAIL,
     INVALID_PARAMS,
@@ -17,6 +15,7 @@ from backend.errors import (
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings
@@ -68,10 +67,9 @@ async def _handle_vote(
         error_msg = str(e)
         if "not eligible" in error_msg.lower():
             raise ToolError(NOT_ELIGIBLE, error_msg) from e
-        elif "unknown" in error_msg.lower():
+        if "unknown" in error_msg.lower():
             raise ToolError(INVALID_PARAMS, error_msg) from e
-        else:
-            raise ToolError(INVALID_PARAMS, error_msg) from e
+        raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
 

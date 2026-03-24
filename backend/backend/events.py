@@ -12,9 +12,10 @@ from __future__ import annotations
 import json
 import logging
 from typing import TYPE_CHECKING
-from uuid import UUID
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     import redis.asyncio as aioredis
 
     from backend.clock import Clock

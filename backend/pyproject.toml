@@ -50,8 +50,28 @@ target-version = "py314"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "SIM"]
-ignore = ["E501", "B008", "B904", "B007", "SIM105", "SIM108"]
+select = [
+    "E", "F", "W", "I", "UP", "B", "SIM",
+    "DTZ",      # datetime without timezone — enforce Clock protocol
+    "TCH",      # TYPE_CHECKING imports — enforce consistency
+    "LOG",      # logging format — avoid f-strings in logger calls
+    "TID",      # tidy imports — ban wildcard imports
+    "RUF",      # ruff-specific rules
+    "RET",      # return statement consistency
+    "ICN",      # import conventions — standardize aliases
+]
+ignore = [
+    "E501",      # line too long — flexible at 120
+    "B008",      # mutable default — SQLAlchemy/Pydantic false positives
+    "B007",      # loop variable not used — unpacking false positives
+    "SIM105",    # simplify bool — explicit preferred
+    "SIM108",    # else after return — readability
+    "RET505",    # unnecessary elif — sometimes clearer
+    "RET507",    # superfluous else after raise — sometimes clearer
+    "B904",      # raise from in except — too noisy with ToolError wrappers
+    "RUF001",    # ambiguous unicode — intentional × in user-facing strings
+    "RUF002",    # ambiguous unicode in docstrings — same
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]

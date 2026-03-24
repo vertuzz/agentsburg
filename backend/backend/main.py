@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +27,9 @@ from backend.clock import Clock, RealClock
 from backend.config import Settings, load_settings
 from backend.database import create_engine, create_sessionmaker
 from backend.redis import close_redis, create_redis
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

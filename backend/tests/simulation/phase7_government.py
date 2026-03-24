@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import delete as _delete
 from sqlalchemy import func, select
 
 from backend.models.government import Vote
 from backend.models.transaction import Transaction
 from tests.conftest import force_agent_age, give_balance, give_inventory, jail_agent
-from tests.helpers import TestAgent
 from tests.simulation.helpers import AGENT_NAMES, print_phase, print_section
+
+if TYPE_CHECKING:
+    from tests.helpers import TestAgent
 
 
 async def run_phase_7(agents: dict[str, TestAgent], client, app, clock, run_tick, redis_client):

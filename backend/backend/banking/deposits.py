@@ -14,7 +14,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.banking._helpers import (
     _get_active_policy,
@@ -28,6 +27,8 @@ from backend.models.banking import BankAccount, Loan
 from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 

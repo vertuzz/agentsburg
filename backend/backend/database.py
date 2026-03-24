@@ -13,10 +13,8 @@ app.state. The get_db() dependency retrieves them from there.
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
-from fastapi import Request
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -25,6 +23,10 @@ from sqlalchemy.ext.asyncio import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from fastapi import Request
+
     from backend.config import DatabaseSettings
 
 

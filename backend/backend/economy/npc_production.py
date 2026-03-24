@@ -16,19 +16,20 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
-from backend.models.banking import CentralBank
 from backend.models.business import Business, JobPosting, StorefrontPrice
 from backend.models.inventory import InventoryItem
 from backend.models.marketplace import MarketOrder
-from backend.models.recipe import Recipe
 from backend.models.transaction import Transaction
 from backend.models.zone import Zone
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.config import Settings
+    from backend.models.banking import CentralBank
+    from backend.models.recipe import Recipe
 
 logger = logging.getLogger(__name__)
 

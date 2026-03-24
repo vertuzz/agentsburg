@@ -33,7 +33,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
 from backend.models.banking import CentralBank
@@ -43,6 +42,8 @@ from backend.models.transaction import Transaction
 from backend.models.zone import Zone
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 

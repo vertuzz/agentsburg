@@ -22,4 +22,4 @@ router.include_router(economy_router)
 router.include_router(meta_router)
 router.include_router(rules_router)
 
-__all__ = ["router", "register_error_handlers"]
+__all__ = ["register_error_handlers", "router"]

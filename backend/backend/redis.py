@@ -15,10 +15,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import redis.asyncio as aioredis
-from fastapi import Request
 
 if TYPE_CHECKING:
-    pass
+    from fastapi import Request
 
 
 async def create_redis(url: str) -> aioredis.Redis:

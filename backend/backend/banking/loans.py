@@ -18,7 +18,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.banking._helpers import (
     INSTALLMENT_INTERVAL_HOURS,
@@ -40,6 +39,8 @@ from backend.models.banking import Loan
 from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 

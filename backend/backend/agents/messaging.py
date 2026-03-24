@@ -13,13 +13,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
 from backend.models.message import Message
 
 if TYPE_CHECKING:
-    pass
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def send_message(

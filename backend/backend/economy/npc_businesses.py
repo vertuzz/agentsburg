@@ -30,12 +30,11 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Re-export so existing imports from this module still work
 from backend.economy.npc_production import (
-    run_npc_production,  # noqa: F401
-    spawn_demand_gap_businesses,  # noqa: F401
+    run_npc_production,
+    spawn_demand_gap_businesses,
 )
 from backend.models.agent import Agent
 from backend.models.banking import CentralBank
@@ -45,6 +44,8 @@ from backend.models.recipe import Recipe
 from backend.models.zone import Zone
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 

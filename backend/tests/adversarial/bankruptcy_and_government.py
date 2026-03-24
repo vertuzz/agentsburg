@@ -44,7 +44,7 @@ async def run_bankruptcy_and_government(client, app, clock, run_tick, redis_clie
     )
 
     # Take a loan of 30
-    loan_result, loan_err = await adv_bankrupt.try_call(
+    _loan_result, loan_err = await adv_bankrupt.try_call(
         "bank",
         {
             "action": "take_loan",

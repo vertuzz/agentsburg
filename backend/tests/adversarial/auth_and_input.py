@@ -79,7 +79,7 @@ async def run_auth_and_input(client, app, clock, agents):
     clock.advance(6)
 
     # Different resource should work after global cooldown
-    result2, err2 = await adv_gather.try_call("gather", {"resource": "wood"})
+    _result2, err2 = await adv_gather.try_call("gather", {"resource": "wood"})
     assert err2 is None, f"Expected different resource to work after global CD, got {err2}"
 
     # Advance past global cooldown again before testing invalid resource

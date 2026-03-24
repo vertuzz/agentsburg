@@ -11,13 +11,16 @@ formal trade/marketplace systems.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 class Message(Base):

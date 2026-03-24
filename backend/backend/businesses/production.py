@@ -33,7 +33,6 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.businesses.recipes import (  # noqa: F401
     _work_cooldown_key,
@@ -46,13 +45,14 @@ from backend.businesses.work_context import (
     select_recipe,
     verify_and_consume_inputs,
 )
-from backend.models.agent import Agent
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings
+    from backend.models.agent import Agent
     from backend.models.business import Business
     from backend.models.recipe import Recipe
 

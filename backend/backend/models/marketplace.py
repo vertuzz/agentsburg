@@ -19,13 +19,16 @@ Design decisions:
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    from datetime import datetime
 
 
 class MarketOrder(UUIDMixin, TimestampMixin, Base):

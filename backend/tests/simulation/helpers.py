@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from tests.helpers import TestAgent
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from tests.helpers import TestAgent
 
 
 def print_phase(num: int, title: str) -> None:

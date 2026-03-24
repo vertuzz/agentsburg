@@ -24,10 +24,10 @@ No manual env var exports are needed.
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest_asyncio
@@ -40,6 +40,9 @@ from backend.main import create_app
 from backend.models.agent import Agent
 from backend.models.base import Base
 from backend.models.inventory import InventoryItem
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 
 # ---------------------------------------------------------------------------
 # Load .env.test at import time so all settings pick up test values.
@@ -276,13 +279,12 @@ async def run_tick(app, clock: MockClock):
         from backend.economy.tick import run_tick as tick_fn
 
         async with app.state.session_factory() as session:
-            result = await tick_fn(
+            return await tick_fn(
                 db=session,
                 redis=app.state.redis,
                 clock=clock,
                 settings=app.state.settings,
             )
-        return result
 
     async def _run_days(num_days: int, ticks_per_day: int = 4):
         """

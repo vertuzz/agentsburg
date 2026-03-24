@@ -8,24 +8,25 @@ Registration and closing logic is in registration.py.
 from __future__ import annotations
 
 import logging
-import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Re-exports for backwards compatibility
 from backend.businesses.registration import (  # noqa: F401
     close_business,
     register_business,
 )
-from backend.models.agent import Agent
 from backend.models.business import Business, Employment, JobPosting, StorefrontPrice
 from backend.models.recipe import Recipe
 
 if TYPE_CHECKING:
-    pass
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from backend.models.agent import Agent
 
 logger = logging.getLogger(__name__)
 

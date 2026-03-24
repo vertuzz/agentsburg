@@ -16,7 +16,10 @@ Usage:
 
 from __future__ import annotations
 
-import httpx
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import httpx
 
 # Maps tool names to (HTTP method, REST endpoint path).
 TOOL_ROUTES = {

@@ -25,7 +25,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Re-export run_audits so existing imports from taxes.py still work
 from backend.government.auditing import run_audits  # noqa: F401
@@ -34,6 +33,8 @@ from backend.models.government import TaxRecord
 from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 

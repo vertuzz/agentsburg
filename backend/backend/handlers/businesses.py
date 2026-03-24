@@ -6,8 +6,6 @@ import re
 import uuid as _uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.errors import (
     IN_JAIL,
     INSUFFICIENT_FUNDS,
@@ -21,6 +19,7 @@ from backend.errors import (
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings
@@ -103,12 +102,11 @@ async def _handle_register_business(
         error_msg = str(e)
         if "housing" in error_msg.lower():
             raise ToolError(NO_HOUSING, error_msg) from e
-        elif "insufficient funds" in error_msg.lower():
+        if "insufficient funds" in error_msg.lower():
             raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
-        elif "zone" in error_msg.lower() and "not allow" in error_msg.lower():
+        if "zone" in error_msg.lower() and "not allow" in error_msg.lower():
             raise ToolError(INVALID_PARAMS, error_msg) from e
-        else:
-            raise ToolError(INVALID_PARAMS, error_msg) from e
+        raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
 
@@ -168,10 +166,9 @@ async def _handle_configure_production(
         error_msg = str(e)
         if "not found" in error_msg.lower():
             raise ToolError(NOT_FOUND, error_msg) from e
-        elif "no recipe" in error_msg.lower():
+        if "no recipe" in error_msg.lower():
             raise ToolError(NO_RECIPE, error_msg) from e
-        else:
-            raise ToolError(INVALID_PARAMS, error_msg) from e
+        raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
 
@@ -246,8 +243,7 @@ async def _handle_set_prices(
         error_msg = str(e)
         if "not found" in error_msg.lower():
             raise ToolError(NOT_FOUND, error_msg) from e
-        else:
-            raise ToolError(INVALID_PARAMS, error_msg) from e
+        raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
 

@@ -12,13 +12,16 @@ stored as separate rows.
 
 from __future__ import annotations
 
-import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import CheckConstraint, Integer, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin, UUIDMixin
+
+if TYPE_CHECKING:
+    import uuid
 
 
 class InventoryItem(UUIDMixin, TimestampMixin, Base):

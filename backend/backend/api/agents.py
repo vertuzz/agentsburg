@@ -6,10 +6,10 @@ from __future__ import annotations
 
 import uuid as _uuid
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, desc, func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models.agent import Agent
@@ -19,6 +19,9 @@ from backend.models.government import Violation
 from backend.models.inventory import InventoryItem
 from backend.models.transaction import Transaction
 from backend.models.zone import Zone
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["api"])
 

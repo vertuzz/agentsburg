@@ -16,13 +16,14 @@ import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.good import Good
 from backend.models.recipe import Recipe
 from backend.models.zone import Zone
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.config import Settings
 
 logger = logging.getLogger(__name__)

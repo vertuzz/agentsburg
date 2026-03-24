@@ -22,19 +22,20 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.inventory import add_to_inventory, remove_from_inventory
 from backend.models.agent import Agent
 from backend.models.marketplace import MarketOrder
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 
 # --- Re-exports so existing imports continue to work ---
 from backend.marketplace.browsing import browse_orders, cancel_agent_orders  # noqa: F401
-from backend.marketplace.matching import CANCEL_FEE_RATE, match_orders  # noqa: F401
+from backend.marketplace.matching import CANCEL_FEE_RATE, match_orders
 
 logger = logging.getLogger(__name__)
 

@@ -18,14 +18,15 @@ import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.agent import Agent
 from backend.models.transaction import Transaction
 from backend.models.zone import Zone
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.config import Settings
+    from backend.models.agent import Agent
 
 logger = logging.getLogger(__name__)
 

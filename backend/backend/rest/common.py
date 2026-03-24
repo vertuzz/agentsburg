@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.errors import ToolError
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 logger = logging.getLogger(__name__)

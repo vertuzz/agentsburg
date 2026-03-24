@@ -8,15 +8,16 @@ the cooldown should be.
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 if TYPE_CHECKING:
+    import uuid
+
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings

@@ -18,22 +18,22 @@ Homeless penalty applies to production/work only (via housing.py).
 from __future__ import annotations
 
 import logging
-import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.agents.inventory import add_to_inventory, get_storage_used
-from backend.models.agent import Agent
 from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
+    import uuid
+
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings
+    from backend.models.agent import Agent
 
 logger = logging.getLogger(__name__)
 

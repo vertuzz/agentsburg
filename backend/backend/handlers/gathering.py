@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import UTC
 from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.errors import (
     COOLDOWN_ACTIVE,
     IN_JAIL,
@@ -19,6 +17,7 @@ from backend.errors import (
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings
@@ -95,12 +94,11 @@ async def _handle_gather(
         # Detect specific error types for better error codes
         if "cooldown active" in error_msg.lower():
             raise ToolError(COOLDOWN_ACTIVE, error_msg) from e
-        elif "storage full" in error_msg.lower():
+        if "storage full" in error_msg.lower():
             raise ToolError(STORAGE_FULL, error_msg) from e
-        elif "not a gatherable" in error_msg.lower() or "unknown" in error_msg.lower():
+        if "not a gatherable" in error_msg.lower() or "unknown" in error_msg.lower():
             raise ToolError(INVALID_PARAMS, error_msg) from e
-        else:
-            raise ToolError(INVALID_PARAMS, error_msg) from e
+        raise ToolError(INVALID_PARAMS, error_msg) from e
 
     # Set global gather cooldown after successful gather
     from datetime import timedelta

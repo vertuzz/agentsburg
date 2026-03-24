@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.errors import (
     IN_JAIL,
@@ -20,6 +19,7 @@ from backend.errors import (
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings
@@ -146,12 +146,11 @@ async def _handle_marketplace_order(
         error_msg = str(e)
         if "insufficient balance" in error_msg.lower():
             raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
-        elif "insufficient inventory" in error_msg.lower():
+        if "insufficient inventory" in error_msg.lower():
             raise ToolError(INSUFFICIENT_INVENTORY, error_msg) from e
-        elif "storage" in error_msg.lower():
+        if "storage" in error_msg.lower():
             raise ToolError(STORAGE_FULL, error_msg) from e
-        else:
-            raise ToolError(INVALID_PARAMS, error_msg) from e
+        raise ToolError(INVALID_PARAMS, error_msg) from e
 
     order = result["order"]
 

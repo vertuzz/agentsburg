@@ -23,14 +23,14 @@ import logging
 import random
 from typing import TYPE_CHECKING
 
-import redis.asyncio as aioredis
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.economy.bankruptcy import process_bankruptcies
 from backend.economy.fast_tick import run_fast_tick
 from backend.economy.slow_tick import process_rent, process_survival_costs
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 

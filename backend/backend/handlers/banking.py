@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.errors import (
     ALREADY_EXISTS,
     INSUFFICIENT_FUNDS,
@@ -17,6 +15,7 @@ from backend.errors import (
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings
@@ -142,16 +141,13 @@ async def _handle_bank(
             result = await take_loan(db, agent, amount, clock, settings)
         except ValueError as e:
             error_msg = str(e)
-            if (
-                "credit" in error_msg.lower()
-                and "limit" in error_msg.lower()
-                or "credit score" in error_msg.lower()
-                and "not qualify" in error_msg.lower()
+            if ("credit" in error_msg.lower() and "limit" in error_msg.lower()) or (
+                "credit score" in error_msg.lower() and "not qualify" in error_msg.lower()
             ):
                 raise ToolError(NOT_ELIGIBLE, error_msg) from e
-            elif "active loan" in error_msg.lower():
+            if "active loan" in error_msg.lower():
                 raise ToolError(ALREADY_EXISTS, error_msg) from e
-            elif "capacity" in error_msg.lower():
+            if "capacity" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
 

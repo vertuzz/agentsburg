@@ -18,7 +18,6 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func as sqlfunc
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
 from backend.models.banking import CentralBank
@@ -27,6 +26,7 @@ from backend.models.zone import Zone
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+    from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
     from backend.config import Settings

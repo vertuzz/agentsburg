@@ -14,13 +14,14 @@ import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.marketplace.orderbook import match_orders
 from backend.marketplace.trading import expire_trades
 from backend.models.marketplace import MarketOrder
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
 

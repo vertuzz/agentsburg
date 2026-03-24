@@ -11,15 +11,17 @@ storage_size that determines how many units it takes up.
 from __future__ import annotations
 
 import logging
-import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.inventory import InventoryItem
 
 if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.config import Settings
 
 logger = logging.getLogger(__name__)

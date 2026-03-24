@@ -21,7 +21,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Re-export reference-data seeders so existing imports keep working.
 from backend.economy.seeds import seed_goods, seed_recipes, seed_zones  # noqa: F401
@@ -29,6 +28,8 @@ from backend.models.business import JobPosting
 from backend.models.zone import Zone
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.config import Settings
 
 logger = logging.getLogger(__name__)

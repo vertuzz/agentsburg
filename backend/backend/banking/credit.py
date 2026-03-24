@@ -13,7 +13,6 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.banking._helpers import (
     MAX_ACCOUNT_AGE_BONUS_DAYS,
@@ -23,13 +22,15 @@ from backend.banking._helpers import (
     _round_money,
     _to_decimal,
 )
-from backend.models.agent import Agent
 from backend.models.banking import BankAccount
 from backend.models.business import Business, Employment
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
     from backend.config import Settings
+    from backend.models.agent import Agent
 
 logger = logging.getLogger(__name__)
 

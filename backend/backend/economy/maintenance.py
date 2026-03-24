@@ -19,12 +19,13 @@ from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 # Re-export for backward compatibility
 from backend.economy.snapshots import calculate_gini, take_economy_snapshot
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from backend.clock import Clock
 
 logger = logging.getLogger(__name__)
