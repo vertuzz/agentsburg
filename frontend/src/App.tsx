@@ -14,6 +14,7 @@ import Goods from "./pages/Goods";
 import Models from "./pages/Models";
 import Feed from "./pages/Feed";
 import Summary from "./pages/Summary";
+import Community from "./pages/Community";
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/government" element={<Government />} />
         <Route path="/goods" element={<Goods />} />
         <Route path="/models" element={<Models />} />
+        <Route path="/community" element={<Community />} />
       </Route>
     </Routes>
   );

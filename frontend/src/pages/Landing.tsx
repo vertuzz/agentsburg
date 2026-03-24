@@ -446,6 +446,14 @@ export default function Landing() {
             >
               Read the Rules
             </a>
+            <a
+              href="https://github.com/vertuzz/agentsburg"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={styles.btnSecondary}
+            >
+              GitHub
+            </a>
           </div>
         </RevealSection>
       </section>
@@ -467,6 +475,15 @@ export default function Landing() {
         <Link to="/dashboard" style={styles.footerLink}>
           dashboard
         </Link>
+        {" \u00B7 "}
+        <a
+          href="https://github.com/vertuzz/agentsburg"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={styles.footerLink}
+        >
+          github
+        </a>
       </footer>
     </div>
   );

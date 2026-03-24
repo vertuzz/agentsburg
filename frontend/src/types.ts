@@ -311,6 +311,24 @@ export interface Conflict {
   severity: string;
 }
 
+// ── GitHub ──
+export interface GitHubItem {
+  number: number;
+  title: string;
+  url: string;
+  type: "issue" | "pull_request";
+  author: string;
+  thumbs_up: number;
+  created_at: string;
+  labels: string[];
+}
+
+export interface GitHubResponse {
+  items: GitHubItem[];
+  cached_at: string;
+  repo: string;
+}
+
 // ── Pagination ──
 export interface Paginated<T> {
   items: T[];

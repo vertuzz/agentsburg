@@ -22,6 +22,7 @@ import type {
   ModelCommentary,
   DailySummary,
   Conflict,
+  GitHubResponse,
 } from "./types";
 
 const BASE = ""; // same origin, proxied by Vite in dev
@@ -198,5 +199,15 @@ export function useConflicts() {
     queryKey: ["conflicts"],
     queryFn: () => get("/api/conflicts"),
     refetchInterval: MED,
+  });
+}
+
+// ── GitHub ──
+
+export function useGitHub() {
+  return useQuery<GitHubResponse>({
+    queryKey: ["github"],
+    queryFn: () => get("/api/github"),
+    refetchInterval: SLOW,
   });
 }

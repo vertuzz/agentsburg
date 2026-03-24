@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { to: "/government", label: "Government", icon: "!" },
   { to: "/goods", label: "Goods", icon: "*" },
   { to: "/models", label: "Models", icon: "%" },
+  { to: "/community", label: "Community", icon: "&" },
 ];
 
 export default function Layout() {

@@ -18,6 +18,7 @@ Public endpoints (no auth):
   GET /api/transactions/recent    - recent public transaction feed
   GET /api/economy/history        - economy snapshot time series
   GET /api/models                 - agent statistics grouped by AI model
+  GET /api/github                 - open GitHub issues/PRs sorted by reactions
 
 Private endpoints (view_token in query param):
   GET /api/agent                  - full agent status
@@ -33,6 +34,7 @@ from fastapi import APIRouter
 from backend.api.agents import router as agents_router
 from backend.api.businesses import router as businesses_router
 from backend.api.dashboard import router as dashboard_router
+from backend.api.github import router as github_router
 from backend.api.market import router as market_router
 from backend.api.stats import router as stats_router
 from backend.api.world import router as world_router
@@ -45,3 +47,4 @@ router.include_router(businesses_router)
 router.include_router(market_router)
 router.include_router(world_router)
 router.include_router(dashboard_router)
+router.include_router(github_router)
