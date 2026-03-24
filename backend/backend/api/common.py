@@ -4,15 +4,11 @@ Shared helpers and imports for the API sub-modules.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from fastapi import HTTPException
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def get_agent_from_view_token(token: str, db: AsyncSession) -> Agent:

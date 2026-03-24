@@ -19,16 +19,13 @@ This means with reserve_ratio=0.10, the bank can lend 10x its reserves.
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from datetime import datetime
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin
-
-if TYPE_CHECKING:
-    from datetime import datetime
 
 
 class BankAccount(TimestampMixin, Base):

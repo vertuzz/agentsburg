@@ -7,10 +7,10 @@ Includes agent status, transactions, businesses, and messages.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.common import get_agent_from_view_token
 from backend.database import get_db
@@ -22,9 +22,6 @@ from backend.models.inventory import InventoryItem
 from backend.models.message import Message
 from backend.models.transaction import Transaction
 from backend.models.zone import Zone
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["api"])
 

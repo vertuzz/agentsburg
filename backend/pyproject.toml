@@ -73,6 +73,16 @@ ignore = [
     "RUF002",    # ambiguous unicode in docstrings — same
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# SQLAlchemy needs uuid/datetime at runtime to resolve Mapped[] annotations (TCH003).
+# FastAPI needs AsyncSession/aioredis resolvable at runtime for dependency injection (TCH002).
+# With `from __future__ import annotations` + Python 3.14, hiding these behind
+# TYPE_CHECKING breaks get_type_hints() which both frameworks rely on.
+"backend/models/*.py" = ["TCH"]
+"backend/rest/*.py" = ["TCH"]
+"backend/api/*.py" = ["TCH"]
+"backend/database.py" = ["TCH"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
 

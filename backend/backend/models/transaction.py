@@ -26,16 +26,13 @@ Transaction types map to different economic events:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import uuid
 
 from sqlalchemy import JSON, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin, UUIDMixin
-
-if TYPE_CHECKING:
-    import uuid
 
 # All valid transaction type strings — used for validation and documentation
 TRANSACTION_TYPES = frozenset(

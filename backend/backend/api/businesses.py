@@ -5,19 +5,16 @@ API endpoints: business list and business detail.
 from __future__ import annotations
 
 import uuid as _uuid
-from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models.agent import Agent
 from backend.models.business import Business, Employment, StorefrontPrice
 from backend.models.inventory import InventoryItem
 from backend.models.zone import Zone
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["api"])
 

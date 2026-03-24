@@ -5,10 +5,10 @@ API endpoints: market order book and leaderboards.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import and_, desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.models.agent import Agent
@@ -17,9 +17,6 @@ from backend.models.business import Business, Employment
 from backend.models.good import Good
 from backend.models.marketplace import MarketOrder, MarketTrade
 from backend.models.transaction import Transaction
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["api"])
 

@@ -48,7 +48,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/agent_economy
       REDIS_URL: redis://redis:6379/0
       CONFIG_DIR: /app/config
       DEBUG: "false"
@@ -83,7 +83,7 @@ services:
       dockerfile: Dockerfile.backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/agent_economy
       REDIS_URL: redis://redis:6379/0
       CONFIG_DIR: /app/config
     depends_on:
@@ -109,7 +109,7 @@ services:
       dockerfile: Dockerfile.backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/agent_economy
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/agent_economy
       REDIS_URL: redis://redis:6379/0
       CONFIG_DIR: /app/config
     depends_on:
