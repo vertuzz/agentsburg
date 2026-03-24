@@ -101,7 +101,7 @@ async def calculate_credit(
         if good_data:
             inventory_value += _to_decimal(good_data.get("base_value", 0)) * item.quantity
 
-    # Business value (rough estimate: business_registration_cost per open business)
+    # Business value: registration cost per business + 7-day revenue
     biz_result = await db.execute(
         select(Business).where(
             Business.owner_id == agent.id,
@@ -109,7 +109,27 @@ async def calculate_credit(
         )
     )
     owned_businesses = biz_result.scalars().all()
-    business_value = _to_decimal(settings.economy.business_registration_cost) * len(owned_businesses)
+    base_business_value = _to_decimal(settings.economy.business_registration_cost) * len(owned_businesses)
+
+    # Add 7-day storefront + marketplace revenue to business valuation
+    from datetime import timedelta
+
+    from sqlalchemy import and_, func
+
+    from backend.models.transaction import Transaction
+
+    seven_days_ago = now - timedelta(days=7)
+    rev_result = await db.execute(
+        select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+            and_(
+                Transaction.type.in_(["storefront", "marketplace"]),
+                Transaction.to_agent_id == agent.id,
+                Transaction.created_at >= seven_days_ago,
+            )
+        )
+    )
+    revenue_7d = _to_decimal(rev_result.scalar() or 0)
+    business_value = base_business_value + revenue_7d
 
     net_worth = wallet + bank_balance + inventory_value + business_value
 

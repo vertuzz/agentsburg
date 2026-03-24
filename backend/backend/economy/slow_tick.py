@@ -309,3 +309,64 @@ async def process_rent(
         "agents_evicted": evicted_count,
         "total_collected": float(total_collected),
     }
+
+
+async def enforce_reserve_floor(
+    db: AsyncSession,
+    clock: Clock,
+    settings: Settings,
+) -> dict:
+    """
+    Ensure central bank reserves don't stay below the configured minimum.
+
+    If reserves have fallen below ``min_bank_reserves``, the bank "prints
+    money" (monetary injection) to top them back up.  This prevents the
+    economy death spiral where NPC demand, loans, and GDP all freeze
+    because reserves hit zero.
+
+    Called once per slow tick, **after** rent / tax / loan collections
+    have already replenished what they can organically.
+
+    Returns:
+        Dict with injection amount (0.0 if no injection was needed).
+    """
+    min_reserves = Decimal(str(settings.economy.min_bank_reserves))
+    if min_reserves <= 0:
+        return {"type": "reserve_floor", "injection": 0.0}
+
+    bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1).with_for_update())
+    central_bank = bank_result.scalar_one_or_none()
+    if central_bank is None:
+        return {"type": "reserve_floor", "injection": 0.0}
+
+    current = Decimal(str(central_bank.reserves))
+    if current >= min_reserves:
+        return {"type": "reserve_floor", "injection": 0.0}
+
+    injection = min_reserves - current
+    central_bank.reserves = min_reserves
+
+    now = clock.now()
+    txn = Transaction(
+        type="monetary_injection",
+        from_agent_id=None,
+        to_agent_id=None,
+        amount=float(injection),
+        metadata_json={
+            "reason": "reserve_floor",
+            "previous_reserves": float(current),
+            "new_reserves": float(min_reserves),
+            "tick_time": now.isoformat(),
+        },
+    )
+    db.add(txn)
+    await db.flush()
+
+    logger.info(
+        "Reserve floor: injected %.2f (was %.2f, floor %.2f)",
+        float(injection),
+        float(current),
+        float(min_reserves),
+    )
+
+    return {"type": "reserve_floor", "injection": float(injection)}

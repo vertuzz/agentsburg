@@ -324,10 +324,15 @@ async def _handle_leaderboard(
     Shows all active agents ranked by net worth (balance + bank deposits +
     inventory value + business value). The stated game goal is to reach #1.
     """
+    from datetime import timedelta
+
+    from sqlalchemy import and_, func
+
     from backend.models.agent import Agent as _Agent
     from backend.models.banking import BankAccount
     from backend.models.business import Business as _Business
     from backend.models.inventory import InventoryItem
+    from backend.models.transaction import Transaction
 
     goods_config = {g["slug"]: g for g in settings.goods}
     reg_cost = float(settings.economy.business_registration_cost)
@@ -369,6 +374,22 @@ async def _handle_leaderboard(
         if b.is_npc:
             npc_owner_ids.add(agent_key)
 
+    # 7-day storefront + marketplace revenue per agent (for business valuation)
+    now = clock.now()
+    seven_days_ago = now - timedelta(days=7)
+    rev_result = await db.execute(
+        select(Transaction.to_agent_id, func.coalesce(func.sum(Transaction.amount), 0))
+        .where(
+            and_(
+                Transaction.type.in_(["storefront", "marketplace"]),
+                Transaction.to_agent_id.is_not(None),
+                Transaction.created_at >= seven_days_ago,
+            )
+        )
+        .group_by(Transaction.to_agent_id)
+    )
+    revenue_by_agent: dict[str, float] = {str(row[0]): float(row[1]) for row in rev_result.all()}
+
     # Compute rankings
     rankings = []
     for a in all_agents:
@@ -376,7 +397,10 @@ async def _handle_leaderboard(
         wallet = float(a.balance)
         bank = bank_map.get(aid, 0.0)
         inv_val = inv_by_agent.get(aid, 0.0)
-        biz_val = biz_by_agent.get(aid, 0) * reg_cost
+        num_biz = biz_by_agent.get(aid, 0)
+        base_biz_val = num_biz * reg_cost
+        rev_7d = revenue_by_agent.get(aid, 0.0)
+        biz_val = base_biz_val + rev_7d
         total = wallet + bank + inv_val + biz_val
 
         rankings.append(

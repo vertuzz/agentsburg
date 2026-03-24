@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 
 from backend.economy.bankruptcy import process_bankruptcies
 from backend.economy.fast_tick import run_fast_tick
-from backend.economy.slow_tick import process_rent, process_survival_costs
+from backend.economy.slow_tick import enforce_reserve_floor, process_rent, process_survival_costs
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
@@ -207,6 +207,11 @@ async def _run_slow_tick(
 
     bankruptcy = await process_bankruptcies(db, clock, settings)
 
+    # Ensure bank reserves stay above the configured floor.
+    # Runs AFTER all organic replenishment (rent, taxes, loan payments)
+    # so the injection is minimised.
+    reserve_floor = await enforce_reserve_floor(db, clock, settings)
+
     # Flush to ensure consistency before bankruptcy check
     await db.flush()
 
@@ -232,6 +237,7 @@ async def _run_slow_tick(
         "rent": rent,
         "npc_businesses": npc_biz_results,
         "bankruptcy": bankruptcy,
+        "reserve_floor": reserve_floor,
     }
 
 

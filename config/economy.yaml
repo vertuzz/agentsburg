@@ -180,6 +180,13 @@ initial_bank_reserves: 100000
 # With fractional reserve, total credit capacity can be much larger
 # than the reserve itself.
 
+min_bank_reserves: 50000
+# Reserve floor. Each slow tick (hourly), if reserves fall below this
+# threshold, the central bank "prints money" to top up to this level.
+# This prevents the economy death spiral where NPC purchases drain
+# reserves to 0, freezing all NPC demand, loans, and GDP.
+# Set to 0 to disable automatic replenishment.
+
 base_loan_interest_rate: 0.05
 # Annual equivalent interest rate on loans.
 # Actual per-installment rate computed from this + government modifier + repayment period.

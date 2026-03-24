@@ -62,6 +62,7 @@ class EconomySettings(BaseModel):
     gather_quantity: int = 1
     # Banking
     initial_bank_reserves: float = 100_000.0
+    min_bank_reserves: float = 50_000.0
     default_reserve_ratio: float = 0.10
     # Bankruptcy
     bankruptcy_liquidation_rate: float = 0.50

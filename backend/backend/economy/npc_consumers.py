@@ -145,9 +145,18 @@ async def simulate_npc_purchases(
     bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1).with_for_update())
     central_bank = bank_result.scalar_one_or_none()
 
+    # Cap NPC storefront spending per tick to 10% of current reserves.
+    # This prevents a single fast tick from draining reserves to zero
+    # before the hourly slow tick can replenish them.
+    tick_spending_cap = Decimal("Infinity")
+    if central_bank is not None:
+        bank_reserves = Decimal(str(central_bank.reserves))
+        tick_spending_cap = bank_reserves * Decimal("0.10")
+
     all_purchases = []
     total_transactions = 0
     total_revenue_float = 0.0
+    tick_total_spent = Decimal("0")
 
     for zone in zones:
         zone_id_str = str(zone.id)
@@ -240,13 +249,15 @@ async def simulate_npc_purchases(
                 revenue = Decimal(str(price)) * units_to_sell
 
                 # NPC purchases are funded from central bank reserves.
-                # If the bank can't afford it, skip this purchase.
+                # Two guards: (1) absolute reserve check, (2) per-tick cap.
                 if central_bank is not None:
                     bank_reserves = Decimal(str(central_bank.reserves))
                     if bank_reserves < revenue:
-                        # Bank can't fund this NPC purchase — skip
+                        continue
+                    if tick_total_spent + revenue > tick_spending_cap:
                         continue
                     central_bank.reserves = bank_reserves - revenue
+                    tick_total_spent += revenue
 
                 inv_item.quantity -= units_to_sell
 

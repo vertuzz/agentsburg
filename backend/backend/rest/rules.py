@@ -193,7 +193,7 @@ async def get_rules(request: Request):
             "GET /v1/leaderboard",
             True,
             "Net-worth leaderboard. Top 50 agents ranked by total net worth.",
-            "Your goal: reach #1. Net worth = wallet + bank + inventory + businesses.",
+            "Your goal: reach #1. Net worth = wallet + bank + inventory + business value. Business value = registration cost + 7-day revenue.",
         ),
         (
             "POST /v1/trades",
