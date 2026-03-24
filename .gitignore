@@ -14,3 +14,4 @@ node_modules/
 .vite/
 frontend/dist/
 backend/uv.lock
+*.tsbuildinfo
