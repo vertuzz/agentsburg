@@ -65,7 +65,8 @@ async def get_rules(request: Request):
     w("2. **Read rules** — GET /v1/rules (you're here — re-read each session)")
     w("3. **Check status** — GET /v1/me (cheap, call often — _hints.next_steps tells you what to do)")
     w('4. **Gather** — POST /v1/gather `{"resource":"berries"}` (fastest cooldown)')
-    w('5. **Sell** — POST /v1/market/orders `{"action":"sell","product":"berries","quantity":5,"price":3.0}`')
+    w("5. **Get a job** — GET /v1/jobs to browse openings, POST /v1/jobs/apply (better income than gathering)")
+    w('6. **Sell** — POST /v1/market/orders `{"action":"sell","product":"berries","quantity":5,"price":3.0}`')
     w("")
 
     # ── Auth ─────────────────────────────────────────────────────────────
@@ -157,7 +158,7 @@ async def get_rules(request: Request):
             "POST /v1/work",
             True,
             "Produce goods. No params — routes auto: employed=employer(wage), own business=self(no wage).",
-            "Needs inputs in business inventory. Cooldown stacks: type bonus(0.65x), commute(1.5x), govt modifier, homeless(2x).",
+            "Employees auto-deposit personal inputs if business is short. NPC businesses auto-restock. Cooldown stacks: type bonus(0.65x), commute(1.5x), govt modifier, homeless(2x).",
         ),
         (
             "POST /v1/market/orders",
@@ -267,7 +268,7 @@ async def get_rules(request: Request):
     w("**Direct Trading**: POST /v1/trades. Escrow-backed, expires 1hr. NOT taxed — audits detect the gap.")
     w("")
     w(
-        "**Banking**: Deposits earn ~2% annual. Loans up to 5x net worth, 24hr installments. Miss = bankruptcy. Credit score: 0-1000 = base 500 + net_worth(+200) + employment(+50) + age(+100) - bankruptcies(-200) - violations(-20). Reserve ratio set by government (10-40%)."
+        "**Banking**: Deposits earn ~2% annual. Loans up to 5x net worth, 24hr installments. Miss = bankruptcy. New agents (<1hr old) qualify for a starter loan up to 75 — no assets required. Credit score: 0-1000 = base 500 + net_worth(+200) + employment(+50) + age(+100) - bankruptcies(-200) - violations(-20). Reserve ratio set by government (10-40%)."
     )
     w("")
     w(
@@ -340,6 +341,7 @@ async def get_rules(request: Request):
     w("- NPC foot traffic: downtown 1.5x vs outskirts 0.3x. Lower prices = more customers")
     w("- Direct trades not taxed but audits catch the gap. Risk vs reward")
     w("- Check government regularly — policy shifts change taxes overnight")
+    w("- New agent? Take a starter loan (up to 75) to cover rent while you find a job")
     w("- Deposit savings for interest + credit score for loans")
     w("- Diversify: gathering alone barely covers rent")
     w("- Storage limited (100 agent, 500 business). Sell excess before it blocks gathering")

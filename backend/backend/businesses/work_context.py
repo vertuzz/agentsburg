@@ -165,9 +165,18 @@ async def verify_and_consume_inputs(
     db: AsyncSession,
     business: Business,
     recipe: Recipe,
+    agent: Agent | None = None,
+    settings: Any = None,
 ) -> list[dict[str, Any]]:
-    """Verify the business has enough inputs and deduct them."""
+    """Verify the business has enough inputs and deduct them.
+
+    If the business lacks inputs:
+      1. If an employed agent has the needed goods, auto-deposit them.
+      2. If the business is NPC-owned, auto-restock from the central bank.
+    """
     inputs: list[dict[str, Any]] = recipe.inputs_json or []
+    auto_deposited: list[dict] = []
+
     for inp in inputs:
         inv_result = await db.execute(
             select(InventoryItem).where(
@@ -178,13 +187,55 @@ async def verify_and_consume_inputs(
         )
         inv_item = inv_result.scalar_one_or_none()
         have = inv_item.quantity if inv_item else 0
-        if have < inp["quantity"]:
+        shortfall = inp["quantity"] - have
+
+        if shortfall > 0 and agent is not None and settings is not None:
+            # Try employee auto-deposit from personal inventory
+            agent_inv_result = await db.execute(
+                select(InventoryItem).where(
+                    InventoryItem.owner_type == "agent",
+                    InventoryItem.owner_id == agent.id,
+                    InventoryItem.good_slug == inp["good_slug"],
+                )
+            )
+            agent_inv = agent_inv_result.scalar_one_or_none()
+            agent_has = agent_inv.quantity if agent_inv else 0
+
+            if agent_has >= shortfall:
+                import contextlib
+
+                with contextlib.suppress(ValueError):
+                    await remove_from_inventory(
+                        db=db,
+                        owner_type="agent",
+                        owner_id=agent.id,
+                        good_slug=inp["good_slug"],
+                        quantity=shortfall,
+                    )
+                    await add_to_inventory(
+                        db=db,
+                        owner_type="business",
+                        owner_id=business.id,
+                        good_slug=inp["good_slug"],
+                        quantity=shortfall,
+                        settings=settings,
+                    )
+                    auto_deposited.append({"good_slug": inp["good_slug"], "quantity": shortfall})
+                    shortfall = 0
+
+        if shortfall > 0 and business.is_npc and settings is not None:
+            # NPC auto-restock from central bank
+            await _npc_restock_input(db, business, inp["good_slug"], shortfall, settings)
+            shortfall = 0
+
+        if shortfall > 0:
             raise ValueError(
                 f"Business {business.name!r} lacks inputs to produce {recipe.output_good!r}. "
                 f"Need {inp['quantity']}x {inp['good_slug']}, have {have}. "
                 f"Use POST /v1/businesses/inventory with action='deposit' to transfer "
                 f"goods from your personal inventory to the business."
             )
+
     for inp in inputs:
         await remove_from_inventory(
             db=db,
@@ -194,6 +245,41 @@ async def verify_and_consume_inputs(
             quantity=inp["quantity"],
         )
     return inputs
+
+
+async def _npc_restock_input(
+    db: AsyncSession,
+    business: Business,
+    good_slug: str,
+    quantity: int,
+    settings: Any,
+) -> None:
+    """Buy missing inputs from the central bank at base_value for NPC businesses."""
+    from backend.models.banking import CentralBank
+
+    goods_config = {g["slug"]: g for g in settings.goods}
+    unit_cost = Decimal(str(goods_config.get(good_slug, {}).get("base_value", 1)))
+    total_cost = unit_cost * quantity
+
+    bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1).with_for_update())
+    central_bank = bank_result.scalar_one_or_none()
+    if central_bank is None or Decimal(str(central_bank.reserves)) < total_cost:
+        return
+
+    central_bank.reserves = Decimal(str(central_bank.reserves)) - total_cost
+
+    import contextlib
+
+    with contextlib.suppress(ValueError):
+        await add_to_inventory(
+            db=db,
+            owner_type="business",
+            owner_id=business.id,
+            good_slug=good_slug,
+            quantity=quantity,
+            settings=settings,
+        )
+    await db.flush()
 
 
 async def produce_output(

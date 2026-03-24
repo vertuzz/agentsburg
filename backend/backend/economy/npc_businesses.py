@@ -3,18 +3,22 @@ NPC Business Simulation for Agent Economy.
 
 Runs during the slow tick (hourly). Handles all automated NPC business logic:
 
-1. Auto-produce: NPC businesses produce goods each tick using their recipe
+1. Drain excess inventory: If an NPC business has inventory above 70% of
+   storage capacity, drain down to 50%. Prevents permanent "storage full".
+   (Implementation: _drain_excess_inventory)
+
+2. Auto-produce: NPC businesses produce goods each tick using their recipe
    (or directly add goods if no recipe). NPC efficiency = 0.5x.
    (Implementation in npc_production.py)
 
-2. Profitability check: If an NPC business has been unprofitable for
+3. Profitability check: If an NPC business has been unprofitable for
    3+ consecutive periods, close it (it's been outcompeted by players).
 
-3. Demand gap detection: If a good has high NPC demand but no supply,
+4. Demand gap detection: If a good has high NPC demand but no supply,
    spawn a new NPC business to fill the gap.
    (Implementation in npc_production.py)
 
-4. Price adjustment:
+5. Price adjustment:
    - Inventory growing (not selling fast enough) → reduce prices 5-10%
    - Selling out every tick → increase prices 5-10%
 
@@ -29,7 +33,7 @@ import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 # Re-export so existing imports from this module still work
 from backend.economy.npc_production import (
@@ -61,6 +65,11 @@ _REVENUE_HISTORY_KEY = "npc_revenue_history"
 PRICE_REDUCTION_FACTOR = 0.92  # 8% price cut when overstocked
 PRICE_INCREASE_FACTOR = 1.08  # 8% price rise when selling out
 MIN_PRICE = Decimal("0.50")  # Never price below 0.50
+
+# Inventory drain thresholds (fraction of storage_capacity)
+DRAIN_HIGH_WATERMARK = 0.7  # Start draining above this
+DRAIN_LOW_WATERMARK = 0.5  # Drain down to this level
+DRAIN_SALE_DISCOUNT = Decimal("0.5")  # NPC receives 50% of base_value for drained goods
 
 
 async def simulate_npc_businesses(
@@ -110,7 +119,10 @@ async def simulate_npc_businesses(
     bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1))
     central_bank = bank_result.scalar_one_or_none()
 
-    # --- Step 1: Auto-produce ---
+    # --- Step 1: Drain excess inventory ---
+    drain_log = await _drain_excess_inventory(db, npc_businesses, agents_map, central_bank, settings)
+
+    # --- Step 2: Auto-produce ---
     production_log = await run_npc_production(
         db,
         npc_businesses,
@@ -123,10 +135,10 @@ async def simulate_npc_businesses(
         settings,
     )
 
-    # --- Step 2: Profitability check ---
+    # --- Step 3: Profitability check ---
     closures = _check_profitability(npc_businesses, agents_map, now)
 
-    # --- Step 3: Demand gap spawning ---
+    # --- Step 4: Demand gap spawning ---
     spawned = await spawn_demand_gap_businesses(
         db,
         settings,
@@ -135,13 +147,14 @@ async def simulate_npc_businesses(
         now,
     )
 
-    # --- Step 4: Price adjustment ---
+    # --- Step 5: Price adjustment ---
     price_adjustments = await _adjust_prices(db, settings)
 
     await db.flush()
 
     logger.info(
-        "NPC businesses: %d produced, %d closed, %d spawned, %d price adjustments",
+        "NPC businesses: %d drained, %d produced, %d closed, %d spawned, %d price adjustments",
+        len(drain_log),
         len(production_log),
         len(closures),
         len(spawned),
@@ -151,11 +164,94 @@ async def simulate_npc_businesses(
     return {
         "type": "npc_businesses",
         "timestamp": now.isoformat(),
+        "drain": drain_log,
         "production": production_log,
         "closures": closures,
         "spawned": spawned,
         "price_adjustments": price_adjustments,
     }
+
+
+async def _drain_excess_inventory(
+    db: AsyncSession,
+    npc_businesses: list[Business],
+    agents_map: dict[str, Agent],
+    central_bank: CentralBank | None,
+    settings: Settings,
+) -> list[dict]:
+    """Step 1: Drain NPC inventory above high watermark down to low watermark.
+
+    Prevents NPC businesses from getting permanently stuck at full storage,
+    which blocks employee work() calls. Drained goods are consumed (removed
+    from the economy). The NPC owner receives 50% of base_value as revenue.
+    """
+    goods_config = {g["slug"]: g for g in settings.goods}
+    drain_log: list[dict] = []
+
+    for biz in npc_businesses:
+        high_mark = int(biz.storage_capacity * DRAIN_HIGH_WATERMARK)
+        low_mark = int(biz.storage_capacity * DRAIN_LOW_WATERMARK)
+
+        # Check total storage used
+        used_result = await db.execute(
+            select(func.coalesce(func.sum(InventoryItem.quantity), 0)).where(
+                InventoryItem.owner_type == "business",
+                InventoryItem.owner_id == biz.id,
+            )
+        )
+        total_used = int(used_result.scalar_one())
+        if total_used <= high_mark:
+            continue
+
+        owner = agents_map.get(str(biz.owner_id))
+        units_to_drain = total_used - low_mark
+
+        # Drain from each inventory item proportionally
+        inv_result = await db.execute(
+            select(InventoryItem).where(
+                InventoryItem.owner_type == "business",
+                InventoryItem.owner_id == biz.id,
+                InventoryItem.quantity > 0,
+            )
+        )
+        items = list(inv_result.scalars().all())
+
+        drained_total = 0
+        revenue = Decimal("0")
+        for item in items:
+            if drained_total >= units_to_drain:
+                break
+            drain_qty = min(item.quantity, units_to_drain - drained_total)
+            item.quantity -= drain_qty
+            drained_total += drain_qty
+
+            base_val = Decimal(str(goods_config.get(item.good_slug, {}).get("base_value", 1)))
+            revenue += base_val * DRAIN_SALE_DISCOUNT * drain_qty
+
+        # Credit revenue to NPC owner (from central bank)
+        if owner is not None and revenue > 0 and central_bank is not None:
+            bank_reserves = Decimal(str(central_bank.reserves))
+            payout = min(revenue, bank_reserves)
+            if payout > 0:
+                owner.balance = Decimal(str(owner.balance)) + payout
+                central_bank.reserves = bank_reserves - payout
+
+        if drained_total > 0:
+            drain_log.append(
+                {
+                    "business": biz.name,
+                    "units_drained": drained_total,
+                    "revenue": float(revenue),
+                }
+            )
+            logger.debug(
+                "Drained %d units from NPC %r (revenue: %.2f)",
+                drained_total,
+                biz.name,
+                float(revenue),
+            )
+
+    return drain_log
 
 
 def _check_profitability(

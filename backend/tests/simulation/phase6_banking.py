@@ -3,22 +3,46 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 
 from backend.models.agent import Agent
 from backend.models.banking import BankAccount, CentralBank
 from tests.conftest import give_balance
+from tests.helpers import TestAgent
 from tests.simulation.helpers import print_phase, print_section
-
-if TYPE_CHECKING:
-    from tests.helpers import TestAgent
 
 
 async def run_phase_6(agents: dict[str, TestAgent], client, app, clock, run_tick, redis_client):
     """Test banking: deposit, withdraw, loans, interest accrual, money supply invariant."""
     print_phase(6, "BANKING")
+
+    # --- 6-starter: Starter loan for new agents ---
+    print_section("Starter loan for new agent")
+
+    # Sign up a fresh agent (clock hasn't advanced much within this phase)
+    starter = await TestAgent.signup(client, "eco_starter_loan_test")
+    starter_status = await starter.status()
+    assert starter_status["max_loan_amount"] >= 75.0, (
+        f"New agent should qualify for starter loan >= 75, got {starter_status['max_loan_amount']}"
+    )
+    print(f"  New agent max_loan_amount={starter_status['max_loan_amount']} (>= 75 starter floor)")
+
+    # Ensure bank has reserves for the loan
+    async with app.state.session_factory() as session:
+        cb = await session.execute(select(CentralBank).where(CentralBank.id == 1))
+        bank_row = cb.scalar_one()
+        if float(bank_row.reserves) < 10000:
+            bank_row.reserves = Decimal("50000")
+            await session.commit()
+
+    starter_loan = await starter.call("bank", {"action": "take_loan", "amount": 50})
+    assert starter_loan["principal"] == 50.0, f"Loan principal should be 50, got {starter_loan['principal']}"
+    assert starter_loan["installments_remaining"] == 24
+    assert starter_loan["interest_rate"] > 0
+    new_balance = starter_loan["wallet_balance"]
+    assert new_balance >= 50.0 + 15.0, f"After loan, balance should be >= 65 (15 starting + 50 loan), got {new_balance}"
+    print(f"  Starter loan approved: principal=50, rate={starter_loan['interest_rate']}, balance={new_balance}")
 
     banker = agents["eco_banker"]
     await give_balance(app, "eco_banker", 1000)

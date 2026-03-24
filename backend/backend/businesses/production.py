@@ -112,7 +112,7 @@ async def work(
 
     # Steps 4-9: Production, payment, and cooldown (under lock)
     try:
-        inputs = await verify_and_consume_inputs(db, ctx.business, recipe)
+        inputs = await verify_and_consume_inputs(db, ctx.business, recipe, agent=agent, settings=settings)
         output_item = await produce_output(db, ctx.business, recipe, inputs, settings)
 
         wage_earned: float = 0.0

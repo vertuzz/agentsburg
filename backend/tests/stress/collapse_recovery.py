@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from backend.models.agent import Agent
 from backend.models.banking import BankAccount, CentralBank
 from backend.models.business import Business, StorefrontPrice
+from backend.models.inventory import InventoryItem
 from tests.conftest import get_balance, give_balance
 from tests.helpers import TestAgent
 from tests.stress.helpers import assert_no_negative_inventory, get_open_business_count
@@ -193,6 +194,31 @@ async def phase3_recovery(client, app, clock, run_tick, state: dict) -> None:
         if cb:
             print(f"  Central bank: reserves={float(cb.reserves):.2f}, total_loaned={float(cb.total_loaned):.2f}")
             assert float(cb.reserves) >= 0, f"Central bank reserves should be >= 0, got {cb.reserves}"
+
+    # Verify NPC inventory drain prevents stuck storage
+    async with app.state.session_factory() as session:
+        npc_biz_result = await session.execute(
+            select(Business).where(
+                Business.is_npc == True,  # noqa: E712
+                Business.closed_at.is_(None),
+            )
+        )
+        for biz in npc_biz_result.scalars().all():
+            inv_result = await session.execute(
+                select(func.coalesce(func.sum(InventoryItem.quantity), 0)).where(
+                    InventoryItem.owner_type == "business",
+                    InventoryItem.owner_id == biz.id,
+                )
+            )
+            total_inv = int(inv_result.scalar_one())
+            # After drain, NPC inventory should stay well below full capacity.
+            # Use 90% as threshold (drain targets 50%, but production adds
+            # goods after drain within the same tick cycle).
+            cap = biz.storage_capacity
+            assert total_inv <= int(cap * 0.9), (
+                f"NPC {biz.name} inventory {total_inv} near full capacity {cap} — drain not working"
+            )
+    print("  NPC business inventories below full capacity — drain working")
 
     # Final NPC business count
     npc_final = await get_open_business_count(app, is_npc=True)

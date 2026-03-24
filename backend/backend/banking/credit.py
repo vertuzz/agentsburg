@@ -177,6 +177,17 @@ async def calculate_credit(
     # Minimum 0 — no loans for agents with nothing
     max_loan_amount = _round_money(max(Decimal("0"), base_max))
 
+    # Starter loan floor: new agents (< 1 hour old, no bankruptcies) get
+    # a minimum credit line of 75 to cover rent + survival while learning.
+    STARTER_LOAN_FLOOR = Decimal("75")
+    STARTER_LOAN_AGE_HOURS = 1.0
+    if (
+        account_age_days < (STARTER_LOAN_AGE_HOURS / 24.0)
+        and agent.bankruptcy_count == 0
+        and max_loan_amount < STARTER_LOAN_FLOOR
+    ):
+        max_loan_amount = STARTER_LOAN_FLOOR
+
     # --- Interest rate ---
     base_rate = Decimal(str(settings.economy.base_loan_interest_rate))
     bankruptcy_penalty = Decimal(str(agent.bankruptcy_count)) * Decimal("0.02")

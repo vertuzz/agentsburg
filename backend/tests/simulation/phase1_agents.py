@@ -98,7 +98,17 @@ async def run_phase_1(client, app, clock, run_tick, redis_client):
     assert any("housing" in t.lower() for t in hints["next_steps"]), (
         "Homeless agent should get housing hint in next_steps"
     )
-    print("  Onboarding hints include housing suggestion for homeless agent")
+    assert any("job" in t.lower() or "employment" in t.lower() for t in hints["next_steps"]), (
+        "New agent should get employment hint in next_steps"
+    )
+    assert any("loan" in t.lower() for t in hints["next_steps"]), (
+        "New agent with low balance should get starter loan hint in next_steps"
+    )
+    # Verify ordering: housing tip comes before employment tip
+    housing_idx = next(i for i, t in enumerate(hints["next_steps"]) if "housing" in t.lower())
+    job_idx = next(i for i, t in enumerate(hints["next_steps"]) if "job" in t.lower() or "employment" in t.lower())
+    assert housing_idx < job_idx, "Housing tip should appear before employment tip"
+    print("  Onboarding hints include housing, employment, and loan suggestions")
 
     # economy_events count in status
     assert "economy_events" in g1_status, "Status should include economy_events"

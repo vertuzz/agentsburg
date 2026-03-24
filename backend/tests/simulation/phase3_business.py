@@ -604,6 +604,130 @@ async def run_phase_3(agents: dict[str, TestAgent], client, app, clock, run_tick
     assert lj_work_farm["business_id"] == lj_farm_id
     print(f"  Lumberjack worked at farm: produced {lj_work_farm['produced']['good']}")
 
+    # --- 3o: Employee auto-deposit inputs ---
+    print_section("Employee auto-deposit inputs on work()")
+
+    # Give worker1 wheat in personal inventory; empty mill's wheat
+    await give_inventory(app, "eco_worker1", "wheat", 20)
+    async with app.state.session_factory() as session:
+        mill_wheat = (
+            await session.execute(
+                select(InventoryItem).where(
+                    InventoryItem.owner_type == "business",
+                    InventoryItem.owner_id == _uuid.UUID(mill_id),
+                    InventoryItem.good_slug == "wheat",
+                )
+            )
+        ).scalar_one_or_none()
+        if mill_wheat:
+            mill_wheat.quantity = 0
+        await session.commit()
+
+    clock.advance(120)
+    auto_dep_work = await agents["eco_worker1"].call("work", {})
+    assert auto_dep_work["produced"]["good"] == "flour", "Worker should produce flour via auto-deposit"
+    assert auto_dep_work["employed"] is True
+    print("  worker1 produced flour via auto-deposit from personal inventory")
+
+    # Verify worker's wheat was consumed (had 20, recipe needs some)
+    w1_status = await agents["eco_worker1"].status()
+    w1_wheat = next((i for i in w1_status["inventory"] if i["good_slug"] == "wheat"), None)
+    w1_wheat_qty = w1_wheat["quantity"] if w1_wheat else 0
+    assert w1_wheat_qty < 20, f"Worker wheat should have been consumed via auto-deposit, still has {w1_wheat_qty}"
+    print(f"  worker1 wheat: 20 -> {w1_wheat_qty} (auto-deposited to mill)")
+
+    # --- 3p: NPC business auto-restock on employee work() ---
+    print_section("NPC business auto-restock on work()")
+
+    from backend.models.business import Business as BizModel
+
+    # Find an NPC business with a recipe that needs inputs (tier 2+)
+    async with app.state.session_factory() as session:
+        npc_biz_result = await session.execute(
+            select(BizModel).where(
+                BizModel.is_npc == True,  # noqa: E712
+                BizModel.closed_at.is_(None),
+                BizModel.default_recipe_slug.isnot(None),
+            )
+        )
+        npc_businesses = list(npc_biz_result.scalars().all())
+
+    # Find one with inputs (not an extraction recipe)
+    from backend.models.recipe import Recipe as RecipeModel
+
+    npc_biz_for_test = None
+    npc_recipe = None
+    for nb in npc_businesses:
+        async with app.state.session_factory() as session:
+            r = (
+                await session.execute(select(RecipeModel).where(RecipeModel.slug == nb.default_recipe_slug))
+            ).scalar_one_or_none()
+            if r and r.inputs_json:
+                npc_biz_for_test = nb
+                npc_recipe = r
+                break
+
+    if npc_biz_for_test is not None:
+        # Get the NPC business job posting for a test agent to apply
+        from backend.models.business import JobPosting as JPModel
+
+        async with app.state.session_factory() as session:
+            jp = (
+                await session.execute(
+                    select(JPModel).where(
+                        JPModel.business_id == npc_biz_for_test.id,
+                        JPModel.is_active == True,  # noqa: E712
+                    )
+                )
+            ).scalar_one_or_none()
+
+        if jp is not None:
+            # eco_trader is not employed — use them as test subject
+            trader = agents["eco_trader"]
+            trader_status = await trader.status()
+            if not (trader_status.get("employment") or {}).get("employed"):
+                # Empty the NPC business inputs
+                async with app.state.session_factory() as session:
+                    for inp in npc_recipe.inputs_json:
+                        inp_slug = inp.get("good_slug") or inp.get("good")
+                        inv = (
+                            await session.execute(
+                                select(InventoryItem).where(
+                                    InventoryItem.owner_type == "business",
+                                    InventoryItem.owner_id == npc_biz_for_test.id,
+                                    InventoryItem.good_slug == inp_slug,
+                                )
+                            )
+                        ).scalar_one_or_none()
+                        if inv:
+                            inv.quantity = 0
+                    await session.commit()
+
+                clock.advance(120)
+                npc_apply = await trader.call("apply_job", {"job_id": str(jp.id)})
+                assert "employment_id" in npc_apply
+                print(f"  eco_trader hired at NPC business {npc_biz_for_test.name!r}")
+
+                clock.advance(120)
+                npc_work = await trader.call("work", {})
+                assert npc_work["produced"]["good"] == npc_recipe.output_good, (
+                    f"NPC restock should enable production of {npc_recipe.output_good}"
+                )
+                print(
+                    f"  eco_trader produced {npc_work['produced']['good']} at NPC business "
+                    f"(auto-restocked from central bank)"
+                )
+
+                # Quit so trader is free for later phases
+                await trader.call("manage_employees", {"action": "quit_job"})
+                print("  eco_trader quit NPC job")
+            else:
+                print("  eco_trader already employed, skipping NPC restock test")
+        else:
+            print("  No NPC job posting found, skipping NPC restock test")
+    else:
+        print("  No NPC business with input recipe found, skipping NPC restock test")
+
     # Run 2 days of ticks
     await run_tick(hours=48)
     print("  Ran 2 days of ticks")

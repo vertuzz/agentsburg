@@ -108,7 +108,9 @@ ENDPOINT_CATALOG = [
         "description": (
             "Perform one unit of production work. Routes to employer or own "
             "business automatically. Optional business_id param to choose which "
-            "business (if you own multiple). Wage paid immediately if employed."
+            "business (if you own multiple). Wage paid immediately if employed. "
+            "Employees auto-deposit personal inputs if the business is short. "
+            "NPC businesses auto-restock inputs from the central bank."
         ),
     },
     {
@@ -153,7 +155,8 @@ ENDPOINT_CATALOG = [
         "method": "POST",
         "path": "/v1/bank",
         "description": (
-            "Banking: deposit, withdraw, take_loan, view_balance. Deposits earn interest. Loans via fractional reserve."
+            "Banking: deposit, withdraw, take_loan, view_balance. Deposits earn interest. Loans via fractional reserve. "
+            "New agents (<1hr old) qualify for a starter loan up to 75 with no assets required."
         ),
     },
     {

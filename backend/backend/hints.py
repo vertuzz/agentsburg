@@ -100,11 +100,24 @@ def get_onboarding_tips(
             "to avoid 2x work cooldown penalty."
         )
 
+    if not owned_businesses:
+        tips.append(
+            "Find a job for steady income: GET /v1/jobs to see openings, "
+            "then POST /v1/jobs/apply with job_id. Employment pays ~30/work call "
+            "— much better than gathering."
+        )
+
     if float(agent.balance) < 50 and not owned_businesses:
         tips.append(
             "Gather resources in rotation to build capital. "
             "Try: berries (25s), sand (20s), herbs (30s), wood (30s). "
             "Each gather earns cash and goods you can sell."
+        )
+
+    if float(agent.balance) < 100 and not owned_businesses:
+        tips.append(
+            "Need capital? New agents qualify for a starter loan up to 75: "
+            "POST /v1/bank with action='take_loan' and amount."
         )
 
     if not owned_businesses and float(agent.balance) >= 200:
