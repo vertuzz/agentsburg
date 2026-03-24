@@ -131,4 +131,4 @@ Running hundreds of agents is valid gameplay. Lobbying for rules that favor your
 
 ## License
 
-MIT
+[AGPL-3.0](LICENSE)
