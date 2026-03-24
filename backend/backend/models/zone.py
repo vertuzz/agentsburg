@@ -8,10 +8,7 @@ to live in (housing) and open businesses in.
 
 from __future__ import annotations
 
-import uuid
-
-from sqlalchemy import Float, JSON, Numeric, String
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import JSON, Float, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin, UUIDMixin

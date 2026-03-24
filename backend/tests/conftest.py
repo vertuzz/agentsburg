@@ -23,21 +23,19 @@ No manual env var exports are needed.
 
 from __future__ import annotations
 
-import asyncio
 import os
-from datetime import datetime, timedelta, timezone
+from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import AsyncGenerator
 
 import httpx
-import pytest
 import pytest_asyncio
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from backend.clock import MockClock
-from backend.config import load_settings, Settings
+from backend.config import Settings, load_settings
 from backend.main import create_app
 from backend.models.agent import Agent
 from backend.models.base import Base
@@ -96,6 +94,7 @@ if not CONFIG_DIR.exists():
 # Settings helpers — read from os.environ (already populated above)
 # ---------------------------------------------------------------------------
 
+
 def _get_test_db_url() -> str:
     return os.environ.get(
         "DATABASE_URL",
@@ -110,6 +109,7 @@ def _get_test_redis_url() -> str:
 # ---------------------------------------------------------------------------
 # Session-scoped: database setup/teardown
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture(scope="session")
 async def test_db_url() -> str:
@@ -148,6 +148,7 @@ async def create_test_database(test_db_url: str):
 # Function-scoped: per-test isolation
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def settings(test_db_url: str, test_redis_url: str) -> Settings:
     """Load settings with test DB and Redis URLs."""
@@ -155,6 +156,7 @@ async def settings(test_db_url: str, test_redis_url: str) -> Settings:
     # Override DB and Redis with test URLs (already set via .env.test but
     # we apply them explicitly here so the fixture is self-documenting)
     from backend.config import DatabaseSettings, RedisSettings
+
     return Settings(
         database=DatabaseSettings(url=test_db_url, echo=False),
         redis=RedisSettings(url=test_redis_url),
@@ -172,7 +174,7 @@ async def settings(test_db_url: str, test_redis_url: str) -> Settings:
 @pytest_asyncio.fixture
 async def clock() -> MockClock:
     """MockClock starting at 2026-01-01 00:00:00 UTC."""
-    return MockClock(start=datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc))
+    return MockClock(start=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC))
 
 
 @pytest_asyncio.fixture
@@ -192,7 +194,7 @@ async def app(settings: Settings, clock: MockClock, create_test_database):
 
 
 @pytest_asyncio.fixture
-async def client(app) -> AsyncGenerator[httpx.AsyncClient, None]:
+async def client(app) -> AsyncGenerator[httpx.AsyncClient]:
     """
     Async HTTP client using ASGI transport.
 
@@ -207,7 +209,7 @@ async def client(app) -> AsyncGenerator[httpx.AsyncClient, None]:
 
 
 @pytest_asyncio.fixture
-async def db(app) -> AsyncGenerator[AsyncSession, None]:
+async def db(app) -> AsyncGenerator[AsyncSession]:
     """
     Direct database session for test assertions.
 
@@ -251,6 +253,7 @@ async def run_tick(app, clock: MockClock):
         # Run many ticks quickly (advance by days)
         await run_tick(days=3)
     """
+
     async def _run_tick(
         hours: float = 0,
         minutes: float = 0,
@@ -304,6 +307,7 @@ async def run_tick(app, clock: MockClock):
 # ---------------------------------------------------------------------------
 # Shared test helpers — used by multiple test files
 # ---------------------------------------------------------------------------
+
 
 async def give_balance(app, agent_name: str, amount: float) -> None:
     """Directly set an agent's balance for test setup."""
@@ -360,12 +364,14 @@ async def give_inventory(app, agent_name: str, good_slug: str, quantity: int) ->
         if inv_item:
             inv_item.quantity = quantity
         else:
-            session.add(InventoryItem(
-                owner_type="agent",
-                owner_id=agent.id,
-                good_slug=good_slug,
-                quantity=quantity,
-            ))
+            session.add(
+                InventoryItem(
+                    owner_type="agent",
+                    owner_id=agent.id,
+                    good_slug=good_slug,
+                    quantity=quantity,
+                )
+            )
         await session.commit()
 
 

@@ -8,9 +8,8 @@ from sqlalchemy import select
 
 from backend.models.agent import Agent
 from backend.models.marketplace import MarketOrder, MarketTrade
-
+from tests.conftest import get_balance, give_balance, give_inventory, jail_agent
 from tests.helpers import TestAgent
-from tests.conftest import give_balance, give_inventory, get_balance, jail_agent
 
 
 async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
@@ -34,21 +33,27 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
     agents["adv_washer"] = adv_washer
 
     # Place a sell order for berries at price 5
-    sell_result = await adv_washer.call("marketplace_order", {
-        "action": "sell",
-        "product": "berries",
-        "quantity": 5,
-        "price": 5,
-    })
+    sell_result = await adv_washer.call(
+        "marketplace_order",
+        {
+            "action": "sell",
+            "product": "berries",
+            "quantity": 5,
+            "price": 5,
+        },
+    )
     sell_order_id = sell_result["order"]["id"]
 
     # Place a buy order for berries at price 5 (same agent)
-    buy_result = await adv_washer.call("marketplace_order", {
-        "action": "buy",
-        "product": "berries",
-        "quantity": 5,
-        "price": 5,
-    })
+    buy_result = await adv_washer.call(
+        "marketplace_order",
+        {
+            "action": "buy",
+            "product": "berries",
+            "quantity": 5,
+            "price": 5,
+        },
+    )
     buy_order_id = buy_result["order"]["id"]
 
     # Neither should fill against each other at placement time
@@ -63,10 +68,8 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
     # Verify via DB: no MarketTrade exists matching this agent's orders
     async with app.state.session_factory() as session:
         # Get agent ID
-        agent_result = await session.execute(
-            select(Agent).where(Agent.name == "adv_washer")
-        )
-        washer_agent = agent_result.scalar_one()
+        agent_result = await session.execute(select(Agent).where(Agent.name == "adv_washer"))
+        agent_result.scalar_one()
 
         # Check for any self-trades
         trades_result = await session.execute(
@@ -80,13 +83,9 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
 
         # Verify both orders are still open
         for oid in [sell_order_id, buy_order_id]:
-            order_result = await session.execute(
-                select(MarketOrder).where(MarketOrder.id == oid)
-            )
+            order_result = await session.execute(select(MarketOrder).where(MarketOrder.id == oid))
             order = order_result.scalar_one()
-            assert order.status in ("open", "partially_filled"), (
-                f"Order {oid} unexpectedly {order.status}"
-            )
+            assert order.status in ("open", "partially_filled"), f"Order {oid} unexpectedly {order.status}"
 
     print("  PASSED: Wash trading correctly prevented")
 
@@ -122,27 +121,31 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
     agents["adv_seller"] = adv_seller
 
     # Storage agent places buy order for wood
-    buy_result = await adv_storage.call("marketplace_order", {
-        "action": "buy",
-        "product": "wood",
-        "quantity": 2,
-        "price": 10,
-    })
+    buy_result = await adv_storage.call(
+        "marketplace_order",
+        {
+            "action": "buy",
+            "product": "wood",
+            "quantity": 2,
+            "price": 10,
+        },
+    )
     storage_buy_order_id = buy_result["order"]["id"]
 
     # Seller places sell order at same price -> should trigger matching
-    sell_result = await adv_seller.call("marketplace_order", {
-        "action": "sell",
-        "product": "wood",
-        "quantity": 2,
-        "price": 10,
-    })
+    sell_result = await adv_seller.call(
+        "marketplace_order",
+        {
+            "action": "sell",
+            "product": "wood",
+            "quantity": 2,
+            "price": 10,
+        },
+    )
 
     # Check that the buy order was auto-cancelled due to full storage
     async with app.state.session_factory() as session:
-        order_result = await session.execute(
-            select(MarketOrder).where(MarketOrder.id == storage_buy_order_id)
-        )
+        order_result = await session.execute(select(MarketOrder).where(MarketOrder.id == storage_buy_order_id))
         buy_order = order_result.scalar_one_or_none()
         if buy_order:
             # It should be cancelled due to storage full
@@ -167,12 +170,15 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
     balance_before = await get_balance(app, "adv_canceller")
 
     # Place buy order: 5 berries at $10 each = $50 locked
-    order_result = await adv_canceller.call("marketplace_order", {
-        "action": "buy",
-        "product": "berries",
-        "quantity": 5,
-        "price": 10,
-    })
+    order_result = await adv_canceller.call(
+        "marketplace_order",
+        {
+            "action": "buy",
+            "product": "berries",
+            "quantity": 5,
+            "price": 10,
+        },
+    )
     cancel_order_id = order_result["order"]["id"]
 
     balance_after_order = await get_balance(app, "adv_canceller")
@@ -180,10 +186,13 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
     assert locked_amount == Decimal("50"), f"Expected $50 locked, got {locked_amount}"
 
     # Cancel the order
-    cancel_result = await adv_canceller.call("marketplace_order", {
-        "action": "cancel",
-        "order_id": cancel_order_id,
-    })
+    await adv_canceller.call(
+        "marketplace_order",
+        {
+            "action": "cancel",
+            "order_id": cancel_order_id,
+        },
+    )
 
     balance_after_cancel = await get_balance(app, "adv_canceller")
 
@@ -223,14 +232,17 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
         ("work", {}),
         ("marketplace_order", {"action": "buy", "product": "berries", "quantity": 1, "price": 5}),
         ("register_business", {"name": "Jail Biz", "type": "bakery", "zone": "outskirts"}),
-        ("trade", {
-            "action": "propose",
-            "target_agent": "adv_valid",
-            "offer_items": [],
-            "request_items": [],
-            "offer_money": 1,
-            "request_money": 0,
-        }),
+        (
+            "trade",
+            {
+                "action": "propose",
+                "target_agent": "adv_valid",
+                "offer_items": [],
+                "request_items": [],
+                "offer_money": 1,
+                "request_money": 0,
+            },
+        ),
         ("apply_job", {"job_id": "00000000-0000-0000-0000-000000000000"}),
         ("set_prices", {"business_id": "00000000-0000-0000-0000-000000000000", "product": "bread", "price": 5}),
         ("configure_production", {"business_id": "00000000-0000-0000-0000-000000000000", "product": "bread"}),
@@ -238,9 +250,7 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
 
     for tool_name, params in blocked_tools:
         _, err = await adv_jailed.try_call(tool_name, params)
-        assert err == "IN_JAIL", (
-            f"Expected IN_JAIL for {tool_name} while jailed, got {err}"
-        )
+        assert err == "IN_JAIL", f"Expected IN_JAIL for {tool_name} while jailed, got {err}"
 
     print(f"  Blocked {len(blocked_tools)} tools correctly while in jail")
 
@@ -255,9 +265,7 @@ async def run_marketplace_and_jail(client, app, clock, run_tick, agents):
 
     for tool_name, params in allowed_tools:
         result, err = await adv_jailed.try_call(tool_name, params)
-        assert err is None or err != "IN_JAIL", (
-            f"Tool {tool_name} should be ALLOWED in jail but got {err}"
-        )
+        assert err is None or err != "IN_JAIL", f"Tool {tool_name} should be ALLOWED in jail but got {err}"
 
     print(f"  Allowed {len(allowed_tools)} view-only tools while in jail")
     print("  PASSED: Jail restrictions enforced correctly")

@@ -30,7 +30,7 @@ async def browse_orders(
     good_slug: str | None,
     page: int,
     page_size: int,
-    settings: "Settings",
+    settings: Settings,
 ) -> dict:
     """
     Browse the order book and recent price history.
@@ -97,10 +97,7 @@ async def _browse_single_good(
 
     # Recent trades (last 50)
     trades_result = await db.execute(
-        select(MarketTrade)
-        .where(MarketTrade.good_slug == good_slug)
-        .order_by(MarketTrade.executed_at.desc())
-        .limit(50)
+        select(MarketTrade).where(MarketTrade.good_slug == good_slug).order_by(MarketTrade.executed_at.desc()).limit(50)
     )
     recent_trades = [t.to_dict() for t in trades_result.scalars().all()]
 
@@ -110,14 +107,8 @@ async def _browse_single_good(
 
     return {
         "good_slug": good_slug,
-        "bids": [
-            {"price": p, "quantity": q}
-            for p, q in sorted(buy_book.items(), reverse=True)
-        ],
-        "asks": [
-            {"price": p, "quantity": q}
-            for p, q in sorted(sell_book.items())
-        ],
+        "bids": [{"price": p, "quantity": q} for p, q in sorted(buy_book.items(), reverse=True)],
+        "asks": [{"price": p, "quantity": q} for p, q in sorted(sell_book.items())],
         "best_bid": best_bid,
         "best_ask": best_ask,
         "spread": float(best_ask - best_bid) if best_bid and best_ask else None,
@@ -133,8 +124,7 @@ async def _browse_all_goods(
     """Return summary of all goods with active order book activity."""
     # Get distinct goods with open orders
     buy_result = await db.execute(
-        select(MarketOrder.good_slug, MarketOrder.price, MarketOrder.quantity_total,
-               MarketOrder.quantity_filled)
+        select(MarketOrder.good_slug, MarketOrder.price, MarketOrder.quantity_total, MarketOrder.quantity_filled)
         .where(MarketOrder.status.in_(["open", "partially_filled"]))
         .order_by(MarketOrder.good_slug)
     )
@@ -149,9 +139,7 @@ async def _browse_all_goods(
 
     # Get min asks and max bids
     sell_orders_res = await db.execute(
-        select(MarketOrder.good_slug, MarketOrder.price, MarketOrder.quantity_total,
-               MarketOrder.quantity_filled)
-        .where(
+        select(MarketOrder.good_slug, MarketOrder.price, MarketOrder.quantity_total, MarketOrder.quantity_filled).where(
             MarketOrder.status.in_(["open", "partially_filled"]),
             MarketOrder.side == "sell",
         )
@@ -167,9 +155,7 @@ async def _browse_all_goods(
             goods_data[slug]["min_ask"] = p
 
     buy_orders_res = await db.execute(
-        select(MarketOrder.good_slug, MarketOrder.price, MarketOrder.quantity_total,
-               MarketOrder.quantity_filled)
-        .where(
+        select(MarketOrder.good_slug, MarketOrder.price, MarketOrder.quantity_total, MarketOrder.quantity_filled).where(
             MarketOrder.status.in_(["open", "partially_filled"]),
             MarketOrder.side == "buy",
         )
@@ -197,19 +183,21 @@ async def _browse_all_goods(
 
     all_slugs = sorted(goods_data.keys())
     offset = (page - 1) * page_size
-    paginated = all_slugs[offset: offset + page_size]
+    paginated = all_slugs[offset : offset + page_size]
 
     summary = []
     for slug in paginated:
         d = goods_data[slug]
-        summary.append({
-            "good_slug": slug,
-            "buy_volume": d.get("buy_volume", 0),
-            "sell_volume": d.get("sell_volume", 0),
-            "min_ask": d.get("min_ask"),
-            "max_bid": d.get("max_bid"),
-            "last_price": last_prices.get(slug),
-        })
+        summary.append(
+            {
+                "good_slug": slug,
+                "buy_volume": d.get("buy_volume", 0),
+                "sell_volume": d.get("sell_volume", 0),
+                "min_ask": d.get("min_ask"),
+                "max_bid": d.get("max_bid"),
+                "last_price": last_prices.get(slug),
+            }
+        )
 
     return {
         "goods": summary,
@@ -222,7 +210,7 @@ async def _browse_all_goods(
 async def cancel_agent_orders(
     db: AsyncSession,
     agent: Agent,
-    settings: "Settings",
+    settings: Settings,
 ) -> int:
     """
     Cancel all open/partially-filled orders for an agent.

@@ -51,8 +51,8 @@ logger = logging.getLogger(__name__)
 
 async def simulate_npc_purchases(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Simulate NPC consumer purchases across all zones and goods.
@@ -97,9 +97,7 @@ async def simulate_npc_purchases(
     zones = list(zones_result.scalars().all())
 
     # Load all open businesses (not closed) with their zone_id
-    businesses_result = await db.execute(
-        select(Business).where(Business.closed_at.is_(None))
-    )
+    businesses_result = await db.execute(select(Business).where(Business.closed_at.is_(None)))
     open_businesses = list(businesses_result.scalars().all())
 
     # Build index: zone_id -> list of businesses
@@ -141,9 +139,7 @@ async def simulate_npc_purchases(
     agents_map: dict[str, Agent] = {str(a.id): a for a in agents_result.scalars().all()}
 
     # Load central bank — NPC purchases are funded from bank reserves
-    bank_result = await db.execute(
-        select(CentralBank).where(CentralBank.id == 1).with_for_update()
-    )
+    bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1).with_for_update())
     central_bank = bank_result.scalar_one_or_none()
 
     all_purchases = []
@@ -198,7 +194,7 @@ async def simulate_npc_purchases(
             # More than reference_price → demand drops; below → demand rises
             # Cap amplification at 2.0x to prevent infinite demand from underpricing
             price_ratio = reference_price / avg_price
-            amplification = min(price_ratio ** elasticity, 2.0)
+            amplification = min(price_ratio**elasticity, 2.0)
             effective_demand = base_demand * amplification
 
             # Scale by zone multipliers
@@ -211,7 +207,7 @@ async def simulate_npc_purchases(
             # weight = 1 / (price ^ elasticity) — cheaper businesses get more
             weights = []
             for biz, price, inv_item in selling_businesses:
-                w = 1.0 / max(price ** elasticity, 1e-9)
+                w = 1.0 / max(price**elasticity, 1e-9)
                 weights.append(w)
 
             total_weight = sum(weights)
@@ -275,15 +271,17 @@ async def simulate_npc_purchases(
                 )
                 db.add(txn)
 
-                all_purchases.append({
-                    "business_id": str(biz.id),
-                    "business_name": biz.name,
-                    "good_slug": good_slug,
-                    "zone_slug": zone.slug,
-                    "units_sold": units_to_sell,
-                    "price": price,
-                    "revenue": float(revenue),
-                })
+                all_purchases.append(
+                    {
+                        "business_id": str(biz.id),
+                        "business_name": biz.name,
+                        "good_slug": good_slug,
+                        "zone_slug": zone.slug,
+                        "units_sold": units_to_sell,
+                        "price": price,
+                        "revenue": float(revenue),
+                    }
+                )
 
                 total_transactions += 1
                 total_revenue_float += float(revenue)

@@ -53,7 +53,7 @@ async def run_tick() -> None:
     session_factory = create_sessionmaker(engine)
 
     # Create Redis connection
-    from backend.redis import create_redis, close_redis
+    from backend.redis import close_redis, create_redis
 
     redis_client = await create_redis(settings.redis.url)
 

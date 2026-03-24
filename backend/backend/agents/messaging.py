@@ -107,11 +107,8 @@ async def read_messages(
 
     # Count total messages in inbox
     from sqlalchemy import func as sqlfunc
-    count_result = await db.execute(
-        select(sqlfunc.count(Message.id)).where(
-            Message.to_agent_id == agent.id
-        )
-    )
+
+    count_result = await db.execute(select(sqlfunc.count(Message.id)).where(Message.to_agent_id == agent.id))
     total = count_result.scalar_one() or 0
 
     # Count unread messages before we mark them
@@ -136,11 +133,7 @@ async def read_messages(
     # Mark retrieved messages as read
     message_ids = [m.id for m in messages if not m.read]
     if message_ids:
-        await db.execute(
-            update(Message)
-            .where(Message.id.in_(message_ids))
-            .values(read=True)
-        )
+        await db.execute(update(Message).where(Message.id.in_(message_ids)).values(read=True))
         # Update in-memory objects too
         for m in messages:
             if not m.read:
@@ -150,9 +143,7 @@ async def read_messages(
     sender_ids = list({m.from_agent_id for m in messages})
     sender_names: dict = {}
     if sender_ids:
-        senders_result = await db.execute(
-            select(Agent.id, Agent.name).where(Agent.id.in_(sender_ids))
-        )
+        senders_result = await db.execute(select(Agent.id, Agent.name).where(Agent.id.in_(sender_ids)))
         sender_names = {row.id: row.name for row in senders_result.all()}
 
     return {

@@ -17,7 +17,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -67,14 +67,10 @@ class Business(UUIDMixin, TimestampMixin, Base):
     # Default product slug for self-employed owners (set via configure_production).
     # When work() is called by the business owner without a job posting, this
     # determines what to produce. None means not configured yet.
-    default_recipe_slug: Mapped[str | None] = mapped_column(
-        String(64), nullable=True, default=None
-    )
+    default_recipe_slug: Mapped[str | None] = mapped_column(String(64), nullable=True, default=None)
 
     # Set when the business is closed. None = currently open.
-    closed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return (
@@ -112,9 +108,7 @@ class StorefrontPrice(UUIDMixin, Base):
 
     __tablename__ = "storefront_prices"
 
-    __table_args__ = (
-        UniqueConstraint("business_id", "good_slug", name="uq_storefront_business_good"),
-    )
+    __table_args__ = (UniqueConstraint("business_id", "good_slug", name="uq_storefront_business_good"),)
 
     # The business selling this good
     business_id: Mapped[uuid.UUID] = mapped_column(
@@ -241,14 +235,10 @@ class Employment(UUIDMixin, Base):
     product_slug: Mapped[str] = mapped_column(String(64), nullable=False)
 
     # When the employment started
-    hired_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    hired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # When the employment ended (None = still active)
-    terminated_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    terminated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return (

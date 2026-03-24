@@ -15,11 +15,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.agents.inventory import add_to_inventory, remove_from_inventory
+from backend.marketplace.escrow import return_escrow_to_proposer as _return_escrow_to_proposer
 from backend.models.agent import Agent
 from backend.models.inventory import InventoryItem
 from backend.models.marketplace import Trade
 from backend.models.transaction import Transaction
-from backend.marketplace.escrow import return_escrow_to_proposer as _return_escrow_to_proposer
 
 if TYPE_CHECKING:
     from backend.clock import Clock
@@ -33,8 +33,8 @@ async def respond_trade(
     agent: Agent,
     trade_id: str,
     accept: bool,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Respond to a pending trade proposal as the target agent.
@@ -67,9 +67,7 @@ async def respond_trade(
     except ValueError:
         raise ValueError(f"Invalid trade ID: {trade_id!r}")
 
-    trade_result = await db.execute(
-        select(Trade).where(Trade.id == trade_uuid).with_for_update()
-    )
+    trade_result = await db.execute(select(Trade).where(Trade.id == trade_uuid).with_for_update())
     trade = trade_result.scalar_one_or_none()
 
     if trade is None:
@@ -83,19 +81,13 @@ async def respond_trade(
 
     now = clock.now()
     if now >= trade.expires_at:
-        raise ValueError(
-            f"Trade has expired (expired at {trade.expires_at.isoformat()})"
-        )
+        raise ValueError(f"Trade has expired (expired at {trade.expires_at.isoformat()})")
 
     # Load and lock both agents to prevent concurrent balance/inventory changes
-    agent_row = await db.execute(
-        select(Agent).where(Agent.id == agent.id).with_for_update()
-    )
+    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
     agent = agent_row.scalar_one()
 
-    proposer_result = await db.execute(
-        select(Agent).where(Agent.id == trade.proposer_id).with_for_update()
-    )
+    proposer_result = await db.execute(select(Agent).where(Agent.id == trade.proposer_id).with_for_update())
     proposer = proposer_result.scalar_one_or_none()
     if proposer is None:
         raise ValueError("Trade proposer no longer exists")
@@ -117,7 +109,7 @@ async def respond_trade(
         return {
             "trade_id": trade_id,
             "status": "rejected",
-            "message": f"Trade rejected. Proposer's items have been returned.",
+            "message": "Trade rejected. Proposer's items have been returned.",
         }
 
     # Accept: verify target has the requested items and money
@@ -126,35 +118,34 @@ async def respond_trade(
 
     if request_money > target_balance:
         raise ValueError(
-            f"Insufficient balance: trade requires {float(request_money):.2f} "
-            f"but you have {float(target_balance):.2f}"
+            f"Insufficient balance: trade requires {float(request_money):.2f} but you have {float(target_balance):.2f}"
         )
 
-    for item in (trade.request_items or []):
+    for item in trade.request_items or []:
         slug = item["good_slug"]
         qty = item["quantity"]
         inv_result = await db.execute(
-            select(InventoryItem).where(
+            select(InventoryItem)
+            .where(
                 InventoryItem.owner_type == "agent",
                 InventoryItem.owner_id == agent.id,
                 InventoryItem.good_slug == slug,
-            ).with_for_update()
+            )
+            .with_for_update()
             .execution_options(populate_existing=True)
         )
         inv_item = inv_result.scalar_one_or_none()
         have = inv_item.quantity if inv_item else 0
         if have < qty:
-            raise ValueError(
-                f"Insufficient inventory: have {have}x {slug!r}, need {qty}"
-            )
+            raise ValueError(f"Insufficient inventory: have {have}x {slug!r}, need {qty}")
 
     # --- Execute the exchange ---
     # Proposer's offered goods → target (proposer's goods were in escrow)
-    for item in (trade.offer_items or []):
+    for item in trade.offer_items or []:
         await add_to_inventory(db, "agent", agent.id, item["good_slug"], item["quantity"], settings)
 
     # Target's requested goods → proposer
-    for item in (trade.request_items or []):
+    for item in trade.request_items or []:
         await remove_from_inventory(db, "agent", agent.id, item["good_slug"], item["quantity"])
         await add_to_inventory(db, "agent", proposer.id, item["good_slug"], item["quantity"], settings)
 
@@ -201,21 +192,20 @@ async def respond_trade(
         db.add(txn_request_money)
 
     # If no money exchanged but goods did, still record the trade
-    if offer_money <= 0 and request_money <= 0:
-        if trade.offer_items or trade.request_items:
-            txn_barter = Transaction(
-                type="trade",
-                from_agent_id=proposer.id,
-                to_agent_id=agent.id,
-                amount=Decimal("0"),
-                metadata_json={
-                    "trade_id": str(trade.id),
-                    "transfer": "barter",
-                    "offer_items": trade.offer_items,
-                    "request_items": trade.request_items,
-                },
-            )
-            db.add(txn_barter)
+    if offer_money <= 0 and request_money <= 0 and (trade.offer_items or trade.request_items):
+        txn_barter = Transaction(
+            type="trade",
+            from_agent_id=proposer.id,
+            to_agent_id=agent.id,
+            amount=Decimal("0"),
+            metadata_json={
+                "trade_id": str(trade.id),
+                "transfer": "barter",
+                "offer_items": trade.offer_items,
+                "request_items": trade.request_items,
+            },
+        )
+        db.add(txn_barter)
 
     trade.status = "accepted"
     trade.escrow_locked = False
@@ -243,7 +233,7 @@ async def cancel_trade(
     db: AsyncSession,
     agent: Agent,
     trade_id: str,
-    settings: "Settings",
+    settings: Settings,
 ) -> dict:
     """
     Cancel a pending trade as the proposer.
@@ -267,9 +257,7 @@ async def cancel_trade(
     except ValueError:
         raise ValueError(f"Invalid trade ID: {trade_id!r}")
 
-    trade_result = await db.execute(
-        select(Trade).where(Trade.id == trade_uuid)
-    )
+    trade_result = await db.execute(select(Trade).where(Trade.id == trade_uuid))
     trade = trade_result.scalar_one_or_none()
 
     if trade is None:

@@ -1,13 +1,27 @@
-import { Link } from 'react-router-dom';
+import { Link } from "react-router-dom";
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  BarChart, Bar, CartesianGrid,
-} from 'recharts';
-import { useStats, useLeaderboards, useRecentTransactions, useEconomyHistory } from '../api';
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  CartesianGrid,
+} from "recharts";
+import { useStats, useLeaderboards, useRecentTransactions, useEconomyHistory } from "../api";
 import {
-  Loading, ErrorMsg, Section, StatCard, Grid, Card, Badge,
-  fmt, fmtInt, fmtPct, fmtTime, txTypeColor, PageHeader,
-} from '../components/shared';
+  Loading,
+  ErrorMsg,
+  Section,
+  StatCard,
+  Grid,
+  Card,
+  Badge,
+  PageHeader,
+} from "../components/shared";
+import { fmt, fmtInt, fmtPct, fmtTime, txTypeColor } from "../components/formatters";
 
 export default function Dashboard() {
   const stats = useStats();
@@ -19,8 +33,8 @@ export default function Dashboard() {
   if (stats.error) return <ErrorMsg message={(stats.error as Error).message} />;
   const s = stats.data!;
 
-  const historyData = (history.data?.snapshots || []).map(snap => ({
-    time: new Date(snap.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+  const historyData = (history.data?.snapshots || []).map((snap) => ({
+    time: new Date(snap.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
     gdp: snap.gdp,
     money_supply: snap.money_supply,
     population: snap.population,
@@ -30,35 +44,52 @@ export default function Dashboard() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader
-        title="Economy Overview"
-        subtitle="Real-time aggregate statistics"
-      />
+      <PageHeader title="Economy Overview" subtitle="Real-time aggregate statistics" />
 
       {/* ── Key metrics ── */}
       <Section title="Key Metrics">
         <Grid cols={5}>
           <StatCard icon="$" label="GDP (24h)" value={fmt(s.gdp_24h)} color="var(--accent)" />
-          <StatCard icon="@" label="Population" value={fmtInt(s.population)} sub={`${s.active_agents_1h} active`} />
-          <StatCard icon="%" label="Employment" value={fmtPct(s.employment_rate)} sub={`${s.employed_agents} employed`} />
+          <StatCard
+            icon="@"
+            label="Population"
+            value={fmtInt(s.population)}
+            sub={`${s.active_agents_1h} active`}
+          />
+          <StatCard
+            icon="%"
+            label="Employment"
+            value={fmtPct(s.employment_rate)}
+            sub={`${s.employed_agents} employed`}
+          />
           <StatCard icon="~" label="Money Supply" value={fmt(s.money_supply)} color="var(--cyan)" />
-          <StatCard icon="#" label="Businesses" value={fmtInt(s.businesses.total)} sub={`${s.businesses.agent} agent · ${s.businesses.npc} NPC`} />
+          <StatCard
+            icon="#"
+            label="Businesses"
+            value={fmtInt(s.businesses.total)}
+            sub={`${s.businesses.agent} agent · ${s.businesses.npc} NPC`}
+          />
         </Grid>
       </Section>
 
       {/* ── Government banner ── */}
       <Section title="Government">
         <Card>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
             <Badge color="var(--amber)">{s.government.template_name}</Badge>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
+            <span style={{ fontSize: "var(--text-sm)", color: "var(--text-secondary)" }}>
               Current governing template
             </span>
-            <Link to="/government" style={{
-              marginLeft: 'auto',
-              fontSize: 'var(--text-xs)',
-              color: 'var(--accent)',
-            }}>View details →</Link>
+            <Link
+              to="/government"
+              style={{
+                marginLeft: "auto",
+                fontSize: "var(--text-xs)",
+                color: "var(--accent)",
+              }}
+            >
+              View details →
+            </Link>
           </div>
         </Card>
       </Section>
@@ -67,7 +98,15 @@ export default function Dashboard() {
         {/* ── GDP Chart ── */}
         {historyData.length > 1 && (
           <Card>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+            <div
+              style={{
+                fontSize: "var(--text-xs)",
+                color: "var(--text-secondary)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: 12,
+              }}
+            >
               GDP History
             </div>
             <ResponsiveContainer width="100%" height={180}>
@@ -79,13 +118,19 @@ export default function Dashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="time" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                <XAxis dataKey="time" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  labelStyle={{ color: 'var(--text-secondary)' }}
+                  labelStyle={{ color: "var(--text-secondary)" }}
                 />
-                <Area type="monotone" dataKey="gdp" stroke="#4ade80" strokeWidth={2} fill="url(#gdpGrad)" />
+                <Area
+                  type="monotone"
+                  dataKey="gdp"
+                  stroke="#4ade80"
+                  strokeWidth={2}
+                  fill="url(#gdpGrad)"
+                />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
@@ -94,7 +139,15 @@ export default function Dashboard() {
         {/* ── Money Supply Chart ── */}
         {historyData.length > 1 && (
           <Card>
-            <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+            <div
+              style={{
+                fontSize: "var(--text-xs)",
+                color: "var(--text-secondary)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: 12,
+              }}
+            >
               Money Supply History
             </div>
             <ResponsiveContainer width="100%" height={180}>
@@ -106,13 +159,19 @@ export default function Dashboard() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                <XAxis dataKey="time" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-                <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                <XAxis dataKey="time" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
                 <Tooltip
                   contentStyle={tooltipStyle}
-                  labelStyle={{ color: 'var(--text-secondary)' }}
+                  labelStyle={{ color: "var(--text-secondary)" }}
                 />
-                <Area type="monotone" dataKey="money_supply" stroke="#22d3ee" strokeWidth={2} fill="url(#msGrad)" />
+                <Area
+                  type="monotone"
+                  dataKey="money_supply"
+                  stroke="#22d3ee"
+                  strokeWidth={2}
+                  fill="url(#msGrad)"
+                />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
@@ -124,36 +183,52 @@ export default function Dashboard() {
         <Section title="Top Agents by Wealth">
           <Card style={{ padding: 0 }}>
             {leaderboards.data?.richest?.slice(0, 8).map((entry, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '8px 14px',
-                borderBottom: '1px solid var(--border)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{
-                    width: 22, height: 22, borderRadius: '50%',
-                    background: i < 3 ? 'var(--accent-glow-md)' : 'var(--bg-elevated)',
-                    color: i < 3 ? 'var(--accent)' : 'var(--text-muted)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 'var(--text-xs)', fontWeight: 600,
-                  }}>{entry.rank}</span>
-                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)' }}>
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 14px",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: "50%",
+                      background: i < 3 ? "var(--accent-glow-md)" : "var(--bg-elevated)",
+                      color: i < 3 ? "var(--accent)" : "var(--text-muted)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "var(--text-xs)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {entry.rank}
+                  </span>
+                  <span style={{ fontSize: "var(--text-sm)", color: "var(--text-primary)" }}>
                     {entry.agent_name}
                   </span>
                   {entry.agent_model && (
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                    <span style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
                       {entry.agent_model}
                     </span>
                   )}
                 </div>
-                <span style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)', fontWeight: 500 }}>
+                <span
+                  style={{ fontSize: "var(--text-sm)", color: "var(--accent)", fontWeight: 500 }}
+                >
                   {fmt(entry.value)}
                 </span>
               </div>
             )) || <Loading />}
           </Card>
-          <div style={{ marginTop: 8, textAlign: 'right' }}>
-            <Link to="/agents" style={{ fontSize: 'var(--text-xs)', color: 'var(--accent)' }}>
+          <div style={{ marginTop: 8, textAlign: "right" }}>
+            <Link to="/agents" style={{ fontSize: "var(--text-xs)", color: "var(--accent)" }}>
               View all agents →
             </Link>
           </div>
@@ -163,24 +238,35 @@ export default function Dashboard() {
         <Section title="Recent Activity">
           <Card style={{ padding: 0 }}>
             {tx.data?.transactions?.slice(0, 8).map((t, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '8px 14px',
-                borderBottom: '1px solid var(--border)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
+                key={i}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "8px 14px",
+                  borderBottom: "1px solid var(--border)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <Badge color={txTypeColor(t.type)}>{t.type}</Badge>
-                  <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                  <span style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
                     {t.from_agent_name && `${t.from_agent_name}`}
-                    {t.from_agent_name && t.to_agent_name && ' → '}
+                    {t.from_agent_name && t.to_agent_name && " → "}
                     {t.to_agent_name && `${t.to_agent_name}`}
                   </span>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-primary)', fontWeight: 500 }}>
+                <div style={{ textAlign: "right" }}>
+                  <span
+                    style={{
+                      fontSize: "var(--text-sm)",
+                      color: "var(--text-primary)",
+                      fontWeight: 500,
+                    }}
+                  >
                     {fmt(t.amount)}
                   </span>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-muted)" }}>
                     {fmtTime(t.created_at)}
                   </div>
                 </div>
@@ -195,7 +281,15 @@ export default function Dashboard() {
         <Section title="Employment & Population Trends">
           <div className="responsive-grid responsive-grid-2">
             <Card>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+              <div
+                style={{
+                  fontSize: "var(--text-xs)",
+                  color: "var(--text-secondary)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  marginBottom: 12,
+                }}
+              >
                 Employment Rate
               </div>
               <ResponsiveContainer width="100%" height={140}>
@@ -207,22 +301,40 @@ export default function Dashboard() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="time" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} domain={[0, 1]} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} />
+                  <XAxis dataKey="time" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: "var(--text-muted)" }}
+                    domain={[0, 1]}
+                    tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`}
+                  />
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Area type="monotone" dataKey="employment_rate" stroke="#a78bfa" strokeWidth={2} fill="url(#empGrad)" />
+                  <Area
+                    type="monotone"
+                    dataKey="employment_rate"
+                    stroke="#a78bfa"
+                    strokeWidth={2}
+                    fill="url(#empGrad)"
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </Card>
             <Card>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>
+              <div
+                style={{
+                  fontSize: "var(--text-xs)",
+                  color: "var(--text-secondary)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.06em",
+                  marginBottom: 12,
+                }}
+              >
                 Population
               </div>
               <ResponsiveContainer width="100%" height={140}>
                 <BarChart data={historyData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                  <XAxis dataKey="time" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
-                  <YAxis tick={{ fontSize: 10, fill: 'var(--text-muted)' }} />
+                  <XAxis dataKey="time" tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
+                  <YAxis tick={{ fontSize: 10, fill: "var(--text-muted)" }} />
                   <Tooltip contentStyle={tooltipStyle} />
                   <Bar dataKey="population" fill="#22d3ee" radius={[2, 2, 0, 0]} opacity={0.7} />
                 </BarChart>
@@ -236,9 +348,9 @@ export default function Dashboard() {
 }
 
 const tooltipStyle = {
-  background: 'var(--bg-elevated)',
-  border: '1px solid var(--border)',
+  background: "var(--bg-elevated)",
+  border: "1px solid var(--border)",
   borderRadius: 4,
-  fontSize: '0.75rem',
-  fontFamily: 'var(--font-mono)',
+  fontSize: "0.75rem",
+  fontFamily: "var(--font-mono)",
 };

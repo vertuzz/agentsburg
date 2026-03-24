@@ -43,16 +43,16 @@ LAST_HOURLY_KEY = "tick:last_hourly"
 LAST_DAILY_KEY = "tick:last_daily"
 LAST_WEEKLY_KEY = "tick:last_weekly"
 
-HOURLY_INTERVAL = 3600    # 1 hour in seconds
-DAILY_INTERVAL = 86400    # 24 hours in seconds
+HOURLY_INTERVAL = 3600  # 1 hour in seconds
+DAILY_INTERVAL = 86400  # 24 hours in seconds
 WEEKLY_INTERVAL = 604800  # 7 days in seconds
 
 
 async def run_tick(
     db: AsyncSession,
     redis: aioredis.Redis,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Run one tick cycle.
@@ -112,7 +112,8 @@ async def run_tick(
             elapsed_hours = min(elapsed_hours, 168)
             logger.info(
                 "Running slow tick at %s (catching up %d hours)",
-                now.isoformat(), elapsed_hours,
+                now.isoformat(),
+                elapsed_hours,
             )
             slow_results = await _run_slow_tick(db, clock, settings, hours=elapsed_hours, redis=redis)
             slow_results["_hours"] = elapsed_hours
@@ -155,10 +156,10 @@ async def run_tick(
 
 async def _run_slow_tick(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
     hours: int = 1,
-    redis: "aioredis.Redis | None" = None,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Run all hourly slow tick processing.
@@ -172,6 +173,7 @@ async def _run_slow_tick(
     audit_results = {"type": "audits", "skipped": True}
     try:
         from backend.government.taxes import collect_taxes, run_audits
+
         tax_results = await collect_taxes(db, clock, settings)
         audit_results = await run_audits(db, clock, settings)
     except Exception:
@@ -182,6 +184,7 @@ async def _run_slow_tick(
     deposit_interest = {"type": "deposit_interest", "skipped": True}
     try:
         from backend.banking.service import process_deposit_interest, process_loan_payments
+
         loan_payments = await process_loan_payments(db, clock, settings)
         deposit_interest = await process_deposit_interest(db, clock, settings)
     except Exception:
@@ -194,6 +197,7 @@ async def _run_slow_tick(
     npc_biz_results = {"type": "npc_businesses", "skipped": True}
     try:
         from backend.economy.npc_businesses import simulate_npc_businesses
+
         npc_biz_results = await simulate_npc_businesses(db, clock, settings)
     except Exception:
         logger.exception("NPC business simulation failed — continuing")
@@ -217,8 +221,8 @@ async def _run_slow_tick(
 
 async def _run_daily_tick(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Run all daily tick processing.
@@ -232,6 +236,7 @@ async def _run_daily_tick(
     snapshot_result = {"type": "economy_snapshot", "skipped": True}
     try:
         from backend.economy.maintenance import downsample_data
+
         snapshot_result = await downsample_data(db, clock)
         snapshot_result["type"] = "maintenance"
         processed.append("economy_snapshot")
@@ -244,8 +249,8 @@ async def _run_daily_tick(
 
 async def _run_weekly_tick(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Run weekly tick: tally election and apply winning government template.
@@ -256,6 +261,7 @@ async def _run_weekly_tick(
     """
     try:
         from backend.government.service import tally_election
+
         result = await tally_election(db, clock, settings)
         logger.info(
             "Weekly election tally: winner=%s (changed=%s)",

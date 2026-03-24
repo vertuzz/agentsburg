@@ -33,8 +33,8 @@ if TYPE_CHECKING:
     from backend.config import Settings
 
 # --- Re-exports so existing imports continue to work ---
-from backend.marketplace.matching import CANCEL_FEE_RATE, match_orders  # noqa: F401
 from backend.marketplace.browsing import browse_orders, cancel_agent_orders  # noqa: F401
+from backend.marketplace.matching import CANCEL_FEE_RATE, match_orders  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +51,8 @@ async def place_order(
     side: str,
     quantity: int,
     price: Decimal,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Place a limit order on the order book.
@@ -90,10 +90,7 @@ async def place_order(
     if price <= 0:
         raise ValueError("Price must be greater than zero")
     if quantity > settings.economy.marketplace_order_max_quantity:
-        raise ValueError(
-            f"Quantity {quantity} exceeds maximum of "
-            f"{settings.economy.marketplace_order_max_quantity}"
-        )
+        raise ValueError(f"Quantity {quantity} exceeds maximum of {settings.economy.marketplace_order_max_quantity}")
 
     # Validate the good exists
     goods_config = {g["slug"]: g for g in settings.goods}
@@ -111,8 +108,7 @@ async def place_order(
     open_count = len(list(open_count_result.scalars().all()))
     if open_count >= max_orders:
         raise ValueError(
-            f"You have {open_count} open orders (max {max_orders}). "
-            f"Cancel some orders before placing new ones."
+            f"You have {open_count} open orders (max {max_orders}). Cancel some orders before placing new ones."
         )
 
     if side == "sell":
@@ -144,8 +140,7 @@ async def place_order(
 
             if not sell_orders_list:
                 raise ValueError(
-                    f"No sell orders available for {good_slug!r}. "
-                    "Cannot place a market buy order with no sellers."
+                    f"No sell orders available for {good_slug!r}. Cannot place a market buy order with no sellers."
                 )
 
             # Calculate actual max cost: fill qty units at available prices
@@ -175,9 +170,7 @@ async def place_order(
             total_cost = price * quantity
 
         # Lock agent row to prevent concurrent balance manipulation
-        agent_row = await db.execute(
-            select(Agent).where(Agent.id == agent.id).with_for_update()
-        )
+        agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
         agent = agent_row.scalar_one()
 
         agent_balance = Decimal(str(agent.balance))
@@ -232,7 +225,7 @@ async def cancel_order(
     db: AsyncSession,
     agent: Agent,
     order_id: str,
-    settings: "Settings",
+    settings: Settings,
 ) -> dict:
     """
     Cancel an open or partially-filled order.
@@ -258,9 +251,7 @@ async def cancel_order(
     except ValueError:
         raise ValueError(f"Invalid order ID: {order_id!r}")
 
-    result = await db.execute(
-        select(MarketOrder).where(MarketOrder.id == order_uuid).with_for_update()
-    )
+    result = await db.execute(select(MarketOrder).where(MarketOrder.id == order_uuid).with_for_update())
     order = result.scalar_one_or_none()
 
     if order is None:
@@ -270,9 +261,7 @@ async def cancel_order(
         raise ValueError("You can only cancel your own orders")
 
     if order.status not in ("open", "partially_filled"):
-        raise ValueError(
-            f"Order cannot be cancelled — current status is {order.status!r}"
-        )
+        raise ValueError(f"Order cannot be cancelled — current status is {order.status!r}")
 
     # Calculate how much to return
     unfilled_qty = order.quantity_total - order.quantity_filled

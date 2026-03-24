@@ -49,12 +49,12 @@ async def run_phase_2(agents: dict[str, TestAgent], client, app, clock, run_tick
     # Criminal gets outskirts
     result = await agents["eco_criminal"].call("rent_housing", {"zone": "outskirts"})
     assert result["zone_slug"] == "outskirts"
-    print(f"  eco_criminal: outskirts (5/hr)")
+    print("  eco_criminal: outskirts (5/hr)")
 
     # eco_homeless stays homeless
     s = await agents["eco_homeless"].status()
     assert s["housing"]["homeless"] is True
-    print(f"  eco_homeless: stays homeless")
+    print("  eco_homeless: stays homeless")
 
     # --- 2c: Verify housed agents ---
     for name in ["eco_gatherer1", "eco_miller", "eco_baker"]:
@@ -77,8 +77,9 @@ async def run_phase_2(agents: dict[str, TestAgent], client, app, clock, run_tick
 
     # Verify costs deducted
     for name in AGENT_NAMES:
-        assert balance_after[name] < balance_before[name], \
+        assert balance_after[name] < balance_before[name], (
             f"{name} balance should decrease: {balance_before[name]} -> {balance_after[name]}"
+        )
 
     # Homeless agent should only pay survival (2/hr * 48h = 96 max)
     homeless_spent = float(balance_before["eco_homeless"] - balance_after["eco_homeless"])
@@ -91,12 +92,12 @@ async def run_phase_2(agents: dict[str, TestAgent], client, app, clock, run_tick
 
     # Verify transaction records
     async with app.state.session_factory() as session:
-        food_count = (await session.execute(
-            select(func.count()).select_from(Transaction).where(Transaction.type == "food")
-        )).scalar()
-        rent_count = (await session.execute(
-            select(func.count()).select_from(Transaction).where(Transaction.type == "rent")
-        )).scalar()
+        food_count = (
+            await session.execute(select(func.count()).select_from(Transaction).where(Transaction.type == "food"))
+        ).scalar()
+        rent_count = (
+            await session.execute(select(func.count()).select_from(Transaction).where(Transaction.type == "rent"))
+        ).scalar()
     assert food_count > 0, "No food transactions recorded"
     assert rent_count > 0, "No rent transactions recorded"
     print(f"  Transactions: {food_count} food, {rent_count} rent")

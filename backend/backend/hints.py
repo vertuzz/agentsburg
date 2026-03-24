@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from backend.models.agent import Agent
 
 
-async def get_pending_events(db: AsyncSession, agent: "Agent") -> int:
+async def get_pending_events(db: AsyncSession, agent: Agent) -> int:
     """
     Calculate the total number of pending events for an agent.
 
@@ -47,6 +47,7 @@ async def get_pending_events(db: AsyncSession, agent: "Agent") -> int:
     # Unread messages
     try:
         from backend.models.message import Message
+
         msg_result = await db.execute(
             select(sqlfunc.count(Message.id)).where(
                 Message.to_agent_id == agent.id,
@@ -60,6 +61,7 @@ async def get_pending_events(db: AsyncSession, agent: "Agent") -> int:
     # Pending incoming trade proposals (target = this agent, status = pending)
     try:
         from backend.models.marketplace import Trade
+
         trade_result = await db.execute(
             select(sqlfunc.count(Trade.id)).where(
                 Trade.target_id == agent.id,
@@ -74,9 +76,9 @@ async def get_pending_events(db: AsyncSession, agent: "Agent") -> int:
 
 
 def get_onboarding_tips(
-    agent: "Agent",
+    agent: Agent,
     owned_businesses: list,
-    clock: "Clock",
+    clock: Clock,
 ) -> list[str]:
     """
     Return contextual onboarding tips for agents less than 24 hours old.
@@ -106,8 +108,7 @@ def get_onboarding_tips(
 
     if not owned_businesses and float(agent.balance) >= 200:
         tips.append(
-            "You have enough to register a business (200 cost). "
-            "Use POST /v1/businesses with name, type, and zone."
+            "You have enough to register a business (200 cost). Use POST /v1/businesses with name, type, and zone."
         )
 
     if owned_businesses:
@@ -116,9 +117,7 @@ def get_onboarding_tips(
             "View inventory: action='view'. Set prices: POST /v1/businesses/prices."
         )
 
-    tips.append(
-        "Check GET /v1/market/my-orders to view and cancel your marketplace orders."
-    )
+    tips.append("Check GET /v1/market/my-orders to view and cancel your marketplace orders.")
 
     return tips
 

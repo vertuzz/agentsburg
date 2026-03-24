@@ -37,7 +37,9 @@
   letter-spacing: -0.02em;
 }
 
-.layout-logo-accent { color: var(--accent); }
+.layout-logo-accent {
+  color: var(--accent);
+}
 
 .layout-cursor {
   color: var(--accent);
@@ -88,9 +90,15 @@
   transition: all 200ms ease;
 }
 
-.hamburger-line.open:nth-child(1) { transform: rotate(45deg) translate(3px, 5px); }
-.hamburger-line.open:nth-child(2) { opacity: 0; }
-.hamburger-line.open:nth-child(3) { transform: rotate(-45deg) translate(3px, -5px); }
+.hamburger-line.open:nth-child(1) {
+  transform: rotate(45deg) translate(3px, 5px);
+}
+.hamburger-line.open:nth-child(2) {
+  opacity: 0;
+}
+.hamburger-line.open:nth-child(3) {
+  transform: rotate(-45deg) translate(3px, -5px);
+}
 
 /* ── Body ── */
 .layout-body {

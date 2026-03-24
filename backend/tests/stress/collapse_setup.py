@@ -46,35 +46,47 @@ async def phase1_build_economy(client, app, clock, run_tick) -> dict:
     print("  All agents housed -- OK")
 
     # Register 4 businesses: mill, bakery, lumber_mill, smithy
-    mill_reg = await agents[0].call("register_business", {
-        "name": "Collapse Mill",
-        "type": "mill",
-        "zone": "industrial",
-    })
+    mill_reg = await agents[0].call(
+        "register_business",
+        {
+            "name": "Collapse Mill",
+            "type": "mill",
+            "zone": "industrial",
+        },
+    )
     mill_id = mill_reg["business_id"]
     print(f"  Registered mill (id={mill_id[:8]}...)")
 
-    bakery_reg = await agents[1].call("register_business", {
-        "name": "Collapse Bakery",
-        "type": "bakery",
-        "zone": "suburbs",
-    })
+    bakery_reg = await agents[1].call(
+        "register_business",
+        {
+            "name": "Collapse Bakery",
+            "type": "bakery",
+            "zone": "suburbs",
+        },
+    )
     bakery_id = bakery_reg["business_id"]
     print(f"  Registered bakery (id={bakery_id[:8]}...)")
 
-    lumber_reg = await agents[2].call("register_business", {
-        "name": "Collapse Lumber Mill",
-        "type": "lumber_mill",
-        "zone": "industrial",
-    })
+    lumber_reg = await agents[2].call(
+        "register_business",
+        {
+            "name": "Collapse Lumber Mill",
+            "type": "lumber_mill",
+            "zone": "industrial",
+        },
+    )
     lumber_id = lumber_reg["business_id"]
     print(f"  Registered lumber_mill (id={lumber_id[:8]}...)")
 
-    smithy_reg = await agents[3].call("register_business", {
-        "name": "Collapse Smithy",
-        "type": "smithy",
-        "zone": "industrial",
-    })
+    smithy_reg = await agents[3].call(
+        "register_business",
+        {
+            "name": "Collapse Smithy",
+            "type": "smithy",
+            "zone": "industrial",
+        },
+    )
     smithy_id = smithy_reg["business_id"]
     print(f"  Registered smithy (id={smithy_id[:8]}...)")
 
@@ -87,55 +99,66 @@ async def phase1_build_economy(client, app, clock, run_tick) -> dict:
     print("  Gave businesses production inputs")
 
     # Post jobs and hire workers
-    mill_job = await agents[0].call("manage_employees", {
-        "business_id": mill_id,
-        "action": "post_job",
-        "title": "Miller",
-        "wage": 10.0,
-        "product": "flour",
-        "max_workers": 2,
-    })
+    mill_job = await agents[0].call(
+        "manage_employees",
+        {
+            "business_id": mill_id,
+            "action": "post_job",
+            "title": "Miller",
+            "wage": 10.0,
+            "product": "flour",
+            "max_workers": 2,
+        },
+    )
     await agents[4].call("apply_job", {"job_id": mill_job["job_id"]})
     print("  Mill: posted job, col_4 hired")
 
-    bakery_job = await agents[1].call("manage_employees", {
-        "business_id": bakery_id,
-        "action": "post_job",
-        "title": "Baker",
-        "wage": 12.0,
-        "product": "bread",
-        "max_workers": 2,
-    })
+    bakery_job = await agents[1].call(
+        "manage_employees",
+        {
+            "business_id": bakery_id,
+            "action": "post_job",
+            "title": "Baker",
+            "wage": 12.0,
+            "product": "bread",
+            "max_workers": 2,
+        },
+    )
     await agents[5].call("apply_job", {"job_id": bakery_job["job_id"]})
     print("  Bakery: posted job, col_5 hired")
 
-    lumber_job = await agents[2].call("manage_employees", {
-        "business_id": lumber_id,
-        "action": "post_job",
-        "title": "Lumberjack",
-        "wage": 10.0,
-        "product": "lumber",
-        "max_workers": 2,
-    })
+    lumber_job = await agents[2].call(
+        "manage_employees",
+        {
+            "business_id": lumber_id,
+            "action": "post_job",
+            "title": "Lumberjack",
+            "wage": 10.0,
+            "product": "lumber",
+            "max_workers": 2,
+        },
+    )
     await agents[6].call("apply_job", {"job_id": lumber_job["job_id"]})
     print("  Lumber Mill: posted job, col_6 hired")
 
-    smithy_job = await agents[3].call("manage_employees", {
-        "business_id": smithy_id,
-        "action": "post_job",
-        "title": "Blacksmith",
-        "wage": 10.0,
-        "product": "iron_ingots",
-        "max_workers": 2,
-    })
+    smithy_job = await agents[3].call(
+        "manage_employees",
+        {
+            "business_id": smithy_id,
+            "action": "post_job",
+            "title": "Blacksmith",
+            "wage": 10.0,
+            "product": "iron_ingots",
+            "max_workers": 2,
+        },
+    )
     await agents[7].call("apply_job", {"job_id": smithy_job["job_id"]})
     print("  Smithy: posted job, col_7 hired")
 
     # Snapshot before simulation
     npc_count_before = await get_open_business_count(app, is_npc=True)
     player_count_before = await get_open_business_count(app, is_npc=False)
-    print(f"  Pre-simulation: {npc_count_before} NPC businesses, "
-          f"{player_count_before} player businesses")
+    print(f"  Pre-simulation: {npc_count_before} NPC businesses, {player_count_before} player businesses")
 
     # Run 3 days of simulation
     print("\n  Running 3 days of simulation (6 ticks)...")
@@ -145,16 +168,13 @@ async def phase1_build_economy(client, app, clock, run_tick) -> dict:
     # Snapshot: verify businesses exist
     npc_count_mid = await get_open_business_count(app, is_npc=True)
     player_count_mid = await get_open_business_count(app, is_npc=False)
-    print(f"  Post-Phase-1: {npc_count_mid} NPC businesses, "
-          f"{player_count_mid} player businesses")
+    print(f"  Post-Phase-1: {npc_count_mid} NPC businesses, {player_count_mid} player businesses")
     assert npc_count_mid > 0, "NPC businesses should still be running"
     assert player_count_mid > 0, "Player businesses should still exist"
 
     # Check GDP > 0
     async with app.state.session_factory() as session:
-        tx_count = await session.execute(
-            select(func.count(Transaction.id))
-        )
+        tx_count = await session.execute(select(func.count(Transaction.id)))
         total_tx = tx_count.scalar_one()
     print(f"  Total transactions: {total_tx}")
     assert total_tx > 0, "Should have some transactions from the simulation"

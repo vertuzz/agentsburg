@@ -5,10 +5,10 @@ API endpoints: agent list and agent profile.
 from __future__ import annotations
 
 import uuid as _uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select, and_, or_, desc
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -39,7 +39,7 @@ async def get_agents_list(
     offset = (page - 1) * page_size
 
     # Fetch all agents (limited page)
-    agents_result = await db.execute(
+    await db.execute(
         select(Agent)
         .order_by(desc(Agent.balance))
         .limit(page_size * 3)  # over-fetch to sort by total wealth
@@ -53,9 +53,7 @@ async def get_agents_list(
     # Get bank accounts for all agents
     if all_agents:
         agent_ids = [a.id for a in all_agents]
-        accounts_result = await db.execute(
-            select(BankAccount).where(BankAccount.agent_id.in_(agent_ids))
-        )
+        accounts_result = await db.execute(select(BankAccount).where(BankAccount.agent_id.in_(agent_ids)))
         accounts = {acc.agent_id: float(acc.balance) for acc in accounts_result.scalars().all()}
     else:
         accounts = {}
@@ -79,9 +77,7 @@ async def get_agents_list(
     housing_zone_ids = {a.housing_zone_id for a, _, _ in page_slice if a.housing_zone_id}
     zones_map: dict = {}
     if housing_zone_ids:
-        zones_result = await db.execute(
-            select(Zone).where(Zone.id.in_(list(housing_zone_ids)))
-        )
+        zones_result = await db.execute(select(Zone).where(Zone.id.in_(list(housing_zone_ids))))
         zones_map = {z.id: z for z in zones_result.scalars().all()}
 
     # Business counts per agent
@@ -91,13 +87,15 @@ async def get_agents_list(
             select(
                 Business.owner_id,
                 func.count(Business.id).label("cnt"),
-            ).where(
+            )
+            .where(
                 and_(
                     Business.owner_id.in_(page_agent_ids),
                     Business.closed_at.is_(None),
                     Business.is_npc.is_(False),
                 )
-            ).group_by(Business.owner_id)
+            )
+            .group_by(Business.owner_id)
         )
         biz_counts = {row.owner_id: int(row.cnt) for row in biz_count_result.all()}
 
@@ -114,7 +112,7 @@ async def get_agents_list(
         )
         employed_ids = {row[0] for row in emp_result.all()}
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     agents_list = []
     for agent, bank_bal, total_wealth in page_slice:
         housing_zone = None
@@ -122,21 +120,23 @@ async def get_agents_list(
             z = zones_map[agent.housing_zone_id]
             housing_zone = {"slug": z.slug, "name": z.name}
 
-        agents_list.append({
-            "id": str(agent.id),
-            "name": agent.name,
-            "model": agent.model,
-            "balance": round(float(agent.balance), 2),
-            "bank_balance": round(bank_bal, 2),
-            "total_wealth": round(total_wealth, 2),
-            "housing_zone": housing_zone,
-            "businesses_count": biz_counts.get(agent.id, 0),
-            "is_employed": agent.id in employed_ids,
-            "bankruptcy_count": agent.bankruptcy_count,
-            "is_active": agent.is_active,
-            "is_jailed": agent.is_jailed(now),
-            "created_at": agent.created_at.isoformat(),
-        })
+        agents_list.append(
+            {
+                "id": str(agent.id),
+                "name": agent.name,
+                "model": agent.model,
+                "balance": round(float(agent.balance), 2),
+                "bank_balance": round(bank_bal, 2),
+                "total_wealth": round(total_wealth, 2),
+                "housing_zone": housing_zone,
+                "businesses_count": biz_counts.get(agent.id, 0),
+                "is_employed": agent.id in employed_ids,
+                "bankruptcy_count": agent.bankruptcy_count,
+                "is_active": agent.is_active,
+                "is_jailed": agent.is_jailed(now),
+                "created_at": agent.created_at.isoformat(),
+            }
+        )
 
     return {
         "agents": agents_list,
@@ -162,30 +162,26 @@ async def get_agent_profile(
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Housing zone
     housing_zone = None
     if agent.housing_zone_id:
-        zone_result = await db.execute(
-            select(Zone).where(Zone.id == agent.housing_zone_id)
-        )
+        zone_result = await db.execute(select(Zone).where(Zone.id == agent.housing_zone_id))
         zone = zone_result.scalar_one_or_none()
         if zone:
             housing_zone = {"slug": zone.slug, "name": zone.name}
 
     # Bank account
-    bank_result = await db.execute(
-        select(BankAccount).where(BankAccount.agent_id == agent.id)
-    )
+    bank_result = await db.execute(select(BankAccount).where(BankAccount.agent_id == agent.id))
     bank_account = bank_result.scalar_one_or_none()
     bank_balance = float(bank_account.balance) if bank_account else 0.0
 
     # Employment
     employment_result = await db.execute(
-        select(Employment, Business).join(
-            Business, Business.id == Employment.business_id
-        ).where(
+        select(Employment, Business)
+        .join(Business, Business.id == Employment.business_id)
+        .where(
             and_(
                 Employment.agent_id == agent.id,
                 Employment.terminated_at.is_(None),
@@ -216,16 +212,16 @@ async def get_agent_profile(
     businesses = []
     for biz in owned_biz_result.scalars().all():
         # Get zone slug
-        biz_zone_result = await db.execute(
-            select(Zone).where(Zone.id == biz.zone_id)
-        )
+        biz_zone_result = await db.execute(select(Zone).where(Zone.id == biz.zone_id))
         biz_zone = biz_zone_result.scalar_one_or_none()
-        businesses.append({
-            "id": str(biz.id),
-            "name": biz.name,
-            "type_slug": biz.type_slug,
-            "zone_slug": biz_zone.slug if biz_zone else str(biz.zone_id),
-        })
+        businesses.append(
+            {
+                "id": str(biz.id),
+                "name": biz.name,
+                "type_slug": biz.type_slug,
+                "zone_slug": biz_zone.slug if biz_zone else str(biz.zone_id),
+            }
+        )
 
     # Inventory
     inv_result = await db.execute(
@@ -237,22 +233,18 @@ async def get_agent_profile(
             )
         )
     )
-    inventory = [
-        {"good_slug": item.good_slug, "quantity": item.quantity}
-        for item in inv_result.scalars().all()
-    ]
+    inventory = [{"good_slug": item.good_slug, "quantity": item.quantity} for item in inv_result.scalars().all()]
 
     # Criminal record
-    violations_result = await db.execute(
-        select(func.count(Violation.id)).where(Violation.agent_id == agent.id)
-    )
+    violations_result = await db.execute(select(func.count(Violation.id)).where(Violation.agent_id == agent.id))
     violation_count = violations_result.scalar() or 0
 
     jailed = agent.is_jailed(now)
 
     # Recent transactions (last 10)
     txn_result = await db.execute(
-        select(Transaction).where(
+        select(Transaction)
+        .where(
             or_(
                 Transaction.from_agent_id == agent.id,
                 Transaction.to_agent_id == agent.id,

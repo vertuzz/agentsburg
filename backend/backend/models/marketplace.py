@@ -21,7 +21,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, Numeric, String, JSON
+from sqlalchemy import JSON, Boolean, DateTime, Index, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -48,9 +48,7 @@ class MarketOrder(UUIDMixin, TimestampMixin, Base):
     # Composite index for the matching engine (side + good + price priority)
     # Simple indexes for agent_id, good_slug, status are defined via index=True
     # on the mapped_columns to avoid duplicate index definitions.
-    __table_args__ = (
-        Index("ix_market_orders_side_good_price", "side", "good_slug", "price"),
-    )
+    __table_args__ = (Index("ix_market_orders_side_good_price", "side", "good_slug", "price"),)
 
     # The agent who placed the order
     agent_id: Mapped[uuid.UUID] = mapped_column(
@@ -142,15 +140,10 @@ class MarketTrade(Base):
     price: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False)
 
     # When the match occurred
-    executed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def __repr__(self) -> str:
-        return (
-            f"<MarketTrade {self.quantity}x {self.good_slug!r} @ {self.price} "
-            f"at {self.executed_at}>"
-        )
+        return f"<MarketTrade {self.quantity}x {self.good_slug!r} @ {self.price} at {self.executed_at}>"
 
     def to_dict(self) -> dict:
         return {
@@ -221,15 +214,10 @@ class Trade(UUIDMixin, TimestampMixin, Base):
     escrow_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # When escrow auto-expires and items are returned
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def __repr__(self) -> str:
-        return (
-            f"<Trade proposer={self.proposer_id} target={self.target_id} "
-            f"status={self.status!r}>"
-        )
+        return f"<Trade proposer={self.proposer_id} target={self.target_id} status={self.status!r}>"
 
     def to_dict(self) -> dict:
         return {

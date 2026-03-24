@@ -32,16 +32,17 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Re-export so existing imports from this module still work
+from backend.economy.npc_production import (
+    run_npc_production,  # noqa: F401
+    spawn_demand_gap_businesses,  # noqa: F401
+)
 from backend.models.agent import Agent
 from backend.models.banking import CentralBank
 from backend.models.business import Business, StorefrontPrice
 from backend.models.inventory import InventoryItem
 from backend.models.recipe import Recipe
 from backend.models.zone import Zone
-
-# Re-export so existing imports from this module still work
-from backend.economy.npc_production import run_npc_production  # noqa: F401
-from backend.economy.npc_production import spawn_demand_gap_businesses  # noqa: F401
 
 if TYPE_CHECKING:
     from backend.clock import Clock
@@ -56,15 +57,15 @@ UNPROFITABLE_CLOSE_THRESHOLD = 3
 _REVENUE_HISTORY_KEY = "npc_revenue_history"
 
 # Price adjustment magnitudes
-PRICE_REDUCTION_FACTOR = 0.92   # 8% price cut when overstocked
-PRICE_INCREASE_FACTOR = 1.08    # 8% price rise when selling out
-MIN_PRICE = Decimal("0.50")     # Never price below 0.50
+PRICE_REDUCTION_FACTOR = 0.92  # 8% price cut when overstocked
+PRICE_INCREASE_FACTOR = 1.08  # 8% price rise when selling out
+MIN_PRICE = Decimal("0.50")  # Never price below 0.50
 
 
 async def simulate_npc_businesses(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Run all NPC business simulation logic for one slow tick.
@@ -90,9 +91,7 @@ async def simulate_npc_businesses(
 
     # Load agents (NPC owners)
     agents_result = await db.execute(select(Agent))
-    agents_map: dict[str, Agent] = {
-        str(a.id): a for a in agents_result.scalars().all()
-    }
+    agents_map: dict[str, Agent] = {str(a.id): a for a in agents_result.scalars().all()}
 
     # Load recipes
     recipes_result = await db.execute(select(Recipe))
@@ -107,15 +106,19 @@ async def simulate_npc_businesses(
     npc_config_by_name: dict[str, dict] = {c["name"]: c for c in npc_biz_configs}
 
     # Load CentralBank
-    bank_result = await db.execute(
-        select(CentralBank).where(CentralBank.id == 1)
-    )
+    bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1))
     central_bank = bank_result.scalar_one_or_none()
 
     # --- Step 1: Auto-produce ---
     production_log = await run_npc_production(
-        db, npc_businesses, agents_map, recipes_by_slug,
-        npc_config_by_name, central_bank, npc_efficiency, npc_wage_mult,
+        db,
+        npc_businesses,
+        agents_map,
+        recipes_by_slug,
+        npc_config_by_name,
+        central_bank,
+        npc_efficiency,
+        npc_wage_mult,
         settings,
     )
 
@@ -124,7 +127,11 @@ async def simulate_npc_businesses(
 
     # --- Step 3: Demand gap spawning ---
     spawned = await spawn_demand_gap_businesses(
-        db, settings, recipes_by_output, central_bank, now,
+        db,
+        settings,
+        recipes_by_output,
+        central_bank,
+        now,
     )
 
     # --- Step 4: Price adjustment ---
@@ -134,7 +141,10 @@ async def simulate_npc_businesses(
 
     logger.info(
         "NPC businesses: %d produced, %d closed, %d spawned, %d price adjustments",
-        len(production_log), len(closures), len(spawned), len(price_adjustments),
+        len(production_log),
+        len(closures),
+        len(spawned),
+        len(price_adjustments),
     )
 
     return {
@@ -161,21 +171,24 @@ def _check_profitability(
         biz_balance = Decimal(str(owner.balance))
         if biz_balance < Decimal("-500"):
             biz.closed_at = now
-            closures.append({
-                "business": biz.name,
-                "reason": "unprofitable",
-                "balance": float(biz_balance),
-            })
+            closures.append(
+                {
+                    "business": biz.name,
+                    "reason": "unprofitable",
+                    "balance": float(biz_balance),
+                }
+            )
             logger.info(
                 "Closed NPC business %r (balance: %.2f)",
-                biz.name, float(biz_balance),
+                biz.name,
+                float(biz_balance),
             )
     return closures
 
 
 async def _adjust_prices(
     db: AsyncSession,
-    settings: "Settings",
+    settings: Settings,
 ) -> list[dict]:
     """Step 4: Adjust NPC storefront prices based on inventory levels."""
     demand_entries = settings.npc_demand.get("npc_demand", [])
@@ -210,27 +223,19 @@ async def _adjust_prices(
             inv_item = inv_result.scalar_one_or_none()
             current_stock = inv_item.quantity if inv_item else 0
 
-            demand_cfg = next(
-                (e for e in demand_entries if e.get("good") == good_slug), None
-            )
+            demand_cfg = next((e for e in demand_entries if e.get("good") == good_slug), None)
             if demand_cfg is None:
                 continue
 
             base_demand = float(demand_cfg.get("base_demand_per_zone", 1))
-            ref_price = float(
-                demand_cfg.get("reference_price", float(current_price))
-            )
+            ref_price = float(demand_cfg.get("reference_price", float(current_price)))
 
-            zone_result = await db.execute(
-                select(Zone).where(Zone.id == biz.zone_id)
-            )
+            zone_result = await db.execute(select(Zone).where(Zone.id == biz.zone_id))
             biz_zone = zone_result.scalar_one_or_none()
             zone_mult = float(biz_zone.foot_traffic) if biz_zone else 1.0
             expected = base_demand * zone_mult
 
-            ticks_of_stock = (
-                current_stock / expected if expected > 0 else float("inf")
-            )
+            ticks_of_stock = current_stock / expected if expected > 0 else float("inf")
 
             new_price = current_price
             if current_stock == 0:
@@ -244,11 +249,14 @@ async def _adjust_prices(
             new_price = round(new_price, 2)
             if new_price != current_price:
                 sp.price = float(new_price)
-                price_adjustments.append({
-                    "business": biz.name, "good": good_slug,
-                    "old_price": float(current_price),
-                    "new_price": float(new_price),
-                    "stock": current_stock,
-                })
+                price_adjustments.append(
+                    {
+                        "business": biz.name,
+                        "good": good_slug,
+                        "old_price": float(current_price),
+                        "new_price": float(new_price),
+                        "stock": current_stock,
+                    }
+                )
 
     return price_adjustments

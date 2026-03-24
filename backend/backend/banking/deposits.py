@@ -16,17 +16,16 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.banking._helpers import (
+    _get_active_policy,
+    _get_central_bank,
+    _get_or_create_account,
+    _round_money,
+    _to_decimal,
+)
 from backend.models.agent import Agent
 from backend.models.banking import BankAccount, Loan
 from backend.models.transaction import Transaction
-
-from backend.banking._helpers import (
-    _to_decimal,
-    _round_money,
-    _get_or_create_account,
-    _get_central_bank,
-    _get_active_policy,
-)
 
 if TYPE_CHECKING:
     from backend.clock import Clock
@@ -39,7 +38,7 @@ async def deposit(
     db: AsyncSession,
     agent: Agent,
     amount: Decimal,
-    clock: "Clock",
+    clock: Clock,
 ) -> dict:
     """
     Deposit money from the agent's wallet into their bank account.
@@ -68,16 +67,12 @@ async def deposit(
         raise ValueError("Deposit amount must be positive")
 
     # Lock agent row, bank account, and central bank to prevent concurrent mutations
-    agent_row = await db.execute(
-        select(Agent).where(Agent.id == agent.id).with_for_update()
-    )
+    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
     agent = agent_row.scalar_one()
 
     agent_balance = _to_decimal(agent.balance)
     if agent_balance < amount:
-        raise ValueError(
-            f"Insufficient wallet balance: have {float(agent_balance):.2f}, need {float(amount):.2f}"
-        )
+        raise ValueError(f"Insufficient wallet balance: have {float(agent_balance):.2f}, need {float(amount):.2f}")
 
     account = await _get_or_create_account(db, agent, lock=True)
     bank = await _get_central_bank(db, lock=True)
@@ -103,7 +98,10 @@ async def deposit(
 
     logger.info(
         "Agent %s deposited %.2f (account now %.2f, wallet now %.2f)",
-        agent.name, float(amount), float(account.balance), float(agent.balance),
+        agent.name,
+        float(amount),
+        float(account.balance),
+        float(agent.balance),
     )
 
     return {
@@ -118,7 +116,7 @@ async def withdraw(
     db: AsyncSession,
     agent: Agent,
     amount: Decimal,
-    clock: "Clock",
+    clock: Clock,
 ) -> dict:
     """
     Withdraw money from the agent's bank account to their wallet.
@@ -147,18 +145,14 @@ async def withdraw(
         raise ValueError("Withdrawal amount must be positive")
 
     # Lock agent row, bank account, and central bank to prevent concurrent mutations
-    agent_row = await db.execute(
-        select(Agent).where(Agent.id == agent.id).with_for_update()
-    )
+    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
     agent = agent_row.scalar_one()
 
     account = await _get_or_create_account(db, agent, lock=True)
     account_balance = _to_decimal(account.balance)
 
     if account_balance < amount:
-        raise ValueError(
-            f"Insufficient account balance: have {float(account_balance):.2f}, need {float(amount):.2f}"
-        )
+        raise ValueError(f"Insufficient account balance: have {float(account_balance):.2f}, need {float(amount):.2f}")
 
     bank = await _get_central_bank(db, lock=True)
     reserves = _to_decimal(bank.reserves)
@@ -191,7 +185,10 @@ async def withdraw(
 
     logger.info(
         "Agent %s withdrew %.2f (account now %.2f, wallet now %.2f)",
-        agent.name, float(amount), float(account.balance), float(agent.balance),
+        agent.name,
+        float(amount),
+        float(account.balance),
+        float(agent.balance),
     )
 
     return {
@@ -205,8 +202,8 @@ async def withdraw(
 async def view_balance(
     db: AsyncSession,
     agent: Agent,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Return a full banking snapshot for the agent.
@@ -243,16 +240,18 @@ async def view_balance(
 
     loan_data = []
     for loan in active_loans:
-        loan_data.append({
-            "loan_id": str(loan.id),
-            "principal": float(loan.principal),
-            "remaining_balance": float(loan.remaining_balance),
-            "interest_rate": loan.interest_rate,
-            "installment_amount": float(loan.installment_amount),
-            "installments_remaining": loan.installments_remaining,
-            "next_payment_at": loan.next_payment_at.isoformat(),
-            "status": loan.status,
-        })
+        loan_data.append(
+            {
+                "loan_id": str(loan.id),
+                "principal": float(loan.principal),
+                "remaining_balance": float(loan.remaining_balance),
+                "interest_rate": loan.interest_rate,
+                "installment_amount": float(loan.installment_amount),
+                "installments_remaining": loan.installments_remaining,
+                "next_payment_at": loan.next_payment_at.isoformat(),
+                "status": loan.status,
+            }
+        )
 
     # Credit scoring
     credit = await calculate_credit(db, agent, clock, settings)
@@ -289,8 +288,8 @@ async def view_balance(
 
 async def process_deposit_interest(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Pay interest on all bank deposits above the minimum threshold.
@@ -318,9 +317,7 @@ async def process_deposit_interest(
     min_balance = Decimal(str(settings.economy.min_deposit_for_interest))
 
     # Load all accounts with meaningful balances
-    result = await db.execute(
-        select(BankAccount).where(BankAccount.balance >= min_balance)
-    )
+    result = await db.execute(select(BankAccount).where(BankAccount.balance >= min_balance))
     accounts = list(result.scalars().all())
 
     if not accounts:
@@ -347,7 +344,8 @@ async def process_deposit_interest(
         if reserves < interest:
             logger.warning(
                 "Insufficient reserves to pay deposit interest (reserves: %.2f, interest: %.2f) — skipping",
-                float(reserves), float(interest),
+                float(reserves),
+                float(interest),
             )
             break  # If reserves are this low, stop paying interest
 
@@ -356,24 +354,28 @@ async def process_deposit_interest(
         total_paid += interest
         paid_count += 1
 
-        db.add(Transaction(
-            type="deposit_interest",
-            from_agent_id=None,  # from bank reserves
-            to_agent_id=account.agent_id,
-            amount=interest,
-            metadata_json={
-                "account_balance_before": float(balance),
-                "rate": float(hourly_rate),
-                "tick_time": now.isoformat(),
-            },
-        ))
+        db.add(
+            Transaction(
+                type="deposit_interest",
+                from_agent_id=None,  # from bank reserves
+                to_agent_id=account.agent_id,
+                amount=interest,
+                metadata_json={
+                    "account_balance_before": float(balance),
+                    "rate": float(hourly_rate),
+                    "tick_time": now.isoformat(),
+                },
+            )
+        )
 
     bank.reserves = _round_money(reserves)
     await db.flush()
 
     logger.info(
         "Deposit interest: paid %.4f to %d accounts (%.6f hourly rate)",
-        float(total_paid), paid_count, float(hourly_rate),
+        float(total_paid),
+        paid_count,
+        float(hourly_rate),
     )
 
     return {

@@ -1,16 +1,16 @@
-import { useState, useEffect } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import './Layout.css';
+import { useState, useEffect } from "react";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
+import "./Layout.css";
 
 const NAV_ITEMS = [
-  { to: '/dashboard',   label: 'Overview',     icon: '>' },
-  { to: '/market',      label: 'Market',       icon: '$' },
-  { to: '/agents',      label: 'Agents',       icon: '@' },
-  { to: '/businesses',  label: 'Businesses',   icon: '#' },
-  { to: '/zones',       label: 'Zones',        icon: '~' },
-  { to: '/government',  label: 'Government',   icon: '!' },
-  { to: '/goods',       label: 'Goods',        icon: '*' },
-  { to: '/models',      label: 'Models',       icon: '%' },
+  { to: "/dashboard", label: "Overview", icon: ">" },
+  { to: "/market", label: "Market", icon: "$" },
+  { to: "/agents", label: "Agents", icon: "@" },
+  { to: "/businesses", label: "Businesses", icon: "#" },
+  { to: "/zones", label: "Zones", icon: "~" },
+  { to: "/government", label: "Government", icon: "!" },
+  { to: "/goods", label: "Goods", icon: "*" },
+  { to: "/models", label: "Models", icon: "%" },
 ];
 
 export default function Layout() {
@@ -18,7 +18,9 @@ export default function Layout() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Close menu on route change
-  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
 
   return (
     <div className="layout-root">
@@ -30,11 +32,11 @@ export default function Layout() {
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label="Toggle menu"
           >
-            <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
-            <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
-            <span className={`hamburger-line ${menuOpen ? 'open' : ''}`} />
+            <span className={`hamburger-line ${menuOpen ? "open" : ""}`} />
+            <span className={`hamburger-line ${menuOpen ? "open" : ""}`} />
+            <span className={`hamburger-line ${menuOpen ? "open" : ""}`} />
           </button>
-          <a href="/" className="layout-logo" style={{ textDecoration: 'none' }}>
+          <a href="/" className="layout-logo" style={{ textDecoration: "none" }}>
             agents<span className="layout-logo-accent">burg</span>
           </a>
           <span className="layout-cursor">_</span>
@@ -50,19 +52,17 @@ export default function Layout() {
         {menuOpen && <div className="layout-overlay" onClick={() => setMenuOpen(false)} />}
 
         {/* ── Sidebar ── */}
-        <nav className={`layout-sidebar ${menuOpen ? 'open' : ''}`}>
-          {NAV_ITEMS.map(item => {
-            const active = location.pathname === item.to
-              || location.pathname.startsWith(item.to + '/');
+        <nav className={`layout-sidebar ${menuOpen ? "open" : ""}`}>
+          {NAV_ITEMS.map((item) => {
+            const active =
+              location.pathname === item.to || location.pathname.startsWith(item.to + "/");
             return (
               <NavLink
                 key={item.to}
                 to={item.to}
-                className={`layout-nav-item ${active ? 'active' : ''}`}
+                className={`layout-nav-item ${active ? "active" : ""}`}
               >
-                <span className={`layout-nav-icon ${active ? 'active' : ''}`}>
-                  {item.icon}
-                </span>
+                <span className={`layout-nav-icon ${active ? "active" : ""}`}>{item.icon}</span>
                 <span>{item.label}</span>
               </NavLink>
             );

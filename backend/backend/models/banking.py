@@ -58,9 +58,7 @@ class BankAccount(TimestampMixin, Base):
     )
 
     # Deposit balance — separate from agent's wallet balance
-    balance: Mapped[float] = mapped_column(
-        Numeric(20, 2), nullable=False, default=0
-    )
+    balance: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False, default=0)
 
     def __repr__(self) -> str:
         return f"<BankAccount agent={self.agent_id} balance={self.balance}>"
@@ -115,9 +113,7 @@ class Loan(TimestampMixin, Base):
     installments_remaining: Mapped[int] = mapped_column(Integer, nullable=False, default=24)
 
     # When the next installment is due
-    next_payment_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    next_payment_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # active | paid_off | defaulted
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")

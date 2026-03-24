@@ -29,7 +29,7 @@ All cooldowns use clock timestamps (same pattern as gathering.py).
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -61,10 +61,10 @@ logger = logging.getLogger(__name__)
 
 async def work(
     db: AsyncSession,
-    redis: "aioredis.Redis",
+    redis: aioredis.Redis,
     agent: Agent,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
     business_id: str | None = None,
 ) -> dict:
     """
@@ -98,13 +98,12 @@ async def work(
         try:
             expiry_dt = datetime.fromisoformat(stored_expiry)
             if expiry_dt.tzinfo is None:
-                expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+                expiry_dt = expiry_dt.replace(tzinfo=UTC)
             if now < expiry_dt:
                 remaining = int((expiry_dt - now).total_seconds())
                 await redis.delete(lock_key)
                 raise ValueError(
-                    f"Work cooldown active. Try again in {remaining} seconds. "
-                    f"(Producing: {ctx.product_slug})"
+                    f"Work cooldown active. Try again in {remaining} seconds. (Producing: {ctx.product_slug})"
                 )
         except (ValueError, TypeError) as e:
             if "cooldown active" in str(e).lower():
@@ -119,8 +118,13 @@ async def work(
         wage_earned: float = 0.0
         if ctx.is_employed:
             wage_earned, agent = await pay_wage(
-                db, agent, ctx.employment, ctx.business,
-                ctx.product_slug, recipe, now,
+                db,
+                agent,
+                ctx.employment,
+                ctx.business,
+                ctx.product_slug,
+                recipe,
+                now,
             )
 
         # Step 8: Calculate effective cooldown
@@ -137,8 +141,13 @@ async def work(
 
     logger.info(
         "Agent %s worked at %r: produced %dx %s (cooldown=%ds, employed=%s, wage=%.2f)",
-        agent.name, ctx.business.name, recipe.output_quantity, recipe.output_good,
-        cd["effective"], ctx.is_employed, wage_earned,
+        agent.name,
+        ctx.business.name,
+        recipe.output_quantity,
+        recipe.output_good,
+        cd["effective"],
+        ctx.is_employed,
+        wage_earned,
     )
 
     # Step 10: Return result
@@ -181,8 +190,11 @@ async def work(
 
 
 async def _calc_cooldown(
-    db: AsyncSession, agent: Agent, business: "Business",
-    recipe: "Recipe", settings: "Settings",
+    db: AsyncSession,
+    agent: Agent,
+    business: Business,
+    recipe: Recipe,
+    settings: Settings,
 ) -> dict:
     """Calculate effective work cooldown with all multipliers."""
     base = recipe.cooldown_seconds
@@ -216,19 +228,24 @@ async def _calc_cooldown(
     effective = max(1, int(base * bonus_mult * commute_mult * govt_mod * homeless_mult))
 
     return {
-        "effective": effective, "base": base,
-        "bonus_applied": bonus_applied, "bonus_mult": bonus_mult,
-        "commute_applied": commute_applied, "commute_mult": commute_mult,
+        "effective": effective,
+        "base": base,
+        "bonus_applied": bonus_applied,
+        "bonus_mult": bonus_mult,
+        "commute_applied": commute_applied,
+        "commute_mult": commute_mult,
         "govt_mod": govt_mod,
-        "homeless_applied": homeless_mult != 1.0, "homeless_mult": homeless_mult,
+        "homeless_applied": homeless_mult != 1.0,
+        "homeless_mult": homeless_mult,
     }
 
 
-async def _get_government_modifier(db: AsyncSession, settings: "Settings") -> float:
+async def _get_government_modifier(db: AsyncSession, settings: Settings) -> float:
     """Get the current government production_cooldown_modifier (default 1.0)."""
     try:
-        from backend.models.government import GovernmentState
         from backend.government.service import get_policy_params
+        from backend.models.government import GovernmentState
+
         result = await db.execute(select(GovernmentState).where(GovernmentState.id == 1))
         govt = result.scalar_one_or_none()
         if not govt:

@@ -30,12 +30,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from backend.api.stats import router as stats_router
 from backend.api.agents import router as agents_router
 from backend.api.businesses import router as businesses_router
-from backend.api.market import router as market_router
-from backend.api.world import router as world_router
 from backend.api.dashboard import router as dashboard_router
+from backend.api.market import router as market_router
+from backend.api.stats import router as stats_router
+from backend.api.world import router as world_router
 
 router = APIRouter(tags=["api"])
 

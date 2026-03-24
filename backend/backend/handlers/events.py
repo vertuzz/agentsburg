@@ -18,11 +18,11 @@ if TYPE_CHECKING:
 
 async def _handle_events(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Retrieve recent economy events for the authenticated agent.
@@ -43,6 +43,7 @@ async def _handle_events(
     events = await get_events(redis, agent.id, limit=limit)
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
 
     return {

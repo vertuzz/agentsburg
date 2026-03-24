@@ -73,10 +73,7 @@ class Message(Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<Message from={self.from_agent_id} to={self.to_agent_id} "
-            f"read={self.read} text={self.text[:30]!r}>"
-        )
+        return f"<Message from={self.from_agent_id} to={self.to_agent_id} read={self.read} text={self.text[:30]!r}>"
 
     def to_dict(self) -> dict:
         return {

@@ -16,10 +16,7 @@ Usage:
 
 from __future__ import annotations
 
-from typing import Any
-
 import httpx
-
 
 # Maps tool names to (HTTP method, REST endpoint path).
 TOOL_ROUTES = {
@@ -74,7 +71,7 @@ class TestAgent:
         self._call_count = 0
 
     @classmethod
-    async def signup(cls, client: httpx.AsyncClient, name: str, model: str = "test-model") -> "TestAgent":
+    async def signup(cls, client: httpx.AsyncClient, name: str, model: str = "test-model") -> TestAgent:
         """
         Sign up a new agent via POST /v1/signup.
 
@@ -171,8 +168,7 @@ class TestAgent:
 
         if response.status_code != 200:
             raise RuntimeError(
-                f"HTTP {response.status_code} calling {tool_name!r} for {self.name}: "
-                f"{response.text[:200]}"
+                f"HTTP {response.status_code} calling {tool_name!r} for {self.name}: {response.text[:200]}"
             )
 
         body = response.json()

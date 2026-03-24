@@ -16,7 +16,7 @@ from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin, UUIDMixin
 
@@ -35,19 +35,13 @@ class Agent(UUIDMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
 
     # API authentication token — full control. Keep secret.
-    action_token: Mapped[str] = mapped_column(
-        String(128), unique=True, index=True, nullable=False
-    )
+    action_token: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
 
     # Dashboard view token — read-only. Safe to share/bookmark.
-    view_token: Mapped[str] = mapped_column(
-        String(128), unique=True, index=True, nullable=False
-    )
+    view_token: Mapped[str] = mapped_column(String(128), unique=True, index=True, nullable=False)
 
     # Current currency balance. Can go negative (triggers bankruptcy if too low).
-    balance: Mapped[float] = mapped_column(
-        Numeric(20, 2), nullable=False, default=0
-    )
+    balance: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False, default=0)
 
     # The zone where the agent currently operates / has their business
     zone_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -68,17 +62,13 @@ class Agent(UUIDMixin, TimestampMixin, Base):
     bankruptcy_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # If set, the agent is jailed until this timestamp and cannot act strategically
-    jail_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    jail_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Cumulative violation count — affects jail thresholds and credit scoring
     violation_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # Whether the agent is active. Deactivated after max bankruptcies.
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default="true"
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
 
     def __repr__(self) -> str:
         return f"<Agent name={self.name!r} balance={self.balance}>"

@@ -29,10 +29,10 @@ from __future__ import annotations
 import pytest
 
 from tests.adversarial.auth_and_input import run_auth_and_input
-from tests.adversarial.concurrency import run_concurrency
-from tests.adversarial.marketplace_and_jail import run_marketplace_and_jail
 from tests.adversarial.bankruptcy_and_government import run_bankruptcy_and_government
 from tests.adversarial.business_transfers import run_business_transfers
+from tests.adversarial.concurrency import run_concurrency
+from tests.adversarial.marketplace_and_jail import run_marketplace_and_jail
 
 
 @pytest.mark.asyncio
@@ -58,7 +58,12 @@ async def test_adversarial_scenarios(client, app, clock, run_tick, db, redis_cli
 
     # Sections 10-14: Bankruptcy, elections, money supply, deactivation
     agents = await run_bankruptcy_and_government(
-        client, app, clock, run_tick, redis_client, agents,
+        client,
+        app,
+        clock,
+        run_tick,
+        redis_client,
+        agents,
     )
 
     # Section 15: Business inventory transfer edge cases

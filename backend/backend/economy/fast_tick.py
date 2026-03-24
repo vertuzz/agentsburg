@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 async def run_fast_tick(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Run all fast tick processing.
@@ -55,28 +55,36 @@ async def run_fast_tick(
 
     # --- NPC storefront purchases ---
     from backend.economy.npc_consumers import simulate_npc_purchases
+
     npc_result = await simulate_npc_purchases(db, clock, settings)
-    processed.append({
-        "type": "npc_purchases",
-        "transactions": npc_result["total_transactions"],
-        "revenue": npc_result["total_revenue"],
-    })
+    processed.append(
+        {
+            "type": "npc_purchases",
+            "transactions": npc_result["total_transactions"],
+            "revenue": npc_result["total_revenue"],
+        }
+    )
 
     # --- NPC marketplace demand (bank buys raw goods from sell orders) ---
-    from backend.economy.npc_marketplace import simulate_npc_marketplace_demand, place_npc_buy_orders
+    from backend.economy.npc_marketplace import place_npc_buy_orders, simulate_npc_marketplace_demand
+
     npc_mkt_result = await simulate_npc_marketplace_demand(db, clock, settings)
-    processed.append({
-        "type": "npc_marketplace",
-        "fills": npc_mkt_result["total_fills"],
-        "spent": npc_mkt_result["total_spent"],
-    })
+    processed.append(
+        {
+            "type": "npc_marketplace",
+            "fills": npc_mkt_result["total_fills"],
+            "spent": npc_mkt_result["total_spent"],
+        }
+    )
 
     # --- NPC buy orders (visible demand on the marketplace) ---
     npc_buy_result = await place_npc_buy_orders(db, clock, settings)
-    processed.append({
-        "type": "npc_buy_orders",
-        "orders_placed": npc_buy_result["orders_placed"],
-    })
+    processed.append(
+        {
+            "type": "npc_buy_orders",
+            "orders_placed": npc_buy_result["orders_placed"],
+        }
+    )
 
     # --- Marketplace order matching ---
     matching_result = await _run_order_matching(db, clock, settings)
@@ -84,10 +92,12 @@ async def run_fast_tick(
 
     # --- Trade escrow expiry ---
     expiry_result = await expire_trades(db, clock, settings)
-    processed.append({
-        "type": "trade_expiry",
-        "expired": expiry_result["expired"],
-    })
+    processed.append(
+        {
+            "type": "trade_expiry",
+            "expired": expiry_result["expired"],
+        }
+    )
 
     return {
         "tick_type": "fast",
@@ -98,8 +108,8 @@ async def run_fast_tick(
 
 async def _run_order_matching(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Run the matching engine for all goods that have open orders.
@@ -112,9 +122,7 @@ async def _run_order_matching(
     """
     # Find all goods with open orders
     result = await db.execute(
-        select(MarketOrder.good_slug)
-        .where(MarketOrder.status.in_(["open", "partially_filled"]))
-        .distinct()
+        select(MarketOrder.good_slug).where(MarketOrder.status.in_(["open", "partially_filled"])).distinct()
     )
     active_goods = [row[0] for row in result.all()]
 
@@ -127,11 +135,13 @@ async def _run_order_matching(
         if match_result["trades_executed"] > 0:
             total_trades += match_result["trades_executed"]
             total_volume += match_result["total_volume"]
-            goods_processed.append({
-                "good_slug": good_slug,
-                "trades": match_result["trades_executed"],
-                "volume": match_result["total_volume"],
-            })
+            goods_processed.append(
+                {
+                    "good_slug": good_slug,
+                    "trades": match_result["trades_executed"],
+                    "volume": match_result["total_volume"],
+                }
+            )
 
     logger.info(
         "Order matching: %d goods with open orders, %d trades executed (volume: %d)",

@@ -13,10 +13,9 @@ so government changes (after tally) take immediate effect.
 from __future__ import annotations
 
 import logging
+import random
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
-
-import random
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +33,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_TEMPLATE = "free_market"
 
 
-def get_policy_params(settings: "Settings", template_slug: str) -> dict[str, Any]:
+def get_policy_params(settings: Settings, template_slug: str) -> dict[str, Any]:
     """
     Return the parameter dict for the given template slug.
 
@@ -76,7 +75,7 @@ def get_policy_params(settings: "Settings", template_slug: str) -> dict[str, Any
 
 async def get_current_policy(
     db: AsyncSession,
-    settings: "Settings",
+    settings: Settings,
 ) -> dict[str, Any]:
     """
     Return the current government's policy parameters.
@@ -102,8 +101,8 @@ async def cast_vote(
     db: AsyncSession,
     agent: Agent,
     template_slug: str,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Cast or change a vote for a government template.
@@ -127,13 +126,10 @@ async def cast_vote(
     now = clock.now()
 
     # Validate template exists
-    valid_slugs = {
-        t["slug"] for t in settings.government.get("templates", [])
-    }
+    valid_slugs = {t["slug"] for t in settings.government.get("templates", [])}
     if template_slug not in valid_slugs:
         raise ValueError(
-            f"Unknown government template {template_slug!r}. "
-            f"Valid options: {', '.join(sorted(valid_slugs))}"
+            f"Unknown government template {template_slug!r}. Valid options: {', '.join(sorted(valid_slugs))}"
         )
 
     # Check voting eligibility: agent must be old enough
@@ -149,9 +145,7 @@ async def cast_vote(
         )
 
     # Upsert the vote
-    existing = await db.execute(
-        select(Vote).where(Vote.agent_id == agent.id)
-    )
+    existing = await db.execute(select(Vote).where(Vote.agent_id == agent.id))
     vote = existing.scalar_one_or_none()
 
     if vote is None:
@@ -181,8 +175,8 @@ async def cast_vote(
 
 async def tally_election(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Weekly: count eligible votes, apply the winning template.
@@ -217,11 +211,10 @@ async def tally_election(
     # Find all eligible agents (old enough to vote)
     # We need created_at + eligibility_age <= now
     from datetime import timedelta
+
     eligibility_cutoff = now - timedelta(seconds=eligibility_age)
 
-    eligible_result = await db.execute(
-        select(Agent).where(Agent.created_at <= eligibility_cutoff)
-    )
+    eligible_result = await db.execute(select(Agent).where(Agent.created_at <= eligibility_cutoff))
     eligible_agent_ids = {a.id for a in eligible_result.scalars().all()}
 
     if not eligible_agent_ids:
@@ -238,9 +231,7 @@ async def tally_election(
         }
 
     # Count votes from eligible agents
-    votes_result = await db.execute(
-        select(Vote).where(Vote.agent_id.in_(eligible_agent_ids))
-    )
+    votes_result = await db.execute(select(Vote).where(Vote.agent_id.in_(eligible_agent_ids)))
     all_votes = votes_result.scalars().all()
 
     if not all_votes:
@@ -314,7 +305,7 @@ async def tally_election(
 
 async def _adjust_loan_rates(
     db: AsyncSession,
-    settings: "Settings",
+    settings: Settings,
     new_template_slug: str,
 ) -> int:
     """
@@ -336,9 +327,7 @@ async def _adjust_loan_rates(
     base_rate = float(getattr(settings.economy, "base_loan_interest_rate", 0.05))
     new_rate = base_rate * rate_modifier
 
-    loans_result = await db.execute(
-        select(Loan).where(Loan.status == "active")
-    )
+    loans_result = await db.execute(select(Loan).where(Loan.status == "active"))
     loans = loans_result.scalars().all()
 
     for loan in loans:

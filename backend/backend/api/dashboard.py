@@ -6,12 +6,13 @@ Includes agent status, transactions, businesses, and messages.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select, and_, or_, desc
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.api.common import get_agent_from_view_token
 from backend.database import get_db
 from backend.models.agent import Agent
 from backend.models.banking import BankAccount
@@ -21,8 +22,6 @@ from backend.models.inventory import InventoryItem
 from backend.models.message import Message
 from backend.models.transaction import Transaction
 from backend.models.zone import Zone
-
-from backend.api.common import get_agent_from_view_token
 
 router = APIRouter(tags=["api"])
 
@@ -42,25 +41,21 @@ async def get_agent_status(
     # Housing zone
     housing_zone = None
     if agent.housing_zone_id:
-        zone_result = await db.execute(
-            select(Zone).where(Zone.id == agent.housing_zone_id)
-        )
+        zone_result = await db.execute(select(Zone).where(Zone.id == agent.housing_zone_id))
         zone = zone_result.scalar_one_or_none()
         if zone:
             housing_zone = {"id": str(zone.id), "slug": zone.slug, "name": zone.name}
 
     # Bank account
-    bank_result = await db.execute(
-        select(BankAccount).where(BankAccount.agent_id == agent.id)
-    )
+    bank_result = await db.execute(select(BankAccount).where(BankAccount.agent_id == agent.id))
     bank_account = bank_result.scalar_one_or_none()
     bank_balance = float(bank_account.balance) if bank_account else 0.0
 
     # Employment
     employment_result = await db.execute(
-        select(Employment, Business).join(
-            Business, Business.id == Employment.business_id
-        ).where(
+        select(Employment, Business)
+        .join(Business, Business.id == Employment.business_id)
+        .where(
             and_(
                 Employment.agent_id == agent.id,
                 Employment.terminated_at.is_(None),
@@ -91,19 +86,18 @@ async def get_agent_status(
     )
     owned_businesses = []
     for biz in owned_biz_result.scalars().all():
-        owned_businesses.append({
-            "id": str(biz.id),
-            "name": biz.name,
-            "type_slug": biz.type_slug,
-            "zone_id": str(biz.zone_id),
-        })
+        owned_businesses.append(
+            {
+                "id": str(biz.id),
+                "name": biz.name,
+                "type_slug": biz.type_slug,
+                "zone_id": str(biz.zone_id),
+            }
+        )
 
     # Criminal record
     violations_result = await db.execute(
-        select(Violation)
-        .where(Violation.agent_id == agent.id)
-        .order_by(desc(Violation.detected_at))
-        .limit(10)
+        select(Violation).where(Violation.agent_id == agent.id).order_by(desc(Violation.detected_at)).limit(10)
     )
     violations = [
         {
@@ -115,7 +109,7 @@ async def get_agent_status(
         for v in violations_result.scalars().all()
     ]
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     jailed = agent.jail_until is not None and agent.jail_until > now
     jail_remaining_seconds = None
     if jailed and agent.jail_until:
@@ -131,10 +125,7 @@ async def get_agent_status(
             )
         )
     )
-    inventory = [
-        {"good_slug": item.good_slug, "quantity": item.quantity}
-        for item in inv_result.scalars().all()
-    ]
+    inventory = [{"good_slug": item.good_slug, "quantity": item.quantity} for item in inv_result.scalars().all()]
 
     return {
         "id": str(agent.id),
@@ -186,7 +177,8 @@ async def get_agent_transactions(
 
     # Fetch page
     txn_result = await db.execute(
-        select(Transaction).where(
+        select(Transaction)
+        .where(
             or_(
                 Transaction.from_agent_id == agent.id,
                 Transaction.to_agent_id == agent.id,
@@ -246,9 +238,7 @@ async def get_agent_businesses(
     result = []
     for biz in businesses:
         # Zone info
-        zone_result = await db.execute(
-            select(Zone).where(Zone.id == biz.zone_id)
-        )
+        zone_result = await db.execute(select(Zone).where(Zone.id == biz.zone_id))
         zone = zone_result.scalar_one_or_none()
 
         # Inventory
@@ -261,18 +251,12 @@ async def get_agent_businesses(
                 )
             )
         )
-        inventory = [
-            {"good_slug": item.good_slug, "quantity": item.quantity}
-            for item in inv_result.scalars().all()
-        ]
+        inventory = [{"good_slug": item.good_slug, "quantity": item.quantity} for item in inv_result.scalars().all()]
 
         # Storefront prices
-        prices_result = await db.execute(
-            select(StorefrontPrice).where(StorefrontPrice.business_id == biz.id)
-        )
+        prices_result = await db.execute(select(StorefrontPrice).where(StorefrontPrice.business_id == biz.id))
         storefront_prices = [
-            {"good_slug": sp.good_slug, "price": float(sp.price)}
-            for sp in prices_result.scalars().all()
+            {"good_slug": sp.good_slug, "price": float(sp.price)} for sp in prices_result.scalars().all()
         ]
 
         # Active employees
@@ -296,7 +280,7 @@ async def get_agent_businesses(
         ]
 
         # Revenue last 7d
-        seven_days_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        seven_days_ago = datetime.now(UTC) - timedelta(days=7)
         rev_result = await db.execute(
             select(func.coalesce(func.sum(Transaction.amount), 0)).where(
                 and_(
@@ -308,20 +292,22 @@ async def get_agent_businesses(
         )
         revenue_7d = float(rev_result.scalar() or 0)
 
-        result.append({
-            "id": str(biz.id),
-            "name": biz.name,
-            "type_slug": biz.type_slug,
-            "zone": {"id": str(zone.id), "slug": zone.slug, "name": zone.name} if zone else None,
-            "storage_capacity": biz.storage_capacity,
-            "is_open": biz.is_open(),
-            "closed_at": biz.closed_at.isoformat() if biz.closed_at else None,
-            "inventory": inventory,
-            "storefront_prices": storefront_prices,
-            "employees": employee_list,
-            "revenue_7d": revenue_7d,
-            "created_at": biz.created_at.isoformat(),
-        })
+        result.append(
+            {
+                "id": str(biz.id),
+                "name": biz.name,
+                "type_slug": biz.type_slug,
+                "zone": {"id": str(zone.id), "slug": zone.slug, "name": zone.name} if zone else None,
+                "storage_capacity": biz.storage_capacity,
+                "is_open": biz.is_open(),
+                "closed_at": biz.closed_at.isoformat() if biz.closed_at else None,
+                "inventory": inventory,
+                "storefront_prices": storefront_prices,
+                "employees": employee_list,
+                "revenue_7d": revenue_7d,
+                "created_at": biz.created_at.isoformat(),
+            }
+        )
 
     return {"businesses": result}
 
@@ -340,9 +326,7 @@ async def get_agent_messages(
     offset = (page - 1) * page_size
 
     # Count total inbox messages
-    count_result = await db.execute(
-        select(func.count(Message.id)).where(Message.to_agent_id == agent.id)
-    )
+    count_result = await db.execute(select(func.count(Message.id)).where(Message.to_agent_id == agent.id))
     total = count_result.scalar() or 0
 
     # Fetch page
@@ -359,9 +343,7 @@ async def get_agent_messages(
     sender_ids = list({m.from_agent_id for m in messages})
     senders: dict = {}
     if sender_ids:
-        senders_result = await db.execute(
-            select(Agent.id, Agent.name).where(Agent.id.in_(sender_ids))
-        )
+        senders_result = await db.execute(select(Agent.id, Agent.name).where(Agent.id.in_(sender_ids)))
         senders = {row.id: row.name for row in senders_result.all()}
 
     messages_list = [
@@ -378,9 +360,7 @@ async def get_agent_messages(
 
     # Unread count
     unread_result = await db.execute(
-        select(func.count(Message.id)).where(
-            and_(Message.to_agent_id == agent.id, Message.read.is_(False))
-        )
+        select(func.count(Message.id)).where(and_(Message.to_agent_id == agent.id, Message.read.is_(False)))
     )
     unread_count = unread_result.scalar() or 0
 
@@ -429,9 +409,7 @@ async def get_transactions_recent(
 
     agents_map: dict = {}
     if agent_ids:
-        agents_result = await db.execute(
-            select(Agent).where(Agent.id.in_(list(agent_ids)))
-        )
+        agents_result = await db.execute(select(Agent).where(Agent.id.in_(list(agent_ids))))
         agents_map = {a.id: a.name for a in agents_result.scalars().all()}
 
     transactions = [

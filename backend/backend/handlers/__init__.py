@@ -17,13 +17,13 @@ from backend.handlers.businesses import (
     _handle_set_prices,
 )
 from backend.handlers.economy import _handle_get_economy
-from backend.handlers.events import _handle_events
 from backend.handlers.employment import (
     _handle_apply_job,
     _handle_list_jobs,
     _handle_manage_employees,
     _handle_work,
 )
+from backend.handlers.events import _handle_events
 from backend.handlers.gathering import _handle_gather, _handle_inventory_discard
 from backend.handlers.government import _handle_messages, _handle_vote
 from backend.handlers.inventory import _handle_business_inventory

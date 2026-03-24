@@ -37,7 +37,7 @@ __all__ = [
 ]
 
 
-async def downsample_data(db: AsyncSession, clock: "Clock") -> dict:
+async def downsample_data(db: AsyncSession, clock: Clock) -> dict:
     """
     Run all data maintenance operations.
 

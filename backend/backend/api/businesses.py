@@ -7,7 +7,7 @@ from __future__ import annotations
 import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select, and_, desc
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -44,20 +44,14 @@ async def get_businesses_list(
         filters.append(Business.type_slug == type)
 
     # Count total matching
-    count_result = await db.execute(
-        select(func.count(Business.id)).where(and_(*filters))
-    )
+    count_result = await db.execute(select(func.count(Business.id)).where(and_(*filters)))
     total = count_result.scalar() or 0
 
     offset = (page - 1) * page_size
 
     # Fetch page
     biz_result = await db.execute(
-        select(Business)
-        .where(and_(*filters))
-        .order_by(desc(Business.created_at))
-        .offset(offset)
-        .limit(page_size)
+        select(Business).where(and_(*filters)).order_by(desc(Business.created_at)).offset(offset).limit(page_size)
     )
     businesses = biz_result.scalars().all()
 
@@ -65,18 +59,14 @@ async def get_businesses_list(
     owner_ids = list({b.owner_id for b in businesses})
     owners_map: dict = {}
     if owner_ids:
-        owners_result = await db.execute(
-            select(Agent).where(Agent.id.in_(owner_ids))
-        )
+        owners_result = await db.execute(select(Agent).where(Agent.id.in_(owner_ids)))
         owners_map = {a.id: a for a in owners_result.scalars().all()}
 
     # Resolve zones
     zone_ids = list({b.zone_id for b in businesses})
     zones_map: dict = {}
     if zone_ids:
-        zones_result = await db.execute(
-            select(Zone).where(Zone.id.in_(zone_ids))
-        )
+        zones_result = await db.execute(select(Zone).where(Zone.id.in_(zone_ids)))
         zones_map = {z.id: z for z in zones_result.scalars().all()}
 
     # Employee counts
@@ -87,12 +77,14 @@ async def get_businesses_list(
             select(
                 Employment.business_id,
                 func.count(Employment.id).label("cnt"),
-            ).where(
+            )
+            .where(
                 and_(
                     Employment.business_id.in_(biz_ids),
                     Employment.terminated_at.is_(None),
                 )
-            ).group_by(Employment.business_id)
+            )
+            .group_by(Employment.business_id)
         )
         emp_counts = {row.business_id: int(row.cnt) for row in emp_count_result.all()}
 
@@ -101,18 +93,20 @@ async def get_businesses_list(
         owner = owners_map.get(biz.owner_id)
         z = zones_map.get(biz.zone_id)
 
-        businesses_list.append({
-            "id": str(biz.id),
-            "name": biz.name,
-            "type_slug": biz.type_slug,
-            "owner_name": owner.name if owner else "Unknown",
-            "owner_id": str(biz.owner_id),
-            "is_npc": biz.is_npc,
-            "zone": {"slug": z.slug, "name": z.name} if z else None,
-            "employee_count": emp_counts.get(biz.id, 0),
-            "is_open": biz.is_open(),
-            "created_at": biz.created_at.isoformat(),
-        })
+        businesses_list.append(
+            {
+                "id": str(biz.id),
+                "name": biz.name,
+                "type_slug": biz.type_slug,
+                "owner_name": owner.name if owner else "Unknown",
+                "owner_id": str(biz.owner_id),
+                "is_npc": biz.is_npc,
+                "zone": {"slug": z.slug, "name": z.name} if z else None,
+                "employee_count": emp_counts.get(biz.id, 0),
+                "is_open": biz.is_open(),
+                "created_at": biz.created_at.isoformat(),
+            }
+        )
 
     return {
         "businesses": businesses_list,
@@ -156,25 +150,17 @@ async def get_business_detail(
             )
         )
     )
-    inventory = [
-        {"good_slug": item.good_slug, "quantity": item.quantity}
-        for item in inv_result.scalars().all()
-    ]
+    inventory = [{"good_slug": item.good_slug, "quantity": item.quantity} for item in inv_result.scalars().all()]
 
     # Storefront prices
-    prices_result = await db.execute(
-        select(StorefrontPrice).where(StorefrontPrice.business_id == biz.id)
-    )
-    storefront_prices = [
-        {"good_slug": sp.good_slug, "price": float(sp.price)}
-        for sp in prices_result.scalars().all()
-    ]
+    prices_result = await db.execute(select(StorefrontPrice).where(StorefrontPrice.business_id == biz.id))
+    storefront_prices = [{"good_slug": sp.good_slug, "price": float(sp.price)} for sp in prices_result.scalars().all()]
 
     # Employees
     emp_result = await db.execute(
-        select(Employment, Agent).join(
-            Agent, Agent.id == Employment.agent_id
-        ).where(
+        select(Employment, Agent)
+        .join(Agent, Agent.id == Employment.agent_id)
+        .where(
             and_(
                 Employment.business_id == biz.id,
                 Employment.terminated_at.is_(None),
@@ -183,12 +169,14 @@ async def get_business_detail(
     )
     employees = []
     for emp, agent in emp_result.all():
-        employees.append({
-            "agent_id": str(emp.agent_id),
-            "agent_name": agent.name,
-            "wage_per_work": float(emp.wage_per_work),
-            "product_slug": emp.product_slug,
-        })
+        employees.append(
+            {
+                "agent_id": str(emp.agent_id),
+                "agent_name": agent.name,
+                "wage_per_work": float(emp.wage_per_work),
+                "product_slug": emp.product_slug,
+            }
+        )
 
     return {
         "id": str(biz.id),

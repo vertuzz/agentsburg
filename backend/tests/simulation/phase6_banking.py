@@ -26,16 +26,21 @@ async def run_phase_6(agents: dict[str, TestAgent], client, app, clock, run_tick
     banker_status = await banker.status()
     assert "credit_score" in banker_status, "Status should include credit_score"
     assert "max_loan_amount" in banker_status, "Status should include max_loan_amount"
-    assert isinstance(banker_status["credit_score"], (int, float)), \
+    assert isinstance(banker_status["credit_score"], (int, float)), (
         f"credit_score should be numeric, got {type(banker_status['credit_score'])}"
+    )
     print(f"  credit_score={banker_status['credit_score']}, max_loan_amount={banker_status['max_loan_amount']}")
 
     # --- 6a: Deposit ---
     print_section("Deposit money")
 
-    dep_result = await banker.call("bank", {
-        "action": "deposit", "amount": 300,
-    })
+    dep_result = await banker.call(
+        "bank",
+        {
+            "action": "deposit",
+            "amount": 300,
+        },
+    )
     assert dep_result["account_balance"] == 300.0
     wallet_after_dep = dep_result["wallet_balance"]
     print(f"  Deposited 300. Account={dep_result['account_balance']}, Wallet={wallet_after_dep}")
@@ -43,9 +48,13 @@ async def run_phase_6(agents: dict[str, TestAgent], client, app, clock, run_tick
     # --- 6b: Withdraw ---
     print_section("Withdraw money")
 
-    withdraw_result = await banker.call("bank", {
-        "action": "withdraw", "amount": 100,
-    })
+    withdraw_result = await banker.call(
+        "bank",
+        {
+            "action": "withdraw",
+            "amount": 100,
+        },
+    )
     assert withdraw_result["account_balance"] == 200.0
     print(f"  Withdrew 100. Account={withdraw_result['account_balance']}")
 
@@ -66,14 +75,20 @@ async def run_phase_6(agents: dict[str, TestAgent], client, app, clock, run_tick
             bank_row.reserves = Decimal("50000")
             await session.commit()
 
-    loan_result = await banker.call("bank", {
-        "action": "take_loan", "amount": 100,
-    })
+    loan_result = await banker.call(
+        "bank",
+        {
+            "action": "take_loan",
+            "amount": 100,
+        },
+    )
     assert "principal" in loan_result
     assert loan_result["installments_remaining"] == 24
     loan_installment = loan_result["installment_amount"]
-    print(f"  Loan: principal={loan_result['principal']}, installment={loan_installment}, "
-          f"rate={loan_result.get('interest_rate', 'N/A')}")
+    print(
+        f"  Loan: principal={loan_result['principal']}, installment={loan_installment}, "
+        f"rate={loan_result.get('interest_rate', 'N/A')}"
+    )
 
     # Cannot take second loan
     _, err = await banker.try_call("bank", {"action": "take_loan", "amount": 50})
@@ -108,17 +123,13 @@ async def run_phase_6(agents: dict[str, TestAgent], client, app, clock, run_tick
     print_section("Money supply invariant check")
 
     async with app.state.session_factory() as session:
-        wallet_total = float((await session.execute(
-            select(func.coalesce(func.sum(Agent.balance), 0))
-        )).scalar_one())
+        wallet_total = float((await session.execute(select(func.coalesce(func.sum(Agent.balance), 0)))).scalar_one())
 
-        bank_acct_total = float((await session.execute(
-            select(func.coalesce(func.sum(BankAccount.balance), 0))
-        )).scalar_one())
+        bank_acct_total = float(
+            (await session.execute(select(func.coalesce(func.sum(BankAccount.balance), 0)))).scalar_one()
+        )
 
-        bank_row = (await session.execute(
-            select(CentralBank).where(CentralBank.id == 1)
-        )).scalar_one_or_none()
+        bank_row = (await session.execute(select(CentralBank).where(CentralBank.id == 1))).scalar_one_or_none()
         reserves = float(bank_row.reserves) if bank_row else 0.0
 
     print(f"  Wallets: {wallet_total:.2f}")

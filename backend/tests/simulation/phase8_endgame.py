@@ -23,9 +23,7 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
     print_section("Triggering bankruptcy")
 
     async with app.state.session_factory() as session:
-        result = await session.execute(
-            select(Agent).where(Agent.name == "eco_homeless")
-        )
+        result = await session.execute(select(Agent).where(Agent.name == "eco_homeless"))
         homeless_ag = result.scalar_one()
         homeless_ag.balance = Decimal("-210")  # below -200 threshold
         homeless_ag.is_active = True
@@ -42,7 +40,7 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
             print(f"  Bankruptcy triggered: {bankruptcy.get('bankrupted', [])}")
             break
     else:
-        print(f"  Bankruptcy may not have triggered yet")
+        print("  Bankruptcy may not have triggered yet")
 
     # Verify post-bankruptcy state
     homeless_status = await agents["eco_homeless"].status()
@@ -53,16 +51,16 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
         assert inv_total == 0, f"Inventory should be liquidated, has {inv_total} items"
         print(f"  Post-bankruptcy: balance={homeless_status['balance']}, inventory liquidated")
     else:
-        print(f"  Homeless agent balance={homeless_status['balance']}, "
-              f"bankruptcy_count={homeless_status['bankruptcy_count']}")
+        print(
+            f"  Homeless agent balance={homeless_status['balance']}, "
+            f"bankruptcy_count={homeless_status['bankruptcy_count']}"
+        )
 
     # --- 8b: Verify bankruptcy increments count ---
     print_section("Checking bankruptcy count")
 
     async with app.state.session_factory() as session:
-        bk_agents = (await session.execute(
-            select(Agent).where(Agent.bankruptcy_count > 0)
-        )).scalars().all()
+        bk_agents = (await session.execute(select(Agent).where(Agent.bankruptcy_count > 0))).scalars().all()
     for ag in bk_agents:
         print(f"  {ag.name}: bankruptcy_count={ag.bankruptcy_count}")
     assert len(bk_agents) > 0, "At least one agent should have gone bankrupt"
@@ -71,22 +69,24 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
     print_section("Serial bankruptcy loan denial")
 
     async with app.state.session_factory() as session:
-        result = await session.execute(
-            select(Agent).where(Agent.name == "eco_homeless")
-        )
+        result = await session.execute(select(Agent).where(Agent.name == "eco_homeless"))
         homeless_ag = result.scalar_one()
         homeless_ag.bankruptcy_count = 3
         homeless_ag.is_active = False
         homeless_ag.balance = Decimal("50")
         await session.commit()
 
-    _, err = await agents["eco_homeless"].try_call("bank", {
-        "action": "take_loan", "amount": 20,
-    })
+    _, err = await agents["eco_homeless"].try_call(
+        "bank",
+        {
+            "action": "take_loan",
+            "amount": 20,
+        },
+    )
     if err is not None:
         print(f"  Serial bankrupt denied loan (error={err})")
     else:
-        print(f"  Loan check: agent with 3 bankruptcies may still qualify (credit score dependent)")
+        print("  Loan check: agent with 3 bankruptcies may still qualify (credit score dependent)")
 
     # --- 8d: Economy stats ---
     print_section("Economy stats (get_economy)")
@@ -110,8 +110,16 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
     # --- 8e: Run more simulation days ---
     print_section("Running final simulation (7 more days)")
 
-    for name in ["eco_miller", "eco_baker", "eco_lumberjack", "eco_trader",
-                  "eco_banker", "eco_politician", "eco_gatherer1", "eco_gatherer2"]:
+    for name in [
+        "eco_miller",
+        "eco_baker",
+        "eco_lumberjack",
+        "eco_trader",
+        "eco_banker",
+        "eco_politician",
+        "eco_gatherer1",
+        "eco_gatherer2",
+    ]:
         await give_balance(app, name, 2000)
 
     await run_tick(hours=168)
@@ -121,11 +129,9 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
     print_section("Final invariant checks")
 
     async with app.state.session_factory() as session:
-        neg_inv = (await session.execute(
-            select(InventoryItem).where(InventoryItem.quantity < 0)
-        )).scalars().all()
+        neg_inv = (await session.execute(select(InventoryItem).where(InventoryItem.quantity < 0))).scalars().all()
     assert len(neg_inv) == 0, f"INVARIANT VIOLATION: {len(neg_inv)} negative inventory items"
-    print(f"  No negative inventory anywhere")
+    print("  No negative inventory anywhere")
 
     async with app.state.session_factory() as session:
         all_agents = (await session.execute(select(Agent))).scalars().all()
@@ -133,39 +139,40 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
             bal = float(ag.balance)
             assert bal == bal, f"{ag.name} has NaN balance"
             assert abs(bal) < 1e15, f"{ag.name} has unreasonable balance: {bal}"
-    print(f"  All balances are valid numbers")
+    print("  All balances are valid numbers")
 
     async with app.state.session_factory() as session:
-        open_businesses = (await session.execute(
-            select(Business).where(Business.closed_at.is_(None))
-        )).scalars().all()
+        open_businesses = (await session.execute(select(Business).where(Business.closed_at.is_(None)))).scalars().all()
         for biz in open_businesses:
-            owner_result = await session.execute(
-                select(Agent).where(Agent.id == biz.owner_id)
-            )
+            owner_result = await session.execute(select(Agent).where(Agent.id == biz.owner_id))
             owner = owner_result.scalar_one_or_none()
             assert owner is not None, f"Business {biz.name} has no valid owner"
     print(f"  {len(open_businesses)} open businesses, all have valid owners")
 
     async with app.state.session_factory() as session:
-        orphan_emp = (await session.execute(
-            select(Employment).join(
-                Business, Employment.business_id == Business.id
-            ).where(
-                Employment.terminated_at.is_(None),
-                Business.closed_at.is_not(None),
+        orphan_emp = (
+            (
+                await session.execute(
+                    select(Employment)
+                    .join(Business, Employment.business_id == Business.id)
+                    .where(
+                        Employment.terminated_at.is_(None),
+                        Business.closed_at.is_not(None),
+                    )
+                )
             )
-        )).scalars().all()
-    assert len(orphan_emp) == 0, \
-        f"INVARIANT VIOLATION: {len(orphan_emp)} active employees at closed businesses"
-    print(f"  No orphaned employments at closed businesses")
+            .scalars()
+            .all()
+        )
+    assert len(orphan_emp) == 0, f"INVARIANT VIOLATION: {len(orphan_emp)} active employees at closed businesses"
+    print("  No orphaned employments at closed businesses")
 
     # ==================================================================
     # FINAL REPORT
     # ==================================================================
-    print(f"\n\n{'#'*70}")
+    print(f"\n\n{'#' * 70}")
     print("# FINAL REPORT")
-    print(f"{'#'*70}")
+    print(f"{'#' * 70}")
 
     statuses = {}
     for name, agent in agents.items():
@@ -173,24 +180,38 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
             statuses[name] = await agent.status()
         except Exception:
             statuses[name] = {
-                "name": name, "balance": 0, "housing": {"homeless": True},
-                "bankruptcy_count": 0, "inventory": [], "storage": {"used": 0},
+                "name": name,
+                "balance": 0,
+                "housing": {"homeless": True},
+                "bankruptcy_count": 0,
+                "inventory": [],
+                "storage": {"used": 0},
                 "violation_count": 0,
             }
 
     print_agent_summary(agents, statuses)
 
     async with app.state.session_factory() as session:
-        for txn_type in ["food", "rent", "wage", "marketplace", "tax", "trade",
-                         "deposit", "withdrawal", "loan_disbursement", "loan_payment"]:
-            count = (await session.execute(
-                select(func.count()).select_from(Transaction).where(Transaction.type == txn_type)
-            )).scalar()
+        for txn_type in [
+            "food",
+            "rent",
+            "wage",
+            "marketplace",
+            "tax",
+            "trade",
+            "deposit",
+            "withdrawal",
+            "loan_disbursement",
+            "loan_payment",
+        ]:
+            count = (
+                await session.execute(select(func.count()).select_from(Transaction).where(Transaction.type == txn_type))
+            ).scalar()
             if count > 0:
                 print(f"  {txn_type}: {count} transactions")
 
     final_econ = await agents["eco_politician"].call("get_economy", {"section": "stats"})
-    print(f"\n  Final economy stats:")
+    print("\n  Final economy stats:")
     print(f"    Population: {final_econ['population']}")
     print(f"    Employment rate: {final_econ['employment_rate']:.1%}")
     print(f"    Money supply: {final_econ['money_supply']:.2f}")
@@ -199,12 +220,9 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
     total_bankruptcies = sum(s["bankruptcy_count"] for s in statuses.values())
     total_violations = sum(s.get("violation_count", 0) for s in statuses.values())
     housed_count = sum(1 for s in statuses.values() if not s["housing"]["homeless"])
-    total_inventory = sum(
-        sum(i["quantity"] for i in s.get("inventory", []))
-        for s in statuses.values()
-    )
+    total_inventory = sum(sum(i["quantity"] for i in s.get("inventory", [])) for s in statuses.values())
 
-    print(f"\n  Summary:")
+    print("\n  Summary:")
     print(f"    Total bankruptcies: {total_bankruptcies}")
     print(f"    Total violations: {total_violations}")
     print(f"    Currently housed: {housed_count}/{len(agents)}")
@@ -212,6 +230,6 @@ async def run_phase_8(agents: dict[str, TestAgent], client, app, clock, run_tick
 
     assert final_econ["population"] >= 12, "Should have at least 12 agents"
 
-    print(f"\n{'='*70}")
+    print(f"\n{'=' * 70}")
     print("  GRAND ECONOMY SIMULATION PASSED")
-    print(f"{'='*70}")
+    print(f"{'=' * 70}")

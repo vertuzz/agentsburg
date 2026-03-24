@@ -30,13 +30,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
-    from backend.models.agent import Agent
     from backend.clock import Clock
+    from backend.models.agent import Agent
 
 
-def is_jailed(agent: "Agent", clock: "Clock") -> bool:
+def is_jailed(agent: Agent, clock: Clock) -> bool:
     """
     Return True if the agent is currently serving jail time.
 
@@ -51,7 +49,7 @@ def is_jailed(agent: "Agent", clock: "Clock") -> bool:
     return agent.jail_until is not None and agent.jail_until > now
 
 
-def get_jail_remaining_seconds(agent: "Agent", clock: "Clock") -> float | None:
+def get_jail_remaining_seconds(agent: Agent, clock: Clock) -> float | None:
     """
     Return seconds remaining in jail sentence, or None if not jailed.
 
@@ -68,7 +66,7 @@ def get_jail_remaining_seconds(agent: "Agent", clock: "Clock") -> float | None:
     return (agent.jail_until - now).total_seconds()  # type: ignore[operator]
 
 
-def check_jail(agent: "Agent", clock: "Clock") -> None:
+def check_jail(agent: Agent, clock: Clock) -> None:
     """
     Raise ValueError if the agent is currently jailed.
 

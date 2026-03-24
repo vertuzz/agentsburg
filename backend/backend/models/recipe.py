@@ -11,7 +11,7 @@ get a faster cooldown (e.g., a bakery makes bread faster than a smithy).
 
 from __future__ import annotations
 
-from sqlalchemy import Float, Integer, JSON, String
+from sqlalchemy import JSON, Float, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.models.base import Base, TimestampMixin
@@ -53,9 +53,7 @@ class Recipe(TimestampMixin, Base):
     bonus_business_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     # Cooldown multiplier applied when business type matches (< 1.0 = faster)
-    bonus_cooldown_multiplier: Mapped[float] = mapped_column(
-        Float, nullable=False, default=1.0
-    )
+    bonus_cooldown_multiplier: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
 
     def __repr__(self) -> str:
         return (

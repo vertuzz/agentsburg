@@ -16,6 +16,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
+
     from backend.clock import Clock
 
 logger = logging.getLogger(__name__)
@@ -29,11 +30,11 @@ def _events_key(agent_id: UUID) -> str:
 
 
 async def emit_event(
-    redis: "aioredis.Redis",
+    redis: aioredis.Redis,
     agent_id: UUID,
     event_type: str,
     detail: dict,
-    clock: "Clock",
+    clock: Clock,
 ) -> None:
     """Push an event to the agent's Redis event list."""
     key = _events_key(agent_id)
@@ -51,7 +52,7 @@ async def emit_event(
 
 
 async def get_events(
-    redis: "aioredis.Redis",
+    redis: aioredis.Redis,
     agent_id: UUID,
     limit: int = 20,
 ) -> list[dict]:
@@ -62,13 +63,13 @@ async def get_events(
     for r in raw:
         try:
             events.append(json.loads(r))
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             continue
     return events
 
 
 async def count_events(
-    redis: "aioredis.Redis",
+    redis: aioredis.Redis,
     agent_id: UUID,
 ) -> int:
     """Count events in the agent's event list."""

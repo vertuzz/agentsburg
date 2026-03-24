@@ -36,6 +36,7 @@ try:
     from backend.banking.service import (
         close_bank_account_for_bankruptcy,
     )
+
     _BANKING_AVAILABLE = True
 except ImportError:
     _BANKING_AVAILABLE = False
@@ -49,8 +50,8 @@ logger = logging.getLogger(__name__)
 
 async def process_bankruptcies(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Find and process all agents below the bankruptcy threshold.
@@ -113,11 +114,13 @@ async def process_bankruptcies(
             proceeds = base_value * liquidation_rate * item.quantity
             total_liquidated += proceeds
 
-            liquidated_items.append({
-                "good_slug": item.good_slug,
-                "quantity": item.quantity,
-                "proceeds": float(proceeds),
-            })
+            liquidated_items.append(
+                {
+                    "good_slug": item.good_slug,
+                    "quantity": item.quantity,
+                    "proceeds": float(proceeds),
+                }
+            )
 
             # Zero out the inventory
             item.quantity = 0
@@ -150,7 +153,8 @@ async def process_bankruptcies(
             active_employment.terminated_at = now
             logger.info(
                 "Terminated employment for bankrupt agent %s (business %s)",
-                agent.name, active_employment.business_id,
+                agent.name,
+                active_employment.business_id,
             )
 
         # --- Phase 3: Close businesses owned by this agent ---
@@ -165,7 +169,8 @@ async def process_bankruptcies(
             biz.closed_at = now
             logger.info(
                 "Closed business %r for bankrupt agent %s",
-                biz.name, agent.name,
+                biz.name,
+                agent.name,
             )
             # Terminate all employees of this business
             biz_emp_result = await db.execute(
@@ -182,6 +187,7 @@ async def process_bankruptcies(
         try:
             from backend.marketplace.orderbook import cancel_agent_orders
             from backend.marketplace.trading import cancel_agent_trades
+
             await cancel_agent_orders(db, agent, settings)
             await cancel_agent_trades(db, agent, settings)
         except ImportError:
@@ -219,9 +225,7 @@ async def process_bankruptcies(
         agent.bankruptcy_count += 1
 
         # --- Step 7: Deactivate agent if max bankruptcies reached ---
-        max_bankruptcies = getattr(
-            settings.economy, "max_bankruptcies_before_deactivation", 2
-        )
+        max_bankruptcies = getattr(settings.economy, "max_bankruptcies_before_deactivation", 2)
         if max_bankruptcies > 0 and agent.bankruptcy_count >= max_bankruptcies:
             agent.is_active = False
             logger.warning(

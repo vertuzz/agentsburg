@@ -25,11 +25,11 @@ if TYPE_CHECKING:
 
 async def _handle_vote(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Cast or change your vote for a government template.
@@ -74,6 +74,7 @@ async def _handle_vote(
             raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
 
     return {
@@ -88,11 +89,11 @@ async def _handle_vote(
 
 async def _handle_messages(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Send or read direct messages between agents.
@@ -125,12 +126,13 @@ async def _handle_messages(
             "Parameter 'action' must be 'send' or 'read'",
         )
 
-    from backend.agents.messaging import send_message, read_messages
+    from backend.agents.messaging import read_messages, send_message
     from backend.hints import get_pending_events
 
     if action == "send":
         # Jail check — cannot send messages while jailed
         from backend.government.jail import check_jail
+
         try:
             check_jail(agent, clock)
         except ValueError as e:
@@ -177,7 +179,7 @@ async def _handle_messages(
         page_raw = params.get("page", 1)
         try:
             page = int(page_raw)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             page = 1
         page = max(1, page)
 

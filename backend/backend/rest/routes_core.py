@@ -6,8 +6,6 @@ inventory/discard, employees, jobs.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,23 +20,24 @@ from backend.rest.common import (
     get_settings,
 )
 from backend.tools import (
-    _handle_signup,
-    _handle_get_status,
-    _handle_rent_housing,
-    _handle_gather,
-    _handle_register_business,
-    _handle_configure_production,
-    _handle_set_prices,
     _handle_business_inventory,
+    _handle_configure_production,
+    _handle_gather,
+    _handle_get_status,
     _handle_inventory_discard,
-    _handle_manage_employees,
     _handle_list_jobs,
+    _handle_manage_employees,
+    _handle_register_business,
+    _handle_rent_housing,
+    _handle_set_prices,
+    _handle_signup,
 )
 
 core_router = APIRouter(prefix="/v1", tags=["v1"])
 
 
 # -- Agents ----------------------------------------------------------------
+
 
 @core_router.post("/signup", tags=["agents"])
 async def signup(
@@ -54,7 +53,12 @@ async def signup(
 
     params = await _body_or_empty(request)
     result = await _handle_signup(
-        params=params, agent=None, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=None,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
@@ -73,12 +77,18 @@ async def get_status(
     await check_rate_limit(request, redis, agent=agent)
 
     result = await _handle_get_status(
-        params={}, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params={},
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Housing & Gathering ---------------------------------------------------
+
 
 @core_router.post("/housing", tags=["housing"])
 async def rent_housing(
@@ -95,7 +105,12 @@ async def rent_housing(
 
     params = await _body_or_empty(request)
     result = await _handle_rent_housing(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
@@ -115,12 +130,18 @@ async def gather(
 
     params = await _body_or_empty(request)
     result = await _handle_gather(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Businesses ------------------------------------------------------------
+
 
 @core_router.post("/businesses", tags=["businesses"])
 async def register_business(
@@ -137,7 +158,12 @@ async def register_business(
 
     params = await _body_or_empty(request)
     result = await _handle_register_business(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
@@ -157,7 +183,12 @@ async def configure_production(
 
     params = await _body_or_empty(request)
     result = await _handle_configure_production(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
@@ -177,7 +208,12 @@ async def set_prices(
 
     params = await _body_or_empty(request)
     result = await _handle_set_prices(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
@@ -197,12 +233,18 @@ async def business_inventory(
 
     params = await _body_or_empty(request)
     result = await _handle_business_inventory(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Inventory Management --------------------------------------------------
+
 
 @core_router.post("/inventory/discard", tags=["inventory"])
 async def inventory_discard(
@@ -219,12 +261,18 @@ async def inventory_discard(
 
     params = await _body_or_empty(request)
     result = await _handle_inventory_discard(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Employment ------------------------------------------------------------
+
 
 @core_router.post("/employees", tags=["employment"])
 async def manage_employees(
@@ -241,7 +289,12 @@ async def manage_employees(
 
     params = await _body_or_empty(request)
     result = await _handle_manage_employees(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
@@ -251,10 +304,10 @@ async def list_jobs(
     request: Request,
     agent=Depends(get_current_agent),
     db: AsyncSession = Depends(get_db),
-    zone: Optional[str] = Query(None, description="Filter by zone slug"),
-    type: Optional[str] = Query(None, description="Filter by business type slug"),
-    min_wage: Optional[float] = Query(None, description="Minimum wage per work() call"),
-    page: Optional[int] = Query(None, description="Page number (1-indexed)"),
+    zone: str | None = Query(None, description="Filter by zone slug"),
+    type: str | None = Query(None, description="Filter by business type slug"),
+    min_wage: float | None = Query(None, description="Minimum wage per work() call"),
+    page: int | None = Query(None, description="Page number (1-indexed)"),
 ):
     """Browse active job postings."""
     clock = get_clock(request)
@@ -274,6 +327,11 @@ async def list_jobs(
         params["page"] = page
 
     result = await _handle_list_jobs(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}

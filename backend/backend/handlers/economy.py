@@ -7,8 +7,6 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.errors import ToolError
-
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
 
@@ -19,11 +17,11 @@ if TYPE_CHECKING:
 
 async def _handle_get_economy(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Query economic data for the Agent Economy world.
@@ -48,7 +46,7 @@ async def _handle_get_economy(
     page = params.get("page", 1)
     try:
         page = int(page)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         page = 1
 
     now = clock.now()
@@ -66,19 +64,19 @@ async def _handle_get_economy(
         return await _get_economy_overview(db, settings, now, product)
 
 
-async def _get_economy_government(db: AsyncSession, settings: "Settings", now) -> dict:
+async def _get_economy_government(db: AsyncSession, settings: Settings, now) -> dict:
     """Return government section: current policy, vote counts, next election."""
+    from datetime import timedelta
+
+    from sqlalchemy import func as sqlfunc
+
     from backend.government.service import get_current_policy
     from backend.models.government import GovernmentState, Vote
-    from sqlalchemy import func as sqlfunc
-    from datetime import timedelta
 
     policy = await get_current_policy(db, settings)
 
     # Get GovernmentState for election timing
-    state_result = await db.execute(
-        select(GovernmentState).where(GovernmentState.id == 1)
-    )
+    state_result = await db.execute(select(GovernmentState).where(GovernmentState.id == 1))
     state = state_result.scalar_one_or_none()
 
     last_election = state.last_election_at if state else None
@@ -92,23 +90,22 @@ async def _get_economy_government(db: AsyncSession, settings: "Settings", now) -
         seconds_until = election_interval
 
     # Count votes by template
-    votes_result = await db.execute(
-        select(Vote.template_slug, sqlfunc.count(Vote.id))
-        .group_by(Vote.template_slug)
-    )
+    votes_result = await db.execute(select(Vote.template_slug, sqlfunc.count(Vote.id)).group_by(Vote.template_slug))
     vote_counts = {slug: count for slug, count in votes_result.all()}
 
     # Include all templates with 0 votes
     all_templates = []
     for tmpl in settings.government.get("templates", []):
         slug = tmpl["slug"]
-        all_templates.append({
-            "slug": slug,
-            "name": tmpl.get("name", slug),
-            "votes": vote_counts.get(slug, 0),
-            "is_current": slug == policy.get("slug"),
-            "description": tmpl.get("description", ""),
-        })
+        all_templates.append(
+            {
+                "slug": slug,
+                "name": tmpl.get("name", slug),
+                "votes": vote_counts.get(slug, 0),
+                "is_current": slug == policy.get("slug"),
+                "description": tmpl.get("description", ""),
+            }
+        )
 
     return {
         "section": "government",
@@ -130,9 +127,10 @@ async def _get_economy_government(db: AsyncSession, settings: "Settings", now) -
     }
 
 
-async def _get_economy_market(db: AsyncSession, product, page: int, settings: "Settings") -> dict:
+async def _get_economy_market(db: AsyncSession, product, page: int, settings: Settings) -> dict:
     """Return market section: delegate to marketplace_browse."""
     from backend.marketplace.orderbook import browse_orders
+
     result = await browse_orders(
         db,
         good_slug=product,
@@ -150,16 +148,15 @@ async def _get_economy_market(db: AsyncSession, product, page: int, settings: "S
     }
 
 
-async def _get_economy_zones(db: AsyncSession, zone_slug, settings: "Settings") -> dict:
+async def _get_economy_zones(db: AsyncSession, zone_slug, settings: Settings) -> dict:
     """Return zones section: zone info with business counts."""
-    from backend.models.zone import Zone
-    from backend.models.business import Business
     from sqlalchemy import func as sqlfunc
 
+    from backend.models.business import Business
+    from backend.models.zone import Zone
+
     if zone_slug:
-        zones_result = await db.execute(
-            select(Zone).where(Zone.slug == zone_slug)
-        )
+        zones_result = await db.execute(select(Zone).where(Zone.slug == zone_slug))
         zones = zones_result.scalars().all()
     else:
         zones_result = await db.execute(select(Zone))
@@ -175,22 +172,25 @@ async def _get_economy_zones(db: AsyncSession, zone_slug, settings: "Settings") 
 
     # Get government rent modifier
     from backend.government.service import get_current_policy
+
     policy = await get_current_policy(db, settings)
     rent_modifier = float(policy.get("rent_modifier", 1.0))
 
     zone_data = []
     for z in zones:
         effective_rent = float(z.rent_cost) * rent_modifier
-        zone_data.append({
-            "slug": z.slug,
-            "name": z.name,
-            "base_rent_per_hour": float(z.rent_cost),
-            "effective_rent_per_hour": round(effective_rent, 2),
-            "foot_traffic": float(z.foot_traffic),
-            "demand_multiplier": float(z.demand_multiplier),
-            "active_businesses": biz_counts.get(z.id, 0),
-            "allowed_business_types": z.allowed_business_types,
-        })
+        zone_data.append(
+            {
+                "slug": z.slug,
+                "name": z.name,
+                "base_rent_per_hour": float(z.rent_cost),
+                "effective_rent_per_hour": round(effective_rent, 2),
+                "foot_traffic": float(z.foot_traffic),
+                "demand_multiplier": float(z.demand_multiplier),
+                "active_businesses": biz_counts.get(z.id, 0),
+                "allowed_business_types": z.allowed_business_types,
+            }
+        )
 
     return {
         "section": "zones",
@@ -199,37 +199,35 @@ async def _get_economy_zones(db: AsyncSession, zone_slug, settings: "Settings") 
         "_hints": {
             "check_back_seconds": 3600,
             "message": (
-                "Zone rents auto-deduct hourly. "
-                "Rent housing in a zone with your business to avoid commute penalty."
+                "Zone rents auto-deduct hourly. Rent housing in a zone with your business to avoid commute penalty."
             ),
         },
     }
 
 
-async def _get_economy_stats(db: AsyncSession, settings: "Settings", now) -> dict:
+async def _get_economy_stats(db: AsyncSession, settings: Settings, now) -> dict:
     """Return aggregate economic statistics."""
+    from datetime import timedelta
+
+    from sqlalchemy import func as sqlfunc
+
     from backend.models.agent import Agent
     from backend.models.business import Employment
     from backend.models.transaction import Transaction
-    from sqlalchemy import func as sqlfunc
-    from datetime import timedelta
 
     # Population
-    agent_count_result = await db.execute(
-        select(sqlfunc.count(Agent.id))
-    )
+    agent_count_result = await db.execute(select(sqlfunc.count(Agent.id)))
     agent_count = agent_count_result.scalar_one() or 0
 
     # Money supply: sum of all agent balances
-    balance_sum_result = await db.execute(
-        select(sqlfunc.coalesce(sqlfunc.sum(Agent.balance), 0))
-    )
+    balance_sum_result = await db.execute(select(sqlfunc.coalesce(sqlfunc.sum(Agent.balance), 0)))
     total_agent_balances = float(balance_sum_result.scalar_one() or 0)
 
     # Bank reserves
     bank_reserves = 0.0
     try:
         from backend.models.banking import CentralBank
+
         bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1))
         bank = bank_result.scalar_one_or_none()
         if bank:
@@ -241,8 +239,7 @@ async def _get_economy_stats(db: AsyncSession, settings: "Settings", now) -> dic
 
     # Employment rate: fraction of agents with active employment
     employed_count_result = await db.execute(
-        select(sqlfunc.count(Employment.id))
-        .where(Employment.terminated_at.is_(None))
+        select(sqlfunc.count(Employment.id)).where(Employment.terminated_at.is_(None))
     )
     employed_count = employed_count_result.scalar_one() or 0
     employment_rate = (employed_count / agent_count) if agent_count > 0 else 0.0
@@ -250,8 +247,7 @@ async def _get_economy_stats(db: AsyncSession, settings: "Settings", now) -> dic
     # GDP proxy: total marketplace transaction volume in last 24h
     day_ago = now - timedelta(hours=24)
     gdp_result = await db.execute(
-        select(sqlfunc.coalesce(sqlfunc.sum(Transaction.amount), 0))
-        .where(
+        select(sqlfunc.coalesce(sqlfunc.sum(Transaction.amount), 0)).where(
             Transaction.type == "marketplace",
             Transaction.created_at >= day_ago,
         )
@@ -260,6 +256,7 @@ async def _get_economy_stats(db: AsyncSession, settings: "Settings", now) -> dic
 
     # Current government
     from backend.government.service import get_current_policy
+
     policy = await get_current_policy(db, settings)
 
     return {
@@ -280,13 +277,14 @@ async def _get_economy_stats(db: AsyncSession, settings: "Settings", now) -> dic
     }
 
 
-async def _get_economy_overview(db: AsyncSession, settings: "Settings", now, product=None) -> dict:
+async def _get_economy_overview(db: AsyncSession, settings: Settings, now, product=None) -> dict:
     """Return a high-level overview combining all sections."""
     gov = await _get_economy_government(db, settings, now)
     stats = await _get_economy_stats(db, settings, now)
 
     # Minimal zone summary
     from backend.models.zone import Zone
+
     zones_result = await db.execute(select(Zone))
     zones = zones_result.scalars().all()
     zone_names = [z.slug for z in zones]

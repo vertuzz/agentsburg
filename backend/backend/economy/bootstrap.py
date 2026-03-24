@@ -23,11 +23,10 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.zone import Zone
-from backend.models.business import JobPosting
-
 # Re-export reference-data seeders so existing imports keep working.
-from backend.economy.seeds import seed_zones, seed_goods, seed_recipes  # noqa: F401
+from backend.economy.seeds import seed_goods, seed_recipes, seed_zones  # noqa: F401
+from backend.models.business import JobPosting
+from backend.models.zone import Zone
 
 if TYPE_CHECKING:
     from backend.config import Settings
@@ -35,7 +34,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def seed_central_bank(db: AsyncSession, settings: "Settings") -> None:
+async def seed_central_bank(db: AsyncSession, settings: Settings) -> None:
     """
     Create the CentralBank singleton if it doesn't exist.
 
@@ -75,7 +74,7 @@ async def seed_central_bank(db: AsyncSession, settings: "Settings") -> None:
         )
 
 
-async def seed_government(db: AsyncSession, settings: "Settings") -> None:
+async def seed_government(db: AsyncSession, settings: Settings) -> None:
     """
     Create the GovernmentState singleton if it doesn't exist.
 
@@ -117,7 +116,7 @@ async def seed_government(db: AsyncSession, settings: "Settings") -> None:
         )
 
 
-async def seed_npc_businesses(db: AsyncSession, settings: "Settings") -> None:
+async def seed_npc_businesses(db: AsyncSession, settings: Settings) -> None:
     """
     Create initial NPC businesses from bootstrap.yaml, if they don't exist yet.
 
@@ -166,9 +165,7 @@ async def seed_npc_businesses(db: AsyncSession, settings: "Settings") -> None:
             continue
 
         # Check if a business with this name already exists
-        existing_biz = await db.execute(
-            select(Business).where(Business.name == biz_name)
-        )
+        existing_biz = await db.execute(select(Business).where(Business.name == biz_name))
         if existing_biz.scalar_one_or_none() is not None:
             skipped_count += 1
             logger.debug("NPC business %r already exists — skipping", biz_name)
@@ -179,7 +176,8 @@ async def seed_npc_businesses(db: AsyncSession, settings: "Settings") -> None:
         if zone is None:
             logger.warning(
                 "NPC business %r references unknown zone %r — skipping",
-                biz_name, zone_slug,
+                biz_name,
+                zone_slug,
             )
             continue
 
@@ -188,7 +186,7 @@ async def seed_npc_businesses(db: AsyncSession, settings: "Settings") -> None:
 
         # Create NPC agent owner
         # Name format: "NPC_<type>_<seq>" (truncated to 64 chars)
-        npc_name_base = f"NPC_{biz_type.replace('_', '').capitalize()}_{i+1:02d}"
+        npc_name_base = f"NPC_{biz_type.replace('_', '').capitalize()}_{i + 1:02d}"
         # Ensure uniqueness with a random suffix
         npc_agent_name = f"{npc_name_base}_{secrets.token_hex(3)}"[:64]
 
@@ -282,7 +280,9 @@ async def seed_npc_businesses(db: AsyncSession, settings: "Settings") -> None:
             else:
                 logger.warning(
                     "Insufficient bank reserves for NPC business %r (need %.2f, have %.2f)",
-                    biz_name, float(initial_balance), float(current_reserves),
+                    biz_name,
+                    float(initial_balance),
+                    float(current_reserves),
                 )
 
         await db.flush()
@@ -291,5 +291,6 @@ async def seed_npc_businesses(db: AsyncSession, settings: "Settings") -> None:
 
     logger.info(
         "NPC business seeding complete: %d created, %d skipped (already exist)",
-        created_count, skipped_count,
+        created_count,
+        skipped_count,
     )

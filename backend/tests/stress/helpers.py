@@ -12,18 +12,13 @@ from backend.models.inventory import InventoryItem
 async def assert_no_negative_inventory(app, label: str) -> None:
     """Verify no inventory row has quantity < 0."""
     async with app.state.session_factory() as session:
-        result = await session.execute(
-            select(InventoryItem).where(InventoryItem.quantity < 0)
-        )
+        result = await session.execute(select(InventoryItem).where(InventoryItem.quantity < 0))
         negatives = result.scalars().all()
         if negatives:
             details = [
-                f"{item.good_slug}={item.quantity} (owner={item.owner_type}:{item.owner_id})"
-                for item in negatives
+                f"{item.good_slug}={item.quantity} (owner={item.owner_type}:{item.owner_id})" for item in negatives
             ]
-            pytest.fail(
-                f"[{label}] Negative inventory found: {details}"
-            )
+            pytest.fail(f"[{label}] Negative inventory found: {details}")
     print(f"  [{label}] No negative inventory -- OK")
 
 

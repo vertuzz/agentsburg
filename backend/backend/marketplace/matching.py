@@ -34,8 +34,8 @@ CANCEL_FEE_RATE = Decimal("0.02")  # 2% cancellation fee to prevent spoofing
 async def match_orders(
     db: AsyncSession,
     good_slug: str,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Run the matching engine for a specific good.
@@ -120,14 +120,10 @@ async def match_orders(
         fill_qty = min(buy_remaining, sell_remaining)
 
         # --- Load buyer and seller agents (locked to prevent concurrent balance changes) ---
-        buyer_result = await db.execute(
-            select(Agent).where(Agent.id == buy_order.agent_id).with_for_update()
-        )
+        buyer_result = await db.execute(select(Agent).where(Agent.id == buy_order.agent_id).with_for_update())
         buyer = buyer_result.scalar_one_or_none()
 
-        seller_result = await db.execute(
-            select(Agent).where(Agent.id == sell_order.agent_id).with_for_update()
-        )
+        seller_result = await db.execute(select(Agent).where(Agent.id == sell_order.agent_id).with_for_update())
         seller = seller_result.scalar_one_or_none()
 
         if buyer is None or seller is None:

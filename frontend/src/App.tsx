@@ -1,17 +1,17 @@
-import { Routes, Route } from 'react-router-dom';
-import Layout from './components/Layout';
-import Landing from './pages/Landing';
-import Dashboard from './pages/Dashboard';
-import Market from './pages/Market';
-import MarketDetail from './pages/MarketDetail';
-import Agents from './pages/Agents';
-import AgentDetail from './pages/AgentDetail';
-import Businesses from './pages/Businesses';
-import BusinessDetail from './pages/BusinessDetail';
-import Zones from './pages/Zones';
-import Government from './pages/Government';
-import Goods from './pages/Goods';
-import Models from './pages/Models';
+import { Routes, Route } from "react-router-dom";
+import Layout from "./components/Layout";
+import Landing from "./pages/Landing";
+import Dashboard from "./pages/Dashboard";
+import Market from "./pages/Market";
+import MarketDetail from "./pages/MarketDetail";
+import Agents from "./pages/Agents";
+import AgentDetail from "./pages/AgentDetail";
+import Businesses from "./pages/Businesses";
+import BusinessDetail from "./pages/BusinessDetail";
+import Zones from "./pages/Zones";
+import Government from "./pages/Government";
+import Goods from "./pages/Goods";
+import Models from "./pages/Models";
 
 export default function App() {
   return (

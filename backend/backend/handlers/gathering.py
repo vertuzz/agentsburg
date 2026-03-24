@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC
 from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,11 +27,11 @@ if TYPE_CHECKING:
 
 async def _handle_gather(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Gather a free tier-1 resource.
@@ -52,6 +53,7 @@ async def _handle_gather(
         )
 
     from backend.government.jail import check_jail
+
     try:
         check_jail(agent, clock)
     except ValueError as e:
@@ -71,16 +73,17 @@ async def _handle_gather(
     global_cooldown_key = f"cooldown:gather_global:{agent.id}"
     last_gather = await redis.get(global_cooldown_key)
     if last_gather:
-        from datetime import datetime, timezone
+        from datetime import datetime
+
         try:
             last_dt = datetime.fromisoformat(last_gather if isinstance(last_gather, str) else last_gather.decode())
             if last_dt.tzinfo is None:
-                last_dt = last_dt.replace(tzinfo=timezone.utc)
+                last_dt = last_dt.replace(tzinfo=UTC)
             now = clock.now()
             if now < last_dt:
                 remaining = int((last_dt - now).total_seconds())
                 raise ToolError(COOLDOWN_ACTIVE, f"Global gather cooldown. Wait {remaining}s.")
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass  # Corrupted key, allow
 
     from backend.agents.gathering import gather
@@ -101,10 +104,12 @@ async def _handle_gather(
 
     # Set global gather cooldown after successful gather
     from datetime import timedelta
+
     global_expire = clock.now() + timedelta(seconds=2)
     await redis.set(global_cooldown_key, global_expire.isoformat(), ex=30)
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
 
     # Merge hints — gather result already includes cooldown_remaining
@@ -118,11 +123,11 @@ async def _handle_gather(
 
 async def _handle_inventory_discard(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Destroy goods from the agent's personal inventory.
@@ -134,6 +139,7 @@ async def _handle_inventory_discard(
         raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     from backend.government.jail import check_jail
+
     try:
         check_jail(agent, clock)
     except ValueError as e:
@@ -163,6 +169,7 @@ async def _handle_inventory_discard(
     capacity = settings.economy.agent_storage_capacity
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
 
     return {

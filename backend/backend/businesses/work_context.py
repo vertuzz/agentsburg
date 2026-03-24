@@ -46,7 +46,9 @@ class WorkContext:
 
 
 async def resolve_work_context(
-    db: AsyncSession, agent: Agent, business_id: str | None = None,
+    db: AsyncSession,
+    agent: Agent,
+    business_id: str | None = None,
 ) -> WorkContext:
     """Determine whether the agent is employed or self-employed."""
     emp_result = await db.execute(
@@ -58,9 +60,7 @@ async def resolve_work_context(
     employment = emp_result.scalar_one_or_none()
 
     if employment is not None:
-        biz_result = await db.execute(
-            select(Business).where(Business.id == employment.business_id)
-        )
+        biz_result = await db.execute(select(Business).where(Business.id == employment.business_id))
         business = biz_result.scalar_one_or_none()
         if business is None or not business.is_open():
             raise ValueError(
@@ -68,12 +68,15 @@ async def resolve_work_context(
                 "Use manage_employees(action='quit_job') to leave, then find new work."
             )
         return WorkContext(
-            business=business, product_slug=employment.product_slug,
-            is_employed=True, employment=employment,
+            business=business,
+            product_slug=employment.product_slug,
+            is_employed=True,
+            employment=employment,
         )
 
     if business_id is not None:
         import uuid as _uuid
+
         try:
             biz_uuid = _uuid.UUID(business_id)
         except ValueError:
@@ -87,14 +90,15 @@ async def resolve_work_context(
         )
         business = owned_result.scalar_one_or_none()
         if business is None:
-            raise ValueError(
-                f"Business {business_id!r} not found, not owned by you, or closed."
-            )
+            raise ValueError(f"Business {business_id!r} not found, not owned by you, or closed.")
     else:
         owned_result = await db.execute(
-            select(Business).where(
-                Business.owner_id == agent.id, Business.closed_at.is_(None),
-            ).limit(1)
+            select(Business)
+            .where(
+                Business.owner_id == agent.id,
+                Business.closed_at.is_(None),
+            )
+            .limit(1)
         )
         business = owned_result.scalar_one_or_none()
     if business is None:
@@ -108,20 +112,17 @@ async def resolve_work_context(
         # Try direct recipe slug lookup first (new format).
         # Fall back to output_good lookup for backward compat with old data
         # that stored good slugs instead of recipe slugs.
-        recipe_result = await db.execute(
-            select(Recipe).where(Recipe.slug == business.default_recipe_slug)
-        )
+        recipe_result = await db.execute(select(Recipe).where(Recipe.slug == business.default_recipe_slug))
         direct_recipe = recipe_result.scalar_one_or_none()
-        if direct_recipe is not None:
-            product_slug = direct_recipe.output_good
-        else:
-            product_slug = business.default_recipe_slug
+        product_slug = direct_recipe.output_good if direct_recipe is not None else business.default_recipe_slug
     else:
         jp_result = await db.execute(
-            select(JobPosting).where(
+            select(JobPosting)
+            .where(
                 JobPosting.business_id == business.id,
                 JobPosting.is_active.is_(True),
-            ).limit(1)
+            )
+            .limit(1)
         )
         job_posting = jp_result.scalar_one_or_none()
         if job_posting is not None:
@@ -134,23 +135,24 @@ async def resolve_work_context(
             )
 
     return WorkContext(
-        business=business, product_slug=product_slug,
-        is_employed=False, employment=None,
+        business=business,
+        product_slug=product_slug,
+        is_employed=False,
+        employment=None,
     )
 
 
 async def select_recipe(
-    db: AsyncSession, product_slug: str, business_type: str,
+    db: AsyncSession,
+    product_slug: str,
+    business_type: str,
 ) -> Recipe:
     """Pick the best recipe for a product, preferring business-type bonuses."""
-    recipe_result = await db.execute(
-        select(Recipe).where(Recipe.output_good == product_slug)
-    )
+    recipe_result = await db.execute(select(Recipe).where(Recipe.output_good == product_slug))
     recipes = list(recipe_result.scalars().all())
     if not recipes:
         raise ValueError(
-            f"No recipe found for product {product_slug!r}. "
-            "Check recipes.yaml for available production recipes."
+            f"No recipe found for product {product_slug!r}. Check recipes.yaml for available production recipes."
         )
     for r in recipes:
         if r.bonus_business_type == business_type:
@@ -159,7 +161,9 @@ async def select_recipe(
 
 
 async def verify_and_consume_inputs(
-    db: AsyncSession, business: Business, recipe: Recipe,
+    db: AsyncSession,
+    business: Business,
+    recipe: Recipe,
 ) -> list[dict[str, Any]]:
     """Verify the business has enough inputs and deduct them."""
     inputs: list[dict[str, Any]] = recipe.inputs_json or []
@@ -182,31 +186,44 @@ async def verify_and_consume_inputs(
             )
     for inp in inputs:
         await remove_from_inventory(
-            db=db, owner_type="business", owner_id=business.id,
-            good_slug=inp["good_slug"], quantity=inp["quantity"],
+            db=db,
+            owner_type="business",
+            owner_id=business.id,
+            good_slug=inp["good_slug"],
+            quantity=inp["quantity"],
         )
     return inputs
 
 
 async def produce_output(
-    db: AsyncSession, business: Business, recipe: Recipe,
-    inputs: list[dict[str, Any]], settings: "Settings",
+    db: AsyncSession,
+    business: Business,
+    recipe: Recipe,
+    inputs: list[dict[str, Any]],
+    settings: Settings,
 ) -> InventoryItem:
     """Add produced goods to business inventory; rolls back inputs on storage-full."""
     try:
         return await add_to_inventory(
-            db=db, owner_type="business", owner_id=business.id,
-            good_slug=recipe.output_good, quantity=recipe.output_quantity,
+            db=db,
+            owner_type="business",
+            owner_id=business.id,
+            good_slug=recipe.output_good,
+            quantity=recipe.output_quantity,
             settings=settings,
         )
     except ValueError:
         logger.warning(
-            "Business %r storage full during work() — re-adding inputs", business.name,
+            "Business %r storage full during work() — re-adding inputs",
+            business.name,
         )
         for inp in inputs:
             await add_to_inventory(
-                db=db, owner_type="business", owner_id=business.id,
-                good_slug=inp["good_slug"], quantity=inp["quantity"],
+                db=db,
+                owner_type="business",
+                owner_id=business.id,
+                good_slug=inp["good_slug"],
+                quantity=inp["quantity"],
                 settings=settings,
             )
         raise ValueError(
@@ -218,30 +235,29 @@ async def produce_output(
 
 
 async def pay_wage(
-    db: AsyncSession, agent: Agent, employment: Employment,
-    business: Business, product_slug: str, recipe: Recipe, now: "datetime",
+    db: AsyncSession,
+    agent: Agent,
+    employment: Employment,
+    business: Business,
+    product_slug: str,
+    recipe: Recipe,
+    now: datetime,
 ) -> tuple[float, Agent]:
     """Deduct wage from owner and credit to worker. Returns (wage_earned, agent)."""
     wage = Decimal(str(employment.wage_per_work))
 
-    owner_result = await db.execute(
-        select(Agent).where(Agent.id == business.owner_id).with_for_update()
-    )
+    owner_result = await db.execute(select(Agent).where(Agent.id == business.owner_id).with_for_update())
     owner_agent = owner_result.scalar_one_or_none()
     if owner_agent is None:
         logger.error(
             "Business %r has no owner agent (owner_id=%s) — cannot pay wage",
-            business.name, business.owner_id,
+            business.name,
+            business.owner_id,
         )
-        raise ValueError(
-            "Business owner not found. Cannot process wage payment. "
-            "Contact the business owner."
-        )
+        raise ValueError("Business owner not found. Cannot process wage payment. Contact the business owner.")
 
     worker_row = await db.execute(
-        select(Agent).where(Agent.id == agent.id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
+        select(Agent).where(Agent.id == agent.id).with_for_update().execution_options(populate_existing=True)
     )
     agent = worker_row.scalar_one()
 
@@ -257,11 +273,17 @@ async def pay_wage(
     agent.balance = Decimal(str(agent.balance)) + wage
 
     txn = Transaction(
-        type="wage", from_agent_id=owner_agent.id, to_agent_id=agent.id,
-        amount=wage, metadata_json={
-            "business_id": str(business.id), "business_name": business.name,
-            "product_slug": product_slug, "recipe_slug": recipe.slug,
-            "employment_id": str(employment.id), "timestamp": now.isoformat(),
+        type="wage",
+        from_agent_id=owner_agent.id,
+        to_agent_id=agent.id,
+        amount=wage,
+        metadata_json={
+            "business_id": str(business.id),
+            "business_name": business.name,
+            "product_slug": product_slug,
+            "recipe_slug": recipe.slug,
+            "employment_id": str(employment.id),
+            "timestamp": now.isoformat(),
         },
     )
     db.add(txn)

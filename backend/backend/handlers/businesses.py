@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.errors import (
-    INSUFFICIENT_FUNDS,
     IN_JAIL,
+    INSUFFICIENT_FUNDS,
     INVALID_PARAMS,
-    NOT_FOUND,
     NO_HOUSING,
     NO_RECIPE,
+    NOT_FOUND,
     UNAUTHORIZED,
     ToolError,
 )
@@ -29,11 +29,11 @@ if TYPE_CHECKING:
 
 async def _handle_register_business(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Register a new business in the city.
@@ -49,6 +49,7 @@ async def _handle_register_business(
         raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     from backend.government.jail import check_jail
+
     try:
         check_jail(agent, clock)
     except ValueError as e:
@@ -66,7 +67,9 @@ async def _handle_register_business(
     if any(c in name for c in "<>&") or any(ord(c) < 32 for c in name):
         raise ToolError(INVALID_PARAMS, "Business name contains invalid characters (no <, >, &, or control chars)")
     if not re.match(r"^[\w\s\-\.\']+$", name):
-        raise ToolError(INVALID_PARAMS, "Business name may only contain letters, numbers, spaces, hyphens, dots, and apostrophes")
+        raise ToolError(
+            INVALID_PARAMS, "Business name may only contain letters, numbers, spaces, hyphens, dots, and apostrophes"
+        )
 
     type_slug = params.get("type")
     if not type_slug or not isinstance(type_slug, str):
@@ -108,6 +111,7 @@ async def _handle_register_business(
             raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
     result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
@@ -116,11 +120,11 @@ async def _handle_register_business(
 
 async def _handle_configure_production(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Configure what product a business will produce.
@@ -132,6 +136,7 @@ async def _handle_configure_production(
         raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     from backend.government.jail import check_jail
+
     try:
         check_jail(agent, clock)
     except ValueError as e:
@@ -147,7 +152,7 @@ async def _handle_configure_production(
 
     try:
         business_id = _uuid.UUID(business_id_str)
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
 
     from backend.businesses.service import configure_production
@@ -169,6 +174,7 @@ async def _handle_configure_production(
             raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
     result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
@@ -177,11 +183,11 @@ async def _handle_configure_production(
 
 async def _handle_set_prices(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Set storefront prices for goods at your business.
@@ -193,6 +199,7 @@ async def _handle_set_prices(
         raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     from backend.government.jail import check_jail
+
     try:
         check_jail(agent, clock)
     except ValueError as e:
@@ -212,7 +219,7 @@ async def _handle_set_prices(
 
     try:
         price = float(raw_price)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         raise ToolError(INVALID_PARAMS, "Parameter 'price' must be a number")
 
     if price <= 0:
@@ -222,7 +229,7 @@ async def _handle_set_prices(
 
     try:
         business_id = _uuid.UUID(business_id_str)
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
 
     from backend.businesses.service import set_prices
@@ -243,6 +250,7 @@ async def _handle_set_prices(
             raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
     result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 

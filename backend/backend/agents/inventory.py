@@ -10,8 +10,8 @@ storage_size that determines how many units it takes up.
 
 from __future__ import annotations
 
-import uuid
 import logging
+import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -55,7 +55,7 @@ async def get_storage_used(
     db: AsyncSession,
     owner_type: str,
     owner_id: uuid.UUID,
-    settings: "Settings",
+    settings: Settings,
 ) -> int:
     """
     Calculate total storage units currently used by this owner.
@@ -96,7 +96,7 @@ async def add_to_inventory(
     owner_id: uuid.UUID,
     good_slug: str,
     quantity: int,
-    settings: "Settings",
+    settings: Settings,
 ) -> InventoryItem:
     """
     Add items to an owner's inventory, enforcing storage capacity.
@@ -133,9 +133,7 @@ async def add_to_inventory(
 
     # Check capacity
     capacity = (
-        settings.economy.agent_storage_capacity
-        if owner_type == "agent"
-        else settings.economy.business_storage_capacity
+        settings.economy.agent_storage_capacity if owner_type == "agent" else settings.economy.business_storage_capacity
     )
     current_used = await get_storage_used(db, owner_type, owner_id, settings)
     if current_used + additional_storage > capacity:
@@ -147,11 +145,13 @@ async def add_to_inventory(
 
     # Upsert the inventory item (locked to prevent concurrent double-add)
     result = await db.execute(
-        select(InventoryItem).where(
+        select(InventoryItem)
+        .where(
             InventoryItem.owner_type == owner_type,
             InventoryItem.owner_id == owner_id,
             InventoryItem.good_slug == good_slug,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     item = result.scalar_one_or_none()
 
@@ -200,19 +200,19 @@ async def remove_from_inventory(
         raise ValueError(f"Quantity must be positive, got {quantity}")
 
     result = await db.execute(
-        select(InventoryItem).where(
+        select(InventoryItem)
+        .where(
             InventoryItem.owner_type == owner_type,
             InventoryItem.owner_id == owner_id,
             InventoryItem.good_slug == good_slug,
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     item = result.scalar_one_or_none()
 
     if item is None or item.quantity < quantity:
         have = item.quantity if item else 0
-        raise ValueError(
-            f"Insufficient inventory: have {have}x {good_slug}, need {quantity}"
-        )
+        raise ValueError(f"Insufficient inventory: have {have}x {good_slug}, need {quantity}")
 
     item.quantity -= quantity
     await db.flush()

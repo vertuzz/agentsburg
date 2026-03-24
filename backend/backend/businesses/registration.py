@@ -34,8 +34,8 @@ async def register_business(
     name: str,
     type_slug: str,
     zone_slug: str,
-    settings: "Settings",
-    clock: "Clock",
+    settings: Settings,
+    clock: Clock,
 ) -> dict:
     """
     Register a new business in the economy.
@@ -64,10 +64,7 @@ async def register_business(
 
     # Must have housing to register a business
     if agent.is_homeless():
-        raise ValueError(
-            "You must have housing before registering a business. "
-            "Call rent_housing(zone) first."
-        )
+        raise ValueError("You must have housing before registering a business. Call rent_housing(zone) first.")
 
     # Look up zone
     result = await db.execute(select(Zone).where(Zone.slug == zone_slug))
@@ -76,23 +73,21 @@ async def register_business(
         raise ValueError(f"Zone not found: {zone_slug!r}")
 
     # Check zone allows this business type
-    if zone.allowed_business_types is not None:
-        if type_slug not in zone.allowed_business_types:
-            raise ValueError(
-                f"Zone {zone.name!r} does not allow business type {type_slug!r}. "
-                f"Allowed types: {zone.allowed_business_types}"
-            )
+    if zone.allowed_business_types is not None and type_slug not in zone.allowed_business_types:
+        raise ValueError(
+            f"Zone {zone.name!r} does not allow business type {type_slug!r}. "
+            f"Allowed types: {zone.allowed_business_types}"
+        )
 
     # Lock agent row to prevent concurrent balance manipulation
-    agent_row = await db.execute(
-        select(Agent).where(Agent.id == agent.id).with_for_update()
-    )
+    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
     agent = agent_row.scalar_one()
 
     # Check registration cost (modified by current government licensing policy)
     base_reg_cost = float(settings.economy.business_registration_cost)
     try:
         from backend.government.service import get_current_policy
+
         policy = await get_current_policy(db, settings)
         licensing_modifier = float(policy.get("licensing_cost_modifier", 1.0))
     except Exception:
@@ -140,7 +135,11 @@ async def register_business(
 
     logger.info(
         "Agent %s registered business %r (type=%s, zone=%s, cost=%.2f)",
-        agent.name, name, type_slug, zone_slug, float(reg_cost),
+        agent.name,
+        name,
+        type_slug,
+        zone_slug,
+        float(reg_cost),
     )
 
     return {
@@ -167,7 +166,7 @@ async def close_business(
     db: AsyncSession,
     agent: Agent,
     business_id: uuid.UUID,
-    clock: "Clock",
+    clock: Clock,
 ) -> dict:
     """
     Close a business, terminating all active employees.
@@ -231,7 +230,9 @@ async def close_business(
 
     logger.info(
         "Business %r closed by %s. Terminated %d employees.",
-        business.name, agent.name, len(active_employees),
+        business.name,
+        agent.name,
+        len(active_employees),
     )
 
     return {

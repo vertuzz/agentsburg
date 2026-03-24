@@ -10,14 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.errors import (
     ALREADY_EXISTS,
     COOLDOWN_ACTIVE,
+    IN_JAIL,
     INSUFFICIENT_FUNDS,
     INSUFFICIENT_INVENTORY,
-    IN_JAIL,
     INVALID_PARAMS,
-    NOT_EMPLOYED,
-    NOT_ELIGIBLE,
-    NOT_FOUND,
     NO_RECIPE,
+    NOT_ELIGIBLE,
+    NOT_EMPLOYED,
+    NOT_FOUND,
     STORAGE_FULL,
     UNAUTHORIZED,
     ToolError,
@@ -33,11 +33,11 @@ if TYPE_CHECKING:
 
 async def _handle_manage_employees(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Manage business workforce. Multiplexed: post_job, hire_npc, fire, quit_job, close_business.
@@ -56,6 +56,7 @@ async def _handle_manage_employees(
     # Jail check — cannot make workforce changes while jailed (except quit_job)
     if action in ("post_job", "hire_npc", "fire"):
         from backend.government.jail import check_jail
+
         try:
             check_jail(agent, clock)
         except ValueError as e:
@@ -69,7 +70,7 @@ async def _handle_manage_employees(
             raise ToolError(INVALID_PARAMS, f"Parameter 'business_id' is required for action='{action}'")
         try:
             business_id = _uuid.UUID(business_id_str)
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
 
     from backend.hints import get_pending_events
@@ -84,7 +85,7 @@ async def _handle_manage_employees(
             raise ToolError(INVALID_PARAMS, "Parameter 'wage' is required for post_job")
         try:
             wage = float(raw_wage)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise ToolError(INVALID_PARAMS, "Parameter 'wage' must be a number")
 
         if wage <= 0:
@@ -99,7 +100,7 @@ async def _handle_manage_employees(
         raw_max_workers = params.get("max_workers", 1)
         try:
             max_workers = int(raw_max_workers)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise ToolError(INVALID_PARAMS, "Parameter 'max_workers' must be an integer")
         if max_workers < 1:
             raise ToolError(INVALID_PARAMS, "Parameter 'max_workers' must be at least 1")
@@ -107,6 +108,7 @@ async def _handle_manage_employees(
             raise ToolError(INVALID_PARAMS, "Parameter 'max_workers' must be at most 100")
 
         from backend.businesses.employment import post_job
+
         try:
             result = await post_job(
                 db=db,
@@ -128,6 +130,7 @@ async def _handle_manage_employees(
 
     elif action == "hire_npc":
         from backend.businesses.employment import hire_npc_worker
+
         try:
             result = await hire_npc_worker(
                 db=db,
@@ -161,10 +164,11 @@ async def _handle_manage_employees(
             raise ToolError(INVALID_PARAMS, "Parameter 'employee_id' is required for action='fire'")
         try:
             employee_id = _uuid.UUID(employee_id_str)
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             raise ToolError(INVALID_PARAMS, f"Invalid employee_id: {employee_id_str!r}")
 
         from backend.businesses.employment import fire_employee
+
         try:
             result = await fire_employee(
                 db=db,
@@ -184,6 +188,7 @@ async def _handle_manage_employees(
 
     elif action == "quit_job":
         from backend.businesses.employment import quit_job
+
         try:
             result = await quit_job(db=db, agent=agent, clock=clock)
         except ValueError as e:
@@ -194,6 +199,7 @@ async def _handle_manage_employees(
 
     elif action == "close_business":
         from backend.businesses.service import close_business
+
         try:
             result = await close_business(
                 db=db,
@@ -215,11 +221,11 @@ async def _handle_manage_employees(
 
 async def _handle_list_jobs(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Browse available job postings with optional filters.
@@ -236,12 +242,12 @@ async def _handle_list_jobs(
     if min_wage_raw is not None:
         try:
             min_wage = float(min_wage_raw)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise ToolError(INVALID_PARAMS, "Parameter 'min_wage' must be a number")
 
     try:
         page = int(page_raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         page = 1
     page = max(1, page)
 
@@ -257,6 +263,7 @@ async def _handle_list_jobs(
     )
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
 
     return {
@@ -264,21 +271,18 @@ async def _handle_list_jobs(
         "_hints": {
             "pending_events": pending_events,
             "check_back_seconds": 60,
-            "message": (
-                f"Found {result['total']} active job postings. "
-                "Use apply_job(job_id) to apply for a position."
-            ),
+            "message": (f"Found {result['total']} active job postings. Use apply_job(job_id) to apply for a position."),
         },
     }
 
 
 async def _handle_apply_job(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Apply for a job posting. Creates employment immediately.
@@ -287,6 +291,7 @@ async def _handle_apply_job(
         raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     from backend.government.jail import check_jail
+
     try:
         check_jail(agent, clock)
     except ValueError as e:
@@ -298,7 +303,7 @@ async def _handle_apply_job(
 
     try:
         job_id = _uuid.UUID(job_id_str)
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         raise ToolError(INVALID_PARAMS, f"Invalid job_id: {job_id_str!r}")
 
     from backend.businesses.employment import apply_job
@@ -317,6 +322,7 @@ async def _handle_apply_job(
             raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
     result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
 
@@ -325,11 +331,11 @@ async def _handle_apply_job(
 
 async def _handle_work(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Perform one unit of production work.
@@ -341,6 +347,7 @@ async def _handle_work(
         raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     from backend.government.jail import check_jail
+
     try:
         check_jail(agent, clock)
     except ValueError as e:
@@ -352,16 +359,18 @@ async def _handle_work(
 
     try:
         result = await work(
-            db=db, redis=redis, agent=agent, clock=clock, settings=settings,
+            db=db,
+            redis=redis,
+            agent=agent,
+            clock=clock,
+            settings=settings,
             business_id=business_id,
         )
     except ValueError as e:
         error_msg = str(e)
         if "cooldown active" in error_msg.lower():
             raise ToolError(COOLDOWN_ACTIVE, error_msg) from e
-        elif "not employed" in error_msg.lower():
-            raise ToolError(NOT_EMPLOYED, error_msg) from e
-        elif "no open business" in error_msg.lower():
+        elif "not employed" in error_msg.lower() or "no open business" in error_msg.lower():
             raise ToolError(NOT_EMPLOYED, error_msg) from e
         elif "lacks inputs" in error_msg.lower():
             raise ToolError(INSUFFICIENT_INVENTORY, error_msg) from e
@@ -375,6 +384,7 @@ async def _handle_work(
             raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
     # Work result may already have hints with cooldown_remaining
     hints = result.get("_hints", {})

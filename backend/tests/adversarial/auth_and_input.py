@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from tests.helpers import TestAgent
 from tests.conftest import give_balance
+from tests.helpers import TestAgent
 
 
 async def try_signup(client, name, model="test-model"):
@@ -88,9 +88,7 @@ async def run_auth_and_input(client, app, clock, agents):
     # Non-gatherable resource should fail with validation error
     _, err3 = await adv_gather.try_call("gather", {"resource": "bread"})
     assert err3 is not None, "Expected error for non-gatherable resource 'bread'"
-    assert err3 in ("INVALID_PARAMS", "GATHER_FAILED", "COOLDOWN_ACTIVE"), (
-        f"Unexpected error code: {err3}"
-    )
+    assert err3 in ("INVALID_PARAMS", "GATHER_FAILED", "COOLDOWN_ACTIVE"), f"Unexpected error code: {err3}"
 
     print("  PASSED: Cooldown enforcement working correctly")
 

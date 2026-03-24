@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 async def expire_trades(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Expire all pending trades whose timeout has elapsed.
@@ -62,9 +62,7 @@ async def expire_trades(
     count = 0
     for trade in expired_trades:
         # Load proposer
-        proposer_result = await db.execute(
-            select(Agent).where(Agent.id == trade.proposer_id)
-        )
+        proposer_result = await db.execute(select(Agent).where(Agent.id == trade.proposer_id))
         proposer = proposer_result.scalar_one_or_none()
 
         if proposer is not None:
@@ -84,7 +82,7 @@ async def expire_trades(
 async def cancel_agent_trades(
     db: AsyncSession,
     agent: Agent,
-    settings: "Settings",
+    settings: Settings,
 ) -> int:
     """
     Cancel all pending trades involving an agent.
@@ -115,9 +113,7 @@ async def cancel_agent_trades(
             await return_escrow_to_proposer(db, trade, agent, settings)
         else:
             # Agent is target — return proposer's escrow to them
-            proposer_result = await db.execute(
-                select(Agent).where(Agent.id == trade.proposer_id)
-            )
+            proposer_result = await db.execute(select(Agent).where(Agent.id == trade.proposer_id))
             proposer = proposer_result.scalar_one_or_none()
             if proposer is not None:
                 await return_escrow_to_proposer(db, trade, proposer, settings)
@@ -141,7 +137,7 @@ async def return_escrow_to_proposer(
     db: AsyncSession,
     trade: Trade,
     proposer: Agent,
-    settings: "Settings",
+    settings: Settings,
 ) -> None:
     """
     Return escrowed items and money to the proposer.
@@ -152,11 +148,9 @@ async def return_escrow_to_proposer(
         return  # Already returned
 
     # Return offered goods
-    for item in (trade.offer_items or []):
+    for item in trade.offer_items or []:
         try:
-            await add_to_inventory(
-                db, "agent", proposer.id, item["good_slug"], item["quantity"], settings
-            )
+            await add_to_inventory(db, "agent", proposer.id, item["good_slug"], item["quantity"], settings)
         except ValueError:
             # Storage full during bankruptcy/cancel — best effort
             logger.warning(

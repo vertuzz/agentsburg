@@ -43,9 +43,7 @@ class InventoryItem(UUIDMixin, TimestampMixin, Base):
     owner_type: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
 
     # UUID of the owning entity — not a FK to allow polymorphism
-    owner_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), nullable=False, index=True
-    )
+    owner_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
 
     # Matches Good.slug (or goods.yaml slug)
     good_slug: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
@@ -54,10 +52,7 @@ class InventoryItem(UUIDMixin, TimestampMixin, Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     def __repr__(self) -> str:
-        return (
-            f"<InventoryItem owner={self.owner_type}:{self.owner_id} "
-            f"good={self.good_slug!r} qty={self.quantity}>"
-        )
+        return f"<InventoryItem owner={self.owner_type}:{self.owner_id} good={self.good_slug!r} qty={self.quantity}>"
 
     def to_dict(self) -> dict:
         return {

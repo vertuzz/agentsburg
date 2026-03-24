@@ -27,12 +27,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Re-export run_audits so existing imports from taxes.py still work
+from backend.government.auditing import run_audits  # noqa: F401
 from backend.models.agent import Agent
 from backend.models.government import TaxRecord
 from backend.models.transaction import Transaction
-
-# Re-export run_audits so existing imports from taxes.py still work
-from backend.government.auditing import run_audits  # noqa: F401
 
 if TYPE_CHECKING:
     from backend.clock import Clock
@@ -51,8 +50,8 @@ TOTAL_INCOME_TYPES = frozenset({"marketplace", "storefront", "trade", "wage", "g
 
 async def collect_taxes(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Collect taxes from all agents for the current period.
@@ -85,12 +84,14 @@ async def collect_taxes(
     # Look-back window: 1 hour (tax_audit_period_seconds)
     audit_period = getattr(settings.economy, "tax_audit_period_seconds", 3600)
     from datetime import timedelta
+
     period_start = now - timedelta(seconds=audit_period)
 
     # Get CentralBank for collecting reserves
     central_bank = None
     try:
         from backend.models.banking import CentralBank
+
         bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1))
         central_bank = bank_result.scalar_one_or_none()
     except ImportError:
@@ -104,12 +105,8 @@ async def collect_taxes(
 
     # --- Batch income summation (2 queries instead of 2*N) ---
     # Pre-compute marketplace income and total income for ALL agents at once
-    marketplace_income_map = await _batch_sum_income(
-        db, MARKETPLACE_INCOME_TYPES, period_start, now
-    )
-    total_income_map = await _batch_sum_income(
-        db, TOTAL_INCOME_TYPES, period_start, now
-    )
+    marketplace_income_map = await _batch_sum_income(db, MARKETPLACE_INCOME_TYPES, period_start, now)
+    total_income_map = await _batch_sum_income(db, TOTAL_INCOME_TYPES, period_start, now)
 
     total_tax_collected = Decimal("0")
     records_created = 0
@@ -214,8 +211,7 @@ async def _sum_agent_income(
     from sqlalchemy import func as sqlfunc
 
     result = await db.execute(
-        select(sqlfunc.coalesce(sqlfunc.sum(Transaction.amount), 0))
-        .where(
+        select(sqlfunc.coalesce(sqlfunc.sum(Transaction.amount), 0)).where(
             Transaction.to_agent_id == agent_id,
             Transaction.type.in_(list(income_types)),
             Transaction.created_at >= period_start,
@@ -253,7 +249,4 @@ async def _batch_sum_income(
         )
         .group_by(Transaction.to_agent_id)
     )
-    return {
-        row[0]: Decimal(str(row[1])) if row[1] else Decimal("0")
-        for row in result.all()
-    }
+    return {row[0]: Decimal(str(row[1])) if row[1] else Decimal("0") for row in result.all()}

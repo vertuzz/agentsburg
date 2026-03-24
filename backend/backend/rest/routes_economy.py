@@ -5,8 +5,6 @@ market/my-orders, leaderboard, trades, bank, vote, economy, messages.
 
 from __future__ import annotations
 
-from typing import Optional
-
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,23 +19,24 @@ from backend.rest.common import (
 )
 from backend.tools import (
     _handle_apply_job,
-    _handle_work,
-    _handle_marketplace_order,
-    _handle_marketplace_browse,
-    _handle_my_orders,
-    _handle_leaderboard,
-    _handle_trade,
     _handle_bank,
-    _handle_vote,
-    _handle_get_economy,
     _handle_events,
+    _handle_get_economy,
+    _handle_leaderboard,
+    _handle_marketplace_browse,
+    _handle_marketplace_order,
     _handle_messages,
+    _handle_my_orders,
+    _handle_trade,
+    _handle_vote,
+    _handle_work,
 )
 
 economy_router = APIRouter(prefix="/v1", tags=["v1"])
 
 
 # -- Employment (continued) ------------------------------------------------
+
 
 @economy_router.post("/jobs/apply", tags=["employment"])
 async def apply_job(
@@ -54,7 +53,12 @@ async def apply_job(
 
     params = await _body_or_empty(request)
     result = await _handle_apply_job(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
@@ -74,12 +78,18 @@ async def work(
 
     params = await _body_or_empty(request)
     result = await _handle_work(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Marketplace -----------------------------------------------------------
+
 
 @economy_router.post("/market/orders", tags=["marketplace"])
 async def marketplace_order(
@@ -96,7 +106,12 @@ async def marketplace_order(
 
     params = await _body_or_empty(request)
     result = await _handle_marketplace_order(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
@@ -106,8 +121,8 @@ async def marketplace_browse(
     request: Request,
     agent=Depends(get_current_agent),
     db: AsyncSession = Depends(get_db),
-    product: Optional[str] = Query(None, description="Good slug to browse"),
-    page: Optional[int] = Query(None, description="Page number (default 1)"),
+    product: str | None = Query(None, description="Good slug to browse"),
+    page: int | None = Query(None, description="Page number (default 1)"),
 ):
     """Browse the marketplace order books and price history."""
     clock = get_clock(request)
@@ -123,7 +138,12 @@ async def marketplace_browse(
         params["page"] = page
 
     result = await _handle_marketplace_browse(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
@@ -142,12 +162,18 @@ async def my_orders(
     await check_rate_limit(request, redis, agent=agent)
 
     result = await _handle_my_orders(
-        params={}, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params={},
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Leaderboard -----------------------------------------------------------
+
 
 @economy_router.get("/leaderboard", tags=["economy"])
 async def leaderboard(
@@ -163,12 +189,18 @@ async def leaderboard(
     await check_rate_limit(request, redis, agent=agent)
 
     result = await _handle_leaderboard(
-        params={}, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params={},
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Trading ---------------------------------------------------------------
+
 
 @economy_router.post("/trades", tags=["trading"])
 async def trade(
@@ -185,12 +217,18 @@ async def trade(
 
     params = await _body_or_empty(request)
     result = await _handle_trade(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Banking ---------------------------------------------------------------
+
 
 @economy_router.post("/bank", tags=["banking"])
 async def bank(
@@ -207,12 +245,18 @@ async def bank(
 
     params = await _body_or_empty(request)
     result = await _handle_bank(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Government ------------------------------------------------------------
+
 
 @economy_router.post("/vote", tags=["government"])
 async def vote(
@@ -229,22 +273,28 @@ async def vote(
 
     params = await _body_or_empty(request)
     result = await _handle_vote(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Economy ---------------------------------------------------------------
 
+
 @economy_router.get("/economy", tags=["economy"])
 async def get_economy(
     request: Request,
     agent=Depends(get_current_agent),
     db: AsyncSession = Depends(get_db),
-    section: Optional[str] = Query(None, description="Section: government, market, zones, stats"),
-    product: Optional[str] = Query(None, description="Good slug for market section"),
-    zone: Optional[str] = Query(None, description="Zone slug to filter zones section"),
-    page: Optional[int] = Query(None, description="Page number for paginated results"),
+    section: str | None = Query(None, description="Section: government, market, zones, stats"),
+    product: str | None = Query(None, description="Good slug for market section"),
+    zone: str | None = Query(None, description="Zone slug to filter zones section"),
+    page: int | None = Query(None, description="Page number for paginated results"),
 ):
     """Query economic data about the Agent Economy world."""
     clock = get_clock(request)
@@ -264,19 +314,25 @@ async def get_economy(
         params["page"] = page
 
     result = await _handle_get_economy(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Events ----------------------------------------------------------------
 
+
 @economy_router.get("/events", tags=["economy"])
 async def events(
     request: Request,
     agent=Depends(get_current_agent),
     db: AsyncSession = Depends(get_db),
-    limit: Optional[int] = Query(None, description="Max events to return (default 20, max 50)"),
+    limit: int | None = Query(None, description="Max events to return (default 20, max 50)"),
 ):
     """Retrieve recent economy events (rent, food, order fills, etc.)."""
     clock = get_clock(request)
@@ -290,12 +346,18 @@ async def events(
         params["limit"] = limit
 
     result = await _handle_events(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}
 
 
 # -- Messages --------------------------------------------------------------
+
 
 @economy_router.post("/messages", tags=["messages"])
 async def messages(
@@ -312,6 +374,11 @@ async def messages(
 
     params = await _body_or_empty(request)
     result = await _handle_messages(
-        params=params, agent=agent, db=db, clock=clock, redis=redis, settings=settings,
+        params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
     )
     return {"ok": True, "data": result}

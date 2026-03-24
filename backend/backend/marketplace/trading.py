@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.agents.inventory import add_to_inventory, remove_from_inventory
+from backend.agents.inventory import remove_from_inventory
 from backend.models.agent import Agent
 from backend.models.inventory import InventoryItem
 from backend.models.marketplace import Trade
@@ -36,7 +36,6 @@ if TYPE_CHECKING:
 from backend.marketplace.escrow import (  # noqa: F401
     cancel_agent_trades,
     expire_trades,
-    return_escrow_to_proposer as _return_escrow_to_proposer,
 )
 
 # Re-exports from trade_responses (backwards compatibility)
@@ -56,8 +55,8 @@ async def propose_trade(
     request_items: list[dict],
     offer_money: Decimal,
     request_money: Decimal,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Propose a direct trade to another agent.
@@ -87,14 +86,10 @@ async def propose_trade(
 
     # Validate trade has at least some content
     if not offer_items and not request_items and offer_money <= 0 and request_money <= 0:
-        raise ValueError(
-            "Trade must include at least one offered or requested item or currency"
-        )
+        raise ValueError("Trade must include at least one offered or requested item or currency")
 
     # Find target agent
-    target_result = await db.execute(
-        select(Agent).where(Agent.name == target_agent_name)
-    )
+    target_result = await db.execute(select(Agent).where(Agent.name == target_agent_name))
     target = target_result.scalar_one_or_none()
     if target is None:
         raise ValueError(f"Agent {target_agent_name!r} not found")
@@ -128,36 +123,31 @@ async def propose_trade(
         slug = item["good_slug"]
         qty = item["quantity"]
         inv_result = await db.execute(
-            select(InventoryItem).where(
+            select(InventoryItem)
+            .where(
                 InventoryItem.owner_type == "agent",
                 InventoryItem.owner_id == agent.id,
                 InventoryItem.good_slug == slug,
-            ).with_for_update()
+            )
+            .with_for_update()
         )
         inv_item = inv_result.scalar_one_or_none()
         have = inv_item.quantity if inv_item else 0
         if have < qty:
-            raise ValueError(
-                f"Insufficient inventory: have {have}x {slug!r}, need {qty}"
-            )
+            raise ValueError(f"Insufficient inventory: have {have}x {slug!r}, need {qty}")
 
     # Re-lock agent row before balance modification (prevent double-spend).
     # populate_existing=True forces SQLAlchemy to overwrite the cached identity
     # map entry with fresh data from the DB after the lock is acquired.
     agent_row = await db.execute(
-        select(Agent).where(Agent.id == agent.id)
-        .with_for_update()
-        .execution_options(populate_existing=True)
+        select(Agent).where(Agent.id == agent.id).with_for_update().execution_options(populate_existing=True)
     )
     agent = agent_row.scalar_one()
 
     # Verify proposer has enough balance for offer_money
     agent_balance = Decimal(str(agent.balance))
     if offer_money > agent_balance:
-        raise ValueError(
-            f"Insufficient balance: need {float(offer_money):.2f} "
-            f"but have {float(agent_balance):.2f}"
-        )
+        raise ValueError(f"Insufficient balance: need {float(offer_money):.2f} but have {float(agent_balance):.2f}")
 
     # Lock offered goods in escrow (remove from proposer's inventory)
     for item in offer_items:
@@ -169,8 +159,9 @@ async def propose_trade(
         await db.flush()
 
     # Calculate expiry
-    timeout_seconds = getattr(settings.economy, "trade_escrow_timeout_seconds",
-                              getattr(settings.economy, "trade_escrow_timeout", 3600))
+    timeout_seconds = getattr(
+        settings.economy, "trade_escrow_timeout_seconds", getattr(settings.economy, "trade_escrow_timeout", 3600)
+    )
     expires_at = clock.now() + timedelta(seconds=timeout_seconds)
 
     # Create trade record

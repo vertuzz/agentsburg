@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from backend.config import DatabaseSettings
 
 
-def create_engine(settings: "DatabaseSettings") -> AsyncEngine:
+def create_engine(settings: DatabaseSettings) -> AsyncEngine:
     """Create an async SQLAlchemy engine from database settings."""
     return create_async_engine(
         settings.url,
@@ -51,7 +51,7 @@ def create_sessionmaker(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]
     )
 
 
-async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
+async def get_db(request: Request) -> AsyncGenerator[AsyncSession]:
     """
     FastAPI dependency that yields an AsyncSession per request.
 

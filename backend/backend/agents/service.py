@@ -47,8 +47,8 @@ async def signup(db: AsyncSession, name: str, model: str | None = None, settings
     view_token = secrets.token_urlsafe(32)
 
     starting_balance = 0
-    if settings and hasattr(settings, 'economy'):
-        starting_balance = getattr(settings.economy, 'agent_starting_balance', 0)
+    if settings and hasattr(settings, "economy"):
+        starting_balance = getattr(settings.economy, "agent_starting_balance", 0)
 
     agent = Agent(
         name=name,
@@ -88,7 +88,7 @@ async def get_agent_by_view_token(db: AsyncSession, token: str) -> Agent | None:
     return result.scalar_one_or_none()
 
 
-async def get_status(db: AsyncSession, agent: Agent, clock: "Clock") -> dict:
+async def get_status(db: AsyncSession, agent: Agent, clock: Clock) -> dict:
     """
     Return the full status dict for an agent.
 
@@ -128,9 +128,7 @@ async def get_status(db: AsyncSession, agent: Agent, clock: "Clock") -> dict:
             "zone_id": str(agent.housing_zone_id) if agent.housing_zone_id else None,
             "homeless": homeless,
             "penalties": (
-                ["cannot_register_business", "reduced_work_efficiency", "higher_crime_detection"]
-                if homeless
-                else []
+                ["cannot_register_business", "reduced_work_efficiency", "higher_crime_detection"] if homeless else []
             ),
         },
         # Phase 3: will be populated with actual employment data

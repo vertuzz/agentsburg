@@ -39,14 +39,10 @@ class GovernmentState(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
 
     # Slug of the currently active template (from government.yaml)
-    current_template_slug: Mapped[str] = mapped_column(
-        String(64), nullable=False, default="free_market"
-    )
+    current_template_slug: Mapped[str] = mapped_column(String(64), nullable=False, default="free_market")
 
     # When was the last election tallied
-    last_election_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    last_election_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return f"<GovernmentState template={self.current_template_slug!r}>"
@@ -111,19 +107,14 @@ class Violation(UUIDMixin, Base):
     fine_amount: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False, default=0)
 
     # If jail was applied, the datetime until they are released
-    jail_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    jail_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # When the violation was detected
-    detected_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    detected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     def __repr__(self) -> str:
         return (
-            f"<Violation agent={self.agent_id} type={self.type!r} "
-            f"fine={self.fine_amount} jail_until={self.jail_until}>"
+            f"<Violation agent={self.agent_id} type={self.type!r} fine={self.fine_amount} jail_until={self.jail_until}>"
         )
 
 
@@ -157,22 +148,14 @@ class TaxRecord(UUIDMixin, Base):
     )
 
     # The billing window covered by this record
-    period_start: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
-    period_end: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # Income visible to the tax authority (marketplace, storefront NPC sales)
-    marketplace_income: Mapped[float] = mapped_column(
-        Numeric(20, 2), nullable=False, default=0
-    )
+    marketplace_income: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False, default=0)
 
     # All income including direct trades (from Transaction table, server side)
-    total_actual_income: Mapped[float] = mapped_column(
-        Numeric(20, 2), nullable=False, default=0
-    )
+    total_actual_income: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False, default=0)
 
     # Tax owed based on marketplace_income * tax_rate
     tax_owed: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False, default=0)

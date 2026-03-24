@@ -8,9 +8,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.errors import (
+    IN_JAIL,
     INSUFFICIENT_FUNDS,
     INSUFFICIENT_INVENTORY,
-    IN_JAIL,
     INVALID_PARAMS,
     NOT_FOUND,
     STORAGE_FULL,
@@ -28,11 +28,11 @@ if TYPE_CHECKING:
 
 async def _handle_marketplace_order(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Place or cancel a marketplace order.
@@ -75,17 +75,19 @@ async def _handle_marketplace_order(
     # Jail check — cannot place new orders while jailed (cancel is allowed)
     if action in ("buy", "sell"):
         from backend.government.jail import check_jail
+
         try:
             check_jail(agent, clock)
         except ValueError as e:
             raise ToolError(IN_JAIL, str(e)) from e
 
     from decimal import Decimal
+
     from backend.marketplace.orderbook import (
-        place_order,
-        cancel_order,
         MARKET_BUY_PRICE,
         MARKET_SELL_PRICE,
+        cancel_order,
+        place_order,
     )
 
     if action == "cancel":
@@ -102,6 +104,7 @@ async def _handle_marketplace_order(
             raise ToolError(INVALID_PARAMS, error_msg) from e
 
         from backend.hints import get_pending_events
+
         pending_events = await get_pending_events(db, agent)
         result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
         return result
@@ -116,7 +119,7 @@ async def _handle_marketplace_order(
         raise ToolError(INVALID_PARAMS, "Parameter 'quantity' is required")
     try:
         quantity = int(quantity)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         raise ToolError(INVALID_PARAMS, "Parameter 'quantity' must be an integer")
 
     if quantity <= 0:
@@ -153,6 +156,7 @@ async def _handle_marketplace_order(
     order = result["order"]
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
 
     hints: dict = {"pending_events": pending_events}
@@ -162,8 +166,7 @@ async def _handle_marketplace_order(
     elif order["status"] == "partially_filled":
         hints["check_back_seconds"] = 60
         hints["message"] = (
-            f"Order partially filled ({order['quantity_filled']}/{quantity} units). "
-            f"Remainder is on the order book."
+            f"Order partially filled ({order['quantity_filled']}/{quantity} units). Remainder is on the order book."
         )
     else:
         hints["check_back_seconds"] = 60
@@ -179,11 +182,11 @@ async def _handle_marketplace_order(
 
 async def _handle_marketplace_browse(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Browse the marketplace order books and price history.
@@ -207,7 +210,7 @@ async def _handle_marketplace_browse(
     page = params.get("page", 1)
     try:
         page = int(page)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         page = 1
     page = max(1, page)
 
@@ -227,6 +230,7 @@ async def _handle_marketplace_browse(
     pending_events = 0
     if agent is not None:
         from backend.hints import get_pending_events
+
         pending_events = await get_pending_events(db, agent)
 
     return {
@@ -235,8 +239,7 @@ async def _handle_marketplace_browse(
             "pending_events": pending_events,
             "check_back_seconds": 60,
             "message": (
-                "Prices update every minute as orders match. "
-                "Use marketplace_order to place your own buy/sell orders."
+                "Prices update every minute as orders match. Use marketplace_order to place your own buy/sell orders."
             ),
         },
     }
@@ -244,11 +247,11 @@ async def _handle_marketplace_browse(
 
 async def _handle_my_orders(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     List the authenticated agent's open marketplace orders.
@@ -273,19 +276,22 @@ async def _handle_my_orders(
 
     items = []
     for o in orders:
-        items.append({
-            "order_id": str(o.id),
-            "good_slug": o.good_slug,
-            "side": o.side,
-            "price": float(o.price),
-            "quantity_total": o.quantity_total,
-            "quantity_filled": o.quantity_filled,
-            "quantity_remaining": o.quantity_total - o.quantity_filled,
-            "status": o.status,
-            "created_at": o.created_at.isoformat() if o.created_at else None,
-        })
+        items.append(
+            {
+                "order_id": str(o.id),
+                "good_slug": o.good_slug,
+                "side": o.side,
+                "price": float(o.price),
+                "quantity_total": o.quantity_total,
+                "quantity_filled": o.quantity_filled,
+                "quantity_remaining": o.quantity_total - o.quantity_filled,
+                "status": o.status,
+                "created_at": o.created_at.isoformat() if o.created_at else None,
+            }
+        )
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
 
     return {
@@ -307,11 +313,11 @@ async def _handle_my_orders(
 
 async def _handle_leaderboard(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     View the net-worth leaderboard.
@@ -321,8 +327,8 @@ async def _handle_leaderboard(
     """
     from backend.models.agent import Agent as _Agent
     from backend.models.banking import BankAccount
-    from backend.models.inventory import InventoryItem
     from backend.models.business import Business as _Business
+    from backend.models.inventory import InventoryItem
 
     goods_config = {g["slug"]: g for g in settings.goods}
     reg_cost = float(settings.economy.business_registration_cost)
@@ -350,12 +356,12 @@ async def _handle_leaderboard(
         agent_key = str(item.owner_id)
         good_data = goods_config.get(item.good_slug)
         if good_data:
-            inv_by_agent[agent_key] = inv_by_agent.get(agent_key, 0) + float(good_data.get("base_value", 0)) * item.quantity
+            inv_by_agent[agent_key] = (
+                inv_by_agent.get(agent_key, 0) + float(good_data.get("base_value", 0)) * item.quantity
+            )
 
     # Get business counts per agent and track NPC owners
-    biz_result = await db.execute(
-        select(_Business).where(_Business.closed_at.is_(None))
-    )
+    biz_result = await db.execute(select(_Business).where(_Business.closed_at.is_(None)))
     biz_by_agent: dict[str, int] = {}
     npc_owner_ids: set[str] = set()
     for b in biz_result.scalars().all():
@@ -374,14 +380,16 @@ async def _handle_leaderboard(
         biz_val = biz_by_agent.get(aid, 0) * reg_cost
         total = wallet + bank + inv_val + biz_val
 
-        rankings.append({
-            "agent_name": a.name,
-            "model": a.model,
-            "net_worth": round(total, 2),
-            "wallet": round(wallet, 2),
-            "businesses": biz_by_agent.get(aid, 0),
-            "is_npc": aid in npc_owner_ids,
-        })
+        rankings.append(
+            {
+                "agent_name": a.name,
+                "model": a.model,
+                "net_worth": round(total, 2),
+                "wallet": round(wallet, 2),
+                "businesses": biz_by_agent.get(aid, 0),
+                "is_npc": aid in npc_owner_ids,
+            }
+        )
 
     rankings.sort(key=lambda x: x["net_worth"], reverse=True)
 
@@ -398,6 +406,7 @@ async def _handle_leaderboard(
                 break
 
     from backend.hints import get_pending_events
+
     pending_events = 0
     if agent is not None:
         pending_events = await get_pending_events(db, agent)
@@ -410,8 +419,7 @@ async def _handle_leaderboard(
             "pending_events": pending_events,
             "check_back_seconds": 300,
             "message": (
-                f"Leaderboard shows {len(rankings)} active agents. "
-                + (f"Your rank: #{my_rank}." if my_rank else "")
+                f"Leaderboard shows {len(rankings)} active agents. " + (f"Your rank: #{my_rank}." if my_rank else "")
             ),
         },
     }

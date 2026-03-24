@@ -15,9 +15,9 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 from typing import TYPE_CHECKING
-from uuid import UUID
 
-from sqlalchemy import select, update, func as sqlfunc, literal, cast, Numeric
+from sqlalchemy import func as sqlfunc
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
@@ -36,10 +36,10 @@ logger = logging.getLogger(__name__)
 
 async def process_survival_costs(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
     hours: int = 1,
-    redis: "aioredis.Redis | None" = None,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Deduct survival costs (food/living expenses) from all agents.
@@ -105,9 +105,12 @@ async def process_survival_costs(
     # Emit food_charged events
     if redis is not None:
         from backend.events import emit_event
+
         for agent_id in agent_ids:
             await emit_event(
-                redis, agent_id, "food_charged",
+                redis,
+                agent_id,
+                "food_charged",
                 {"amount": float(survival_cost), "hours": hours},
                 clock,
             )
@@ -133,10 +136,10 @@ async def process_survival_costs(
 
 async def process_rent(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
     hours: int = 1,
-    redis: "aioredis.Redis | None" = None,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Deduct rent for all housed agents.
@@ -162,6 +165,7 @@ async def process_rent(
     rent_modifier = 1.0
     try:
         from backend.government.service import get_current_policy
+
         policy = await get_current_policy(db, settings)
         rent_modifier = float(policy.get("rent_modifier", 1.0))
     except Exception:
@@ -187,9 +191,7 @@ async def process_rent(
         return {"type": "rent", "agents_charged": 0, "agents_evicted": 0, "total_collected": 0.0}
 
     # Load CentralBank — rent collected goes to bank reserves
-    bank_result = await db.execute(
-        select(CentralBank).where(CentralBank.id == 1).with_for_update()
-    )
+    bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1).with_for_update())
     central_bank = bank_result.scalar_one_or_none()
 
     charged_count = 0
@@ -217,9 +219,7 @@ async def process_rent(
         if can_pay_ids:
             # Batch deduct rent from all agents who can pay in this zone
             await db.execute(
-                update(Agent)
-                .where(Agent.id.in_(can_pay_ids))
-                .values(balance=Agent.balance - float(rent_due))
+                update(Agent).where(Agent.id.in_(can_pay_ids)).values(balance=Agent.balance - float(rent_due))
             )
 
             zone_collected = rent_due * len(can_pay_ids)
@@ -248,9 +248,12 @@ async def process_rent(
             # Emit rent_charged events
             if redis is not None:
                 from backend.events import emit_event
+
                 for agent_id in can_pay_ids:
                     await emit_event(
-                        redis, agent_id, "rent_charged",
+                        redis,
+                        agent_id,
+                        "rent_charged",
                         {"amount": float(rent_due), "zone": zone.slug, "hours": hours},
                         clock,
                     )
@@ -267,11 +270,7 @@ async def process_rent(
         cant_pay_ids = [row[0] for row in cant_pay]
 
         if cant_pay_ids:
-            await db.execute(
-                update(Agent)
-                .where(Agent.id.in_(cant_pay_ids))
-                .values(housing_zone_id=None)
-            )
+            await db.execute(update(Agent).where(Agent.id.in_(cant_pay_ids)).values(housing_zone_id=None))
             evicted_count += len(cant_pay_ids)
 
             for row in cant_pay:
@@ -285,9 +284,12 @@ async def process_rent(
             # Emit evicted events
             if redis is not None:
                 from backend.events import emit_event
+
                 for agent_id in cant_pay_ids:
                     await emit_event(
-                        redis, agent_id, "evicted",
+                        redis,
+                        agent_id,
+                        "evicted",
                         {"zone": zone.slug, "rent_due": float(rent_due)},
                         clock,
                     )

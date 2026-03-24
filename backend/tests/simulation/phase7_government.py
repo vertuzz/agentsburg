@@ -68,15 +68,14 @@ async def run_phase_7(agents: dict[str, TestAgent], client, app, clock, run_tick
     if election:
         print(f"  Election result: {election}")
     else:
-        print(f"  Weekly tick ran (election may be in tick result)")
+        print("  Weekly tick ran (election may be in tick result)")
 
     # Check current government
     econ = await agents["eco_politician"].call("get_economy", {"section": "government"})
     current_gov = econ["current_template"]["slug"]
     print(f"  Current government: {current_gov}")
-    assert current_gov == "free_market", \
-        f"Expected free_market to win election, got {current_gov}"
-    print(f"  Election: free_market won with most votes")
+    assert current_gov == "free_market", f"Expected free_market to win election, got {current_gov}"
+    print("  Election: free_market won with most votes")
 
     # --- 7d: Verify policy effects ---
     tax_rate = econ["current_template"].get("tax_rate", 0)
@@ -89,20 +88,32 @@ async def run_phase_7(agents: dict[str, TestAgent], client, app, clock, run_tick
     await give_balance(app, "eco_trader", 500)
     await give_inventory(app, "eco_gatherer1", "wheat", 20)
 
-    await agents["eco_gatherer1"].call("marketplace_order", {
-        "action": "sell", "product": "wheat", "quantity": 10, "price": 3.0,
-    })
-    await agents["eco_trader"].call("marketplace_order", {
-        "action": "buy", "product": "wheat", "quantity": 10, "price": 5.0,
-    })
+    await agents["eco_gatherer1"].call(
+        "marketplace_order",
+        {
+            "action": "sell",
+            "product": "wheat",
+            "quantity": 10,
+            "price": 3.0,
+        },
+    )
+    await agents["eco_trader"].call(
+        "marketplace_order",
+        {
+            "action": "buy",
+            "product": "wheat",
+            "quantity": 10,
+            "price": 5.0,
+        },
+    )
     await run_tick(minutes=1)
 
     await run_tick(hours=1)
 
     async with app.state.session_factory() as session:
-        tax_count = (await session.execute(
-            select(func.count()).select_from(Transaction).where(Transaction.type == "tax")
-        )).scalar()
+        tax_count = (
+            await session.execute(select(func.count()).select_from(Transaction).where(Transaction.type == "tax"))
+        ).scalar()
     print(f"  Tax transactions recorded: {tax_count}")
 
     # --- 7f: Jail test ---
@@ -114,7 +125,7 @@ async def run_phase_7(agents: dict[str, TestAgent], client, app, clock, run_tick
     criminal_status = await criminal.status()
     cr = criminal_status.get("criminal_record", {})
     assert cr.get("jailed") is True, f"Expected jailed=True, got: {cr}"
-    print(f"  eco_criminal jailed for 2 hours")
+    print("  eco_criminal jailed for 2 hours")
 
     # Jailed agent BLOCKED from these actions:
     blocked_actions = [
@@ -122,11 +133,15 @@ async def run_phase_7(agents: dict[str, TestAgent], client, app, clock, run_tick
         ("work", {}),
         ("marketplace_order", {"action": "sell", "product": "berries", "quantity": 1, "price": 1.0}),
         ("register_business", {"name": "Jail Biz", "type": "mill", "zone": "industrial"}),
-        ("trade", {
-            "action": "propose", "target_agent": "eco_trader",
-            "offer_items": [{"good_slug": "berries", "quantity": 1}],
-            "request_items": [{"good_slug": "wood", "quantity": 1}],
-        }),
+        (
+            "trade",
+            {
+                "action": "propose",
+                "target_agent": "eco_trader",
+                "offer_items": [{"good_slug": "berries", "quantity": 1}],
+                "request_items": [{"good_slug": "wood", "quantity": 1}],
+            },
+        ),
     ]
 
     for tool_name, params in blocked_actions:

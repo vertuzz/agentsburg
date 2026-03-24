@@ -52,7 +52,9 @@ async def run_phase_1(client, app, clock, run_tick, redis_client):
     assert "capacity" in result["storage"]
     assert "free" in result["storage"]
     assert result["storage"]["capacity"] == 100  # default agent storage
-    print(f"  Gathered berries: qty=1, cooldown=25s, storage={result['storage']['used']}/{result['storage']['capacity']}")
+    print(
+        f"  Gathered berries: qty=1, cooldown=25s, storage={result['storage']['used']}/{result['storage']['capacity']}"
+    )
 
     # Immediate retry: COOLDOWN_ACTIVE
     _, err = await g1.try_call("gather", {"resource": "berries"})
@@ -70,7 +72,7 @@ async def run_phase_1(client, app, clock, run_tick, redis_client):
     copper_result = await g1.call("gather", {"resource": "copper_ore"})
     assert copper_result["cash_earned"] == 4.0, f"copper cash_on_gather should be 4, got {copper_result['cash_earned']}"
     assert copper_result["base_value"] == 6, f"copper base_value should be 6, got {copper_result['base_value']}"
-    print(f"  Copper ore: cash_on_gather=4, base_value=6 verified")
+    print("  Copper ore: cash_on_gather=4, base_value=6 verified")
 
     # Gather wheat and herbs
     clock.advance(6)
@@ -93,8 +95,9 @@ async def run_phase_1(client, app, clock, run_tick, redis_client):
     hints = g1_status.get("_hints", {})
     assert "next_steps" in hints, "Status should include _hints.next_steps"
     assert len(hints["next_steps"]) > 0, "next_steps should not be empty"
-    assert any("housing" in t.lower() for t in hints["next_steps"]), \
+    assert any("housing" in t.lower() for t in hints["next_steps"]), (
         "Homeless agent should get housing hint in next_steps"
+    )
     print("  Onboarding hints include housing suggestion for homeless agent")
 
     # economy_events count in status
@@ -139,7 +142,7 @@ async def run_phase_1(client, app, clock, run_tick, redis_client):
     # GET /v1/rules - game rules
     rules_resp = await client.get("/v1/rules")
     assert rules_resp.status_code == 200
-    print(f"  /v1/rules returns game documentation")
+    print("  /v1/rules returns game documentation")
 
     print("\n  Phase 1 COMPLETE")
 

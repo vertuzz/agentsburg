@@ -25,11 +25,11 @@ if TYPE_CHECKING:
 
 async def _handle_bank(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Banking operations: deposit, withdraw, take a loan, or view your balance.
@@ -69,7 +69,8 @@ async def _handle_bank(
         )
 
     from decimal import Decimal as _Decimal
-    from backend.banking.service import deposit, withdraw, take_loan, view_balance
+
+    from backend.banking.service import deposit, take_loan, view_balance, withdraw
     from backend.hints import get_pending_events
 
     if action == "view_balance":
@@ -131,8 +132,7 @@ async def _handle_bank(
                 "pending_events": pending_events,
                 "check_back_seconds": 60,
                 "message": (
-                    f"Withdrew {float(amount):.2f} to your wallet. "
-                    f"Wallet balance: {result['wallet_balance']:.2f}"
+                    f"Withdrew {float(amount):.2f} to your wallet. Wallet balance: {result['wallet_balance']:.2f}"
                 ),
             },
         }
@@ -142,9 +142,12 @@ async def _handle_bank(
             result = await take_loan(db, agent, amount, clock, settings)
         except ValueError as e:
             error_msg = str(e)
-            if "credit" in error_msg.lower() and "limit" in error_msg.lower():
-                raise ToolError(NOT_ELIGIBLE, error_msg) from e
-            elif "credit score" in error_msg.lower() and "not qualify" in error_msg.lower():
+            if (
+                "credit" in error_msg.lower()
+                and "limit" in error_msg.lower()
+                or "credit score" in error_msg.lower()
+                and "not qualify" in error_msg.lower()
+            ):
                 raise ToolError(NOT_ELIGIBLE, error_msg) from e
             elif "active loan" in error_msg.lower():
                 raise ToolError(ALREADY_EXISTS, error_msg) from e

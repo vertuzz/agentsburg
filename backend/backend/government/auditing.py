@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
-from backend.models.government import Violation, TaxRecord
+from backend.models.government import TaxRecord, Violation
 from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
@@ -40,8 +40,8 @@ DISCREPANCY_THRESHOLD_FRACTION = 0.05
 
 async def run_audits(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Randomly audit agents and fine/jail those who under-reported income.
@@ -83,6 +83,7 @@ async def run_audits(
     central_bank = None
     try:
         from backend.models.banking import CentralBank
+
         bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1))
         central_bank = bank_result.scalar_one_or_none()
     except ImportError:
@@ -147,13 +148,14 @@ async def run_audits(
         if prior_violations >= escalation_threshold - 1:  # 3rd+ offense
             # Escalating jail: 1h, 4h, 24h based on total violation count
             if prior_violations == escalation_threshold - 1:
-                jail_seconds = min(3600, max_jail_seconds)   # 1 hour
+                jail_seconds = min(3600, max_jail_seconds)  # 1 hour
             elif prior_violations == escalation_threshold:
                 jail_seconds = min(14400, max_jail_seconds)  # 4 hours
             else:
-                jail_seconds = max_jail_seconds               # max (24h for authoritarian)
+                jail_seconds = max_jail_seconds  # max (24h for authoritarian)
 
             from datetime import timedelta
+
             # Extend existing jail if already jailed
             base_time = max(now, agent.jail_until) if agent.jail_until else now
             jail_until = base_time + timedelta(seconds=jail_seconds)

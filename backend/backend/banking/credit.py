@@ -8,24 +8,24 @@ Public functions:
 from __future__ import annotations
 
 import logging
+from datetime import UTC
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.banking._helpers import (
+    MAX_ACCOUNT_AGE_BONUS_DAYS,
+    MAX_CREDIT_SCORE,
+    MIN_CREDIT_SCORE,
+    _get_active_policy,
+    _round_money,
+    _to_decimal,
+)
 from backend.models.agent import Agent
 from backend.models.banking import BankAccount
 from backend.models.business import Business, Employment
-
-from backend.banking._helpers import (
-    _to_decimal,
-    _get_active_policy,
-    _round_money,
-    MIN_CREDIT_SCORE,
-    MAX_CREDIT_SCORE,
-    MAX_ACCOUNT_AGE_BONUS_DAYS,
-)
 
 if TYPE_CHECKING:
     from backend.clock import Clock
@@ -37,8 +37,8 @@ logger = logging.getLogger(__name__)
 async def calculate_credit(
     db: AsyncSession,
     agent: Agent,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Score an agent's creditworthiness and return loan terms.
@@ -78,15 +78,14 @@ async def calculate_credit(
     wallet = _to_decimal(agent.balance)
 
     # Bank account balance
-    result = await db.execute(
-        select(BankAccount).where(BankAccount.agent_id == agent.id)
-    )
+    result = await db.execute(select(BankAccount).where(BankAccount.agent_id == agent.id))
     account = result.scalar_one_or_none()
     bank_balance = _to_decimal(account.balance) if account else Decimal("0")
 
     # Inventory value (use goods base_value)
     goods_config = {g["slug"]: g for g in settings.goods}
     from backend.models.inventory import InventoryItem
+
     inv_result = await db.execute(
         select(InventoryItem).where(
             InventoryItem.owner_type == "agent",
@@ -134,8 +133,7 @@ async def calculate_credit(
     if agent.created_at is not None:
         created = agent.created_at
         if created.tzinfo is None:
-            from datetime import timezone
-            created = created.replace(tzinfo=timezone.utc)
+            created = created.replace(tzinfo=UTC)
         age_seconds = (now - created).total_seconds()
         account_age_days = max(0.0, age_seconds / 86400)
 

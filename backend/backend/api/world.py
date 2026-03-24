@@ -4,11 +4,11 @@ API endpoints: zones, government, and goods.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
-from sqlalchemy import func, select, and_, desc
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -58,14 +58,13 @@ async def get_zones(
         agent_count = agent_count_result.scalar() or 0
 
         # Population: agents with housing in this zone
-        pop_result = await db.execute(
-            select(func.count(Agent.id)).where(Agent.housing_zone_id == zone.id)
-        )
+        pop_result = await db.execute(select(func.count(Agent.id)).where(Agent.housing_zone_id == zone.id))
         population = pop_result.scalar() or 0
 
         # Top goods sold (by storefront transaction volume, last 7d, filtered by zone)
-        one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+        one_week_ago = datetime.now(UTC) - timedelta(days=7)
         from sqlalchemy import text as _text
+
         top_goods_result = await db.execute(
             _text(
                 "SELECT metadata_json->>'good_slug' AS good_slug, SUM(amount) AS total "
@@ -81,27 +80,27 @@ async def get_zones(
         )
         top_goods_rows = top_goods_result.all()
         top_goods = [
-            {"good_slug": row.good_slug, "revenue": float(row.total)}
-            for row in top_goods_rows
-            if row.good_slug
+            {"good_slug": row.good_slug, "revenue": float(row.total)} for row in top_goods_rows if row.good_slug
         ]
 
-        zone_list.append({
-            "id": str(zone.id),
-            "slug": zone.slug,
-            "name": zone.name,
-            "rent_cost": float(zone.rent_cost),
-            "foot_traffic": zone.foot_traffic,
-            "demand_multiplier": zone.demand_multiplier,
-            "allowed_business_types": zone.allowed_business_types,
-            "businesses": {
-                "npc": npc_count,
-                "agent": agent_count,
-                "total": npc_count + agent_count,
-            },
-            "population": population,
-            "top_goods": top_goods,
-        })
+        zone_list.append(
+            {
+                "id": str(zone.id),
+                "slug": zone.slug,
+                "name": zone.name,
+                "rent_cost": float(zone.rent_cost),
+                "foot_traffic": zone.foot_traffic,
+                "demand_multiplier": zone.demand_multiplier,
+                "allowed_business_types": zone.allowed_business_types,
+                "businesses": {
+                    "npc": npc_count,
+                    "agent": agent_count,
+                    "total": npc_count + agent_count,
+                },
+                "population": population,
+                "top_goods": top_goods,
+            }
+        )
 
     return {"zones": zone_list}
 
@@ -115,12 +114,10 @@ async def get_government(
     Current government info: template, vote counts, election timing.
     """
     settings = request.app.state.settings
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Current government state
-    gov_result = await db.execute(
-        select(GovernmentState).where(GovernmentState.id == 1)
-    )
+    gov_result = await db.execute(select(GovernmentState).where(GovernmentState.id == 1))
     gov_state = gov_result.scalar_one_or_none()
 
     current_slug = gov_state.current_template_slug if gov_state else "free_market"
@@ -170,11 +167,13 @@ async def get_government(
     # For now we just have one gov state -- extend when we log elections
     election_history: list[dict] = []
     if gov_state and gov_state.last_election_at:
-        election_history.append({
-            "template": current_slug,
-            "template_name": current_params.get("name", current_slug),
-            "tallied_at": gov_state.last_election_at.isoformat(),
-        })
+        election_history.append(
+            {
+                "template": current_slug,
+                "template_name": current_params.get("name", current_slug),
+                "tallied_at": gov_state.last_election_at.isoformat(),
+            }
+        )
 
     return {
         "current_template": current_params,
@@ -195,9 +194,7 @@ async def get_goods(
     """
     All goods with current market prices (best available sell price).
     """
-    goods_result = await db.execute(
-        select(Good).order_by(Good.tier, Good.slug)
-    )
+    goods_result = await db.execute(select(Good).order_by(Good.tier, Good.slug))
     goods = goods_result.scalars().all()
 
     # For each good, get best sell price from open orders
@@ -206,13 +203,15 @@ async def get_goods(
         select(
             MarketOrder.good_slug,
             func.min(MarketOrder.price).label("best_sell"),
-        ).where(
+        )
+        .where(
             and_(
                 MarketOrder.good_slug.in_(good_slugs),
                 MarketOrder.side == "sell",
                 MarketOrder.status.in_(["open", "partially_filled"]),
             )
-        ).group_by(MarketOrder.good_slug)
+        )
+        .group_by(MarketOrder.good_slug)
     )
     best_sell_prices = {row.good_slug: float(row.best_sell) for row in prices_result.all()}
 
@@ -230,18 +229,21 @@ async def get_goods(
         select(
             MarketTrade.good_slug,
             MarketTrade.price,
-        ).distinct(MarketTrade.good_slug)
+        )
+        .distinct(MarketTrade.good_slug)
         .order_by(MarketTrade.good_slug, desc(MarketTrade.executed_at))
     )
     last_trade_prices = {row.good_slug: float(row.price) for row in last_trade_result.all()}
 
     goods_list = []
     for g in goods:
-        goods_list.append({
-            **g.to_dict(),
-            "best_sell_price": best_sell_prices.get(g.slug),
-            "best_storefront_price": best_storefront.get(g.slug),
-            "last_trade_price": last_trade_prices.get(g.slug),
-        })
+        goods_list.append(
+            {
+                **g.to_dict(),
+                "best_sell_price": best_sell_prices.get(g.slug),
+                "best_storefront_price": best_storefront.get(g.slug),
+                "last_trade_price": last_trade_prices.get(g.slug),
+            }
+        )
 
     return {"goods": goods_list}

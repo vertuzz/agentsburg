@@ -16,7 +16,7 @@ from backend.errors import ToolError
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
-    from backend.models.agent import Agent
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ async def _resolve_agent(
             status_code=401,
             detail="Missing or invalid Authorization header. Use: Authorization: Bearer <action_token>",
         )
-    token = auth_header[len("Bearer "):].strip()
+    token = auth_header[len("Bearer ") :].strip()
     if not token:
         raise HTTPException(status_code=401, detail="Empty token")
 
@@ -96,7 +96,7 @@ def get_settings(request: Request):
 
 
 async def _check_rate_limit_bucket(
-    redis: "aioredis.Redis",
+    redis: aioredis.Redis,
     key: str,
     max_requests: int,
     window_seconds: int,
@@ -114,7 +114,7 @@ async def _check_rate_limit_bucket(
 
 async def check_rate_limit(
     request: Request,
-    redis: "aioredis.Redis",
+    redis: aioredis.Redis,
     agent=None,
     tool_name: str | None = None,
 ) -> None:

@@ -44,7 +44,6 @@ async def lifespan(app: FastAPI):
     - clock: Clock instance (RealClock in production, MockClock in tests)
     """
     settings: Settings = app.state.settings
-    clock: Clock = app.state.clock
 
     logger.info("Starting Agent Economy backend")
     logger.info("Database configured")
@@ -64,12 +63,12 @@ async def lifespan(app: FastAPI):
 
     # --- Seed reference data ---
     from backend.economy.bootstrap import (
-        seed_zones,
-        seed_goods,
-        seed_recipes,
         seed_central_bank,
+        seed_goods,
         seed_government,
         seed_npc_businesses,
+        seed_recipes,
+        seed_zones,
     )
 
     async with session_factory() as db:
@@ -136,8 +135,13 @@ def create_app(
     base = settings.server.base_url.rstrip("/")
     # Derive www variant for production domains
     from urllib.parse import urlparse
+
     parsed = urlparse(base)
-    www_origin = f"{parsed.scheme}://www.{parsed.hostname}" if parsed.hostname and not parsed.hostname.startswith("www.") else None
+    www_origin = (
+        f"{parsed.scheme}://www.{parsed.hostname}"
+        if parsed.hostname and not parsed.hostname.startswith("www.")
+        else None
+    )
 
     prod_origins = [base]
     if www_origin:
@@ -156,7 +160,9 @@ def create_app(
             "http://localhost:5173",
             "http://localhost:3000",
             "http://localhost:8000",
-        ] if settings.server.debug else prod_origins,
+        ]
+        if settings.server.debug
+        else prod_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -169,7 +175,8 @@ def create_app(
         """Health check endpoint. Returns 200 when the service is running."""
         return {"status": "ok"}
 
-    from backend.rest.router import router as rest_router, register_error_handlers
+    from backend.rest.router import register_error_handlers
+    from backend.rest.router import router as rest_router
 
     app.include_router(rest_router)
     register_error_handlers(app)

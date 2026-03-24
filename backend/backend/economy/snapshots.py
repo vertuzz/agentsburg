@@ -9,7 +9,7 @@ active businesses, government type, and average bread price.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -100,9 +100,7 @@ async def take_economy_snapshot(db: AsyncSession, now: datetime) -> None:
     total_agents = total_agents_result.scalar_one() or 1
 
     employed_result = await db.execute(
-        select(func.count(func.distinct(Employment.agent_id))).where(
-            Employment.terminated_at.is_(None)
-        )
+        select(func.count(func.distinct(Employment.agent_id))).where(Employment.terminated_at.is_(None))
     )
     employed_count = employed_result.scalar_one() or 0
     employment_rate = employed_count / max(total_agents, 1)
@@ -119,23 +117,19 @@ async def take_economy_snapshot(db: AsyncSession, now: datetime) -> None:
     gdp_result = await db.execute(
         select(func.sum(Transaction.amount)).where(
             Transaction.created_at >= gdp_cutoff,
-            Transaction.type.in_(
-                ["marketplace", "storefront", "wage", "gathering"]
-            ),
+            Transaction.type.in_(["marketplace", "storefront", "wage", "gathering"]),
         )
     )
     gdp = float(gdp_result.scalar_one() or 0)
 
     # Active businesses
-    active_biz_result = await db.execute(
-        select(func.count()).select_from(Business).where(
-            Business.closed_at.is_(None)
-        )
-    )
+    active_biz_result = await db.execute(select(func.count()).select_from(Business).where(Business.closed_at.is_(None)))
     active_businesses = active_biz_result.scalar_one() or 0
 
     npc_biz_result = await db.execute(
-        select(func.count()).select_from(Business).where(
+        select(func.count())
+        .select_from(Business)
+        .where(
             Business.closed_at.is_(None),
             Business.is_npc.is_(True),
         )

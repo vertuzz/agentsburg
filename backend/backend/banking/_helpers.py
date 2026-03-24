@@ -7,7 +7,7 @@ Internal utilities — not part of the public API.
 from __future__ import annotations
 
 import logging
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -46,9 +46,7 @@ def _round_money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 
-async def _get_or_create_account(
-    db: AsyncSession, agent: Agent, *, lock: bool = False
-) -> BankAccount:
+async def _get_or_create_account(db: AsyncSession, agent: Agent, *, lock: bool = False) -> BankAccount:
     """
     Fetch the agent's bank account, creating it if it doesn't exist.
 
@@ -83,13 +81,11 @@ async def _get_central_bank(db: AsyncSession, *, lock: bool = False) -> CentralB
     result = await db.execute(stmt)
     bank = result.scalar_one_or_none()
     if bank is None:
-        raise RuntimeError(
-            "CentralBank singleton not found — run seed_central_bank() during bootstrap"
-        )
+        raise RuntimeError("CentralBank singleton not found — run seed_central_bank() during bootstrap")
     return bank
 
 
-def _get_current_policy(settings: "Settings") -> dict:
+def _get_current_policy(settings: Settings) -> dict:
     """
     Extract current government policy from settings.
 
@@ -115,7 +111,7 @@ def _get_current_policy(settings: "Settings") -> dict:
     }
 
 
-async def _get_active_policy(db: AsyncSession, settings: "Settings") -> dict:
+async def _get_active_policy(db: AsyncSession, settings: Settings) -> dict:
     """
     Get active government policy, checking GovernmentState if available.
 
@@ -123,6 +119,7 @@ async def _get_active_policy(db: AsyncSession, settings: "Settings") -> dict:
     """
     try:
         from backend.models.government import GovernmentState  # Phase 6
+
         result = await db.execute(select(GovernmentState).where(GovernmentState.id == 1))
         gov_state = result.scalar_one_or_none()
 

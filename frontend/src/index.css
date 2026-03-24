@@ -1,10 +1,12 @@
-@import './theme.css';
+@import "./theme.css";
 
 /* ═══════════════════════════════════════════════════════
    Global Reset & Base Styles
    ═══════════════════════════════════════════════════════ */
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -28,7 +30,7 @@ body {
 
 /* Subtle scan-line overlay */
 body::after {
-  content: '';
+  content: "";
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -85,43 +87,95 @@ table {
 }
 
 /* ── Utility classes ── */
-.mono { font-family: var(--font-mono); }
-.sans { font-family: var(--font-sans); }
+.mono {
+  font-family: var(--font-mono);
+}
+.sans {
+  font-family: var(--font-sans);
+}
 
-.text-accent { color: var(--accent); }
-.text-cyan { color: var(--cyan); }
-.text-purple { color: var(--purple); }
-.text-amber { color: var(--amber); }
-.text-danger { color: var(--danger); }
-.text-success { color: var(--success); }
-.text-muted { color: var(--text-secondary); }
-.text-bright { color: var(--text-bright); }
+.text-accent {
+  color: var(--accent);
+}
+.text-cyan {
+  color: var(--cyan);
+}
+.text-purple {
+  color: var(--purple);
+}
+.text-amber {
+  color: var(--amber);
+}
+.text-danger {
+  color: var(--danger);
+}
+.text-success {
+  color: var(--success);
+}
+.text-muted {
+  color: var(--text-secondary);
+}
+.text-bright {
+  color: var(--text-bright);
+}
 
-.text-xs { font-size: var(--text-xs); }
-.text-sm { font-size: var(--text-sm); }
-.text-lg { font-size: var(--text-lg); }
-.text-xl { font-size: var(--text-xl); }
-.text-2xl { font-size: var(--text-2xl); }
+.text-xs {
+  font-size: var(--text-xs);
+}
+.text-sm {
+  font-size: var(--text-sm);
+}
+.text-lg {
+  font-size: var(--text-lg);
+}
+.text-xl {
+  font-size: var(--text-xl);
+}
+.text-2xl {
+  font-size: var(--text-2xl);
+}
 
 /* ── Animations ── */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 @keyframes blink {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 
 @keyframes slideIn {
-  from { opacity: 0; transform: translateX(-8px); }
-  to   { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .animate-fade-in {
@@ -141,11 +195,21 @@ table {
   gap: 12px;
 }
 
-.responsive-grid-2 { grid-template-columns: repeat(2, 1fr); }
-.responsive-grid-3 { grid-template-columns: repeat(3, 1fr); }
-.responsive-grid-4 { grid-template-columns: repeat(4, 1fr); }
-.responsive-grid-5 { grid-template-columns: repeat(5, 1fr); }
-.responsive-grid-leaderboard { grid-template-columns: repeat(5, 1fr); }
+.responsive-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+.responsive-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+.responsive-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+.responsive-grid-5 {
+  grid-template-columns: repeat(5, 1fr);
+}
+.responsive-grid-leaderboard {
+  grid-template-columns: repeat(5, 1fr);
+}
 
 /* ═══════════════════════════════════════════════════════
    Mobile Responsive (< 768px)

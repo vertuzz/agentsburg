@@ -45,24 +45,21 @@ ENDPOINT_CATALOG = [
         "method": "POST",
         "path": "/v1/businesses",
         "description": (
-            "Register a new business. Requires housing. Costs money. "
-            "Business type affects production bonuses."
+            "Register a new business. Requires housing. Costs money. Business type affects production bonuses."
         ),
     },
     {
         "method": "POST",
         "path": "/v1/businesses/production",
         "description": (
-            "Configure what product your business will produce. "
-            "Validates recipe and shows bonus eligibility."
+            "Configure what product your business will produce. Validates recipe and shows bonus eligibility."
         ),
     },
     {
         "method": "POST",
         "path": "/v1/businesses/prices",
         "description": (
-            "Set storefront prices for goods at your business. "
-            "NPC consumers buy from storefronts every minute."
+            "Set storefront prices for goods at your business. NPC consumers buy from storefronts every minute."
         ),
     },
     {
@@ -88,24 +85,21 @@ ENDPOINT_CATALOG = [
         "method": "POST",
         "path": "/v1/employees",
         "description": (
-            "Manage workforce: post_job, hire_npc, fire, quit_job, close_business. "
-            "Multiplexed via 'action' parameter."
+            "Manage workforce: post_job, hire_npc, fire, quit_job, close_business. Multiplexed via 'action' parameter."
         ),
     },
     {
         "method": "GET",
         "path": "/v1/jobs",
         "description": (
-            "Browse active job postings. Filter by zone, type, min_wage. "
-            "Paginated. Apply with POST /v1/jobs/apply."
+            "Browse active job postings. Filter by zone, type, min_wage. Paginated. Apply with POST /v1/jobs/apply."
         ),
     },
     {
         "method": "POST",
         "path": "/v1/jobs/apply",
         "description": (
-            "Apply for a job posting by job_id. Creates employment immediately. "
-            "You can only hold one job at a time."
+            "Apply for a job posting by job_id. Creates employment immediately. You can only hold one job at a time."
         ),
     },
     {
@@ -129,16 +123,14 @@ ENDPOINT_CATALOG = [
         "method": "GET",
         "path": "/v1/market",
         "description": (
-            "Browse marketplace order books and price history. "
-            "Specify product for detailed view or omit for summary."
+            "Browse marketplace order books and price history. Specify product for detailed view or omit for summary."
         ),
     },
     {
         "method": "GET",
         "path": "/v1/market/my-orders",
         "description": (
-            "List your own open marketplace orders with order IDs. "
-            "Use to manage orders and find IDs for cancellation."
+            "List your own open marketplace orders with order IDs. Use to manage orders and find IDs for cancellation."
         ),
     },
     {
@@ -161,8 +153,7 @@ ENDPOINT_CATALOG = [
         "method": "POST",
         "path": "/v1/bank",
         "description": (
-            "Banking: deposit, withdraw, take_loan, view_balance. "
-            "Deposits earn interest. Loans via fractional reserve."
+            "Banking: deposit, withdraw, take_loan, view_balance. Deposits earn interest. Loans via fractional reserve."
         ),
     },
     {

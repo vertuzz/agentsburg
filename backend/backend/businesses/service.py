@@ -15,19 +15,17 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.agent import Agent
-from backend.models.business import Business, Employment, JobPosting, StorefrontPrice
-from backend.models.recipe import Recipe
-
 # Re-exports for backwards compatibility
 from backend.businesses.registration import (  # noqa: F401
     close_business,
     register_business,
 )
+from backend.models.agent import Agent
+from backend.models.business import Business, Employment, JobPosting, StorefrontPrice
+from backend.models.recipe import Recipe
 
 if TYPE_CHECKING:
-    from backend.clock import Clock
-    from backend.config import Settings
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -59,15 +57,12 @@ async def configure_production(
         raise ValueError(f"Business {business.name!r} is closed.")
 
     # Verify a recipe exists that produces this good
-    recipe_result = await db.execute(
-        select(Recipe).where(Recipe.output_good == product_slug)
-    )
+    recipe_result = await db.execute(select(Recipe).where(Recipe.output_good == product_slug))
     recipes = list(recipe_result.scalars().all())
 
     if not recipes:
         raise ValueError(
-            f"No recipe found that produces {product_slug!r}. "
-            f"Check recipes.yaml for available production recipes."
+            f"No recipe found that produces {product_slug!r}. Check recipes.yaml for available production recipes."
         )
 
     # Persist the actual recipe slug (not the good slug) so work() can
@@ -158,7 +153,10 @@ async def set_prices(
 
     logger.info(
         "Business %r: %s price for %s = %.2f",
-        business.name, action, good_slug, price,
+        business.name,
+        action,
+        good_slug,
+        price,
     )
 
     return {
@@ -182,9 +180,7 @@ async def get_business(
         raise ValueError(f"Business not found: {business_id}")
 
     # Get storefront prices
-    prices_result = await db.execute(
-        select(StorefrontPrice).where(StorefrontPrice.business_id == business_id)
-    )
+    prices_result = await db.execute(select(StorefrontPrice).where(StorefrontPrice.business_id == business_id))
     prices = list(prices_result.scalars().all())
 
     # Get active job postings

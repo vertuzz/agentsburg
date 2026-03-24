@@ -20,17 +20,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.agent import Agent
-from backend.models.banking import Loan
-from backend.models.transaction import Transaction
-
 from backend.banking._helpers import (
-    _to_decimal,
-    _round_money,
-    _get_central_bank,
-    _get_active_policy,
-    LOAN_INSTALLMENTS,
     INSTALLMENT_INTERVAL_HOURS,
+    LOAN_INSTALLMENTS,
+    _get_active_policy,
+    _get_central_bank,
+    _round_money,
+    _to_decimal,
 )
 
 # Re-export admin functions so existing imports from backend.banking.loans still work
@@ -39,6 +35,9 @@ from backend.banking.loan_admin import (  # noqa: F401
     default_agent_loans,
     process_loan_payments,
 )
+from backend.models.agent import Agent
+from backend.models.banking import Loan
+from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
     from backend.clock import Clock
@@ -51,8 +50,8 @@ async def take_loan(
     db: AsyncSession,
     agent: Agent,
     amount: Decimal,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Disburse a new loan to the agent if credit and reserves allow.
@@ -99,9 +98,7 @@ async def take_loan(
         raise ValueError("Loan denied: too many prior bankruptcies (3+). Your credit history is too poor.")
 
     # Lock agent row to prevent concurrent loan/balance manipulation
-    agent_row = await db.execute(
-        select(Agent).where(Agent.id == agent.id).with_for_update()
-    )
+    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
     agent = agent_row.scalar_one()
 
     # --- Check credit ---
@@ -116,16 +113,17 @@ async def take_loan(
 
     if max_loan <= 0:
         raise ValueError(
-            "Your credit score does not qualify for any loan. "
-            "Build net worth, avoid bankruptcies, and try again."
+            "Your credit score does not qualify for any loan. Build net worth, avoid bankruptcies, and try again."
         )
 
     # --- Check one-loan-at-a-time (locked to prevent double-loan race) ---
     existing_result = await db.execute(
-        select(Loan).where(
+        select(Loan)
+        .where(
             Loan.agent_id == agent.id,
             Loan.status == "active",
-        ).with_for_update()
+        )
+        .with_for_update()
     )
     existing_loan = existing_result.scalar_one_or_none()
     if existing_loan is not None:
@@ -204,7 +202,10 @@ async def take_loan(
 
     logger.info(
         "Loan disbursed: agent=%s amount=%.2f rate=%.4f installment=%.2f",
-        agent.name, float(amount), interest_rate, float(installment_amount),
+        agent.name,
+        float(amount),
+        interest_rate,
+        float(installment_amount),
     )
 
     return {

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import UTC
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -27,11 +28,11 @@ if TYPE_CHECKING:
 
 async def _handle_signup(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Register a new agent in the Agent Economy.
@@ -57,7 +58,9 @@ async def _handle_signup(
     if any(c in name for c in "<>&") or any(ord(c) < 32 for c in name):
         raise ToolError(INVALID_PARAMS, "Agent name contains invalid characters (no <, >, &, or control chars)")
     if not re.match(r"^[\w\s\-\.\']+$", name):
-        raise ToolError(INVALID_PARAMS, "Agent name may only contain letters, numbers, spaces, hyphens, dots, and apostrophes")
+        raise ToolError(
+            INVALID_PARAMS, "Agent name may only contain letters, numbers, spaces, hyphens, dots, and apostrophes"
+        )
 
     model = params.get("model")
     if not model or not isinstance(model, str):
@@ -91,11 +94,11 @@ async def _handle_signup(
 
 async def _handle_get_status(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Get your current agent status.
@@ -123,6 +126,7 @@ async def _handle_get_status(
 
     # Add inventory to status
     from backend.agents.inventory import get_inventory, get_storage_used
+
     inventory_items = await get_inventory(db, "agent", agent.id)
     storage_used = await get_storage_used(db, "agent", agent.id, settings)
     capacity = settings.economy.agent_storage_capacity
@@ -135,8 +139,8 @@ async def _handle_get_status(
     }
 
     # Add gather cooldowns from Redis using clock-based expiry timestamps
-    from datetime import timezone as _tz
     from datetime import datetime as _dt
+
     now = clock.now()
     cooldowns = {}
     gatherable_goods = [g for g in settings.goods if g.get("gatherable")]
@@ -147,7 +151,7 @@ async def _handle_get_status(
             try:
                 expiry_dt = _dt.fromisoformat(stored_expiry)
                 if expiry_dt.tzinfo is None:
-                    expiry_dt = expiry_dt.replace(tzinfo=_tz.utc)
+                    expiry_dt = expiry_dt.replace(tzinfo=UTC)
                 if now < expiry_dt:
                     remaining = int((expiry_dt - now).total_seconds())
                     total = good.get("gather_cooldown_seconds", settings.economy.base_gather_cooldown)
@@ -155,11 +159,12 @@ async def _handle_get_status(
                         "remaining": remaining,
                         "total": total,
                     }
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass
 
     # Add work cooldown
     from backend.businesses.production import get_work_cooldown_remaining
+
     work_remaining = await get_work_cooldown_remaining(redis, agent, clock)
     if work_remaining is not None:
         cooldowns["work"] = {"remaining": work_remaining}
@@ -167,7 +172,8 @@ async def _handle_get_status(
     status["cooldowns"] = cooldowns
 
     # Phase 3: Employment info
-    from backend.models.business import Employment, Business
+    from backend.models.business import Business, Employment
+
     emp_result = await db.execute(
         select(Employment).where(
             Employment.agent_id == agent.id,
@@ -177,9 +183,7 @@ async def _handle_get_status(
     employment = emp_result.scalar_one_or_none()
 
     if employment is not None:
-        biz_result = await db.execute(
-            select(Business).where(Business.id == employment.business_id)
-        )
+        biz_result = await db.execute(select(Business).where(Business.id == employment.business_id))
         emp_business = biz_result.scalar_one_or_none()
         status["employment"] = {
             "employment_id": str(employment.id),
@@ -197,6 +201,7 @@ async def _handle_get_status(
     # Phase 3: Owned businesses list
     from backend.models.business import Business as _Business
     from backend.models.zone import Zone
+
     owned_result = await db.execute(
         select(_Business).where(
             _Business.owner_id == agent.id,
@@ -230,6 +235,7 @@ async def _handle_get_status(
 
     # Credit score
     from backend.banking.credit import calculate_credit
+
     try:
         credit_info = await calculate_credit(db, agent, clock, settings)
         status["credit_score"] = credit_info.get("credit_score", 0)
@@ -243,6 +249,7 @@ async def _handle_get_status(
     rent_cost = 0.0
     if agent.housing_zone_id is not None:
         from backend.models.zone import Zone as _Zone
+
         zone_result = await db.execute(select(_Zone).where(_Zone.id == agent.housing_zone_id))
         housing_zone = zone_result.scalar_one_or_none()
         if housing_zone is not None:
@@ -259,20 +266,20 @@ async def _handle_get_status(
 
     # Phase 8: pending events (unread messages + pending trades)
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
     status["pending_events"] = pending_events
 
     # Economy events count
     from backend.events import count_events
+
     economy_events = await count_events(redis, agent.id)
     status["economy_events"] = economy_events
 
     # Determine check_back_seconds: minimum of next cooldown or 60s
     check_back = 60
     if cooldowns:
-        min_cd = min(
-            (v["remaining"] if isinstance(v, dict) else v) for v in cooldowns.values()
-        )
+        min_cd = min((v["remaining"] if isinstance(v, dict) else v) for v in cooldowns.values())
         check_back = max(5, min(check_back, min_cd))
 
     hints = {
@@ -289,6 +296,7 @@ async def _handle_get_status(
 
     # Onboarding tips for new agents (< 24h old)
     from backend.hints import get_onboarding_tips
+
     tips = get_onboarding_tips(agent, owned_businesses, clock)
     if tips:
         hints["next_steps"] = tips
@@ -300,11 +308,11 @@ async def _handle_get_status(
 
 async def _handle_rent_housing(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Rent housing in a city zone.
@@ -347,6 +355,7 @@ async def _handle_rent_housing(
         raise ToolError(INVALID_PARAMS, error_msg) from e
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
 
     return {
@@ -355,6 +364,6 @@ async def _handle_rent_housing(
             "pending_events": pending_events,
             "check_back_seconds": 3600,
             "message": f"You are now renting in {result['zone_name']}. "
-                       f"Rent of {result['rent_cost_per_hour']:.2f}/hour will be deducted automatically.",
+            f"Rent of {result['rent_cost_per_hour']:.2f}/hour will be deducted automatically.",
         },
     }

@@ -13,6 +13,7 @@ Usage:
 
 class ToolError(Exception):
     """Raised by tool handlers to signal a known, user-facing error."""
+
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code

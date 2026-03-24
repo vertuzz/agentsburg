@@ -34,7 +34,7 @@ async def rent_housing(
     db: AsyncSession,
     agent: Agent,
     zone_slug: str,
-    settings: "Settings",
+    settings: Settings,
 ) -> dict:
     """
     Rent housing for an agent in the specified zone.
@@ -66,10 +66,7 @@ async def rent_housing(
     rent_cost = float(zone.rent_cost)
 
     # Calculate total cost (first rent + relocation if moving)
-    is_relocation = (
-        agent.housing_zone_id is not None
-        and agent.housing_zone_id != zone.id
-    )
+    is_relocation = agent.housing_zone_id is not None and agent.housing_zone_id != zone.id
     relocation_fee = settings.economy.relocation_cost if is_relocation else 0.0
     total_cost = rent_cost + relocation_fee
 

@@ -23,17 +23,20 @@ async def run_phase_5(agents: dict[str, TestAgent], client, app, clock, run_tick
     # --- 5a: Propose and accept a trade ---
     print_section("Propose and accept trade")
 
-    propose = await agent_a.call("trade", {
-        "action": "propose",
-        "target_agent": "eco_gatherer2",
-        "offer_items": [{"good_slug": "berries", "quantity": 8}],
-        "request_items": [{"good_slug": "wood", "quantity": 4}],
-        "offer_money": 5.0,
-        "request_money": 0.0,
-    })
+    propose = await agent_a.call(
+        "trade",
+        {
+            "action": "propose",
+            "target_agent": "eco_gatherer2",
+            "offer_items": [{"good_slug": "berries", "quantity": 8}],
+            "request_items": [{"good_slug": "wood", "quantity": 4}],
+            "offer_money": 5.0,
+            "request_money": 0.0,
+        },
+    )
     trade_id_1 = propose["trade"]["id"]
     assert propose["trade"]["status"] == "pending"
-    print(f"  Trade proposed: A offers 8 berries + 5 money for 4 wood")
+    print("  Trade proposed: A offers 8 berries + 5 money for 4 wood")
 
     # Verify escrow locked
     a_berries = await get_inventory_qty(app, "eco_gatherer1", "berries")
@@ -43,9 +46,14 @@ async def run_phase_5(agents: dict[str, TestAgent], client, app, clock, run_tick
     print(f"  Escrow locked: A has {a_berries} berries, balance={float(a_bal):.2f}")
 
     # B accepts
-    accept = await agent_b.call("trade", {
-        "action": "respond", "trade_id": trade_id_1, "accept": True,
-    })
+    accept = await agent_b.call(
+        "trade",
+        {
+            "action": "respond",
+            "trade_id": trade_id_1,
+            "accept": True,
+        },
+    )
     assert accept["status"] == "accepted"
 
     # Verify exchange
@@ -60,27 +68,36 @@ async def run_phase_5(agents: dict[str, TestAgent], client, app, clock, run_tick
 
     await give_inventory(app, "eco_gatherer1", "berries", 10)
     berries_before_reject = await get_inventory_qty(app, "eco_gatherer1", "berries")
-    bal_before_reject = await get_balance(app, "eco_gatherer1")
+    await get_balance(app, "eco_gatherer1")
 
-    propose2 = await agent_a.call("trade", {
-        "action": "propose",
-        "target_agent": "eco_gatherer2",
-        "offer_items": [{"good_slug": "berries", "quantity": 3}],
-        "request_items": [{"good_slug": "wood", "quantity": 2}],
-        "offer_money": 0.0,
-        "request_money": 0.0,
-    })
+    propose2 = await agent_a.call(
+        "trade",
+        {
+            "action": "propose",
+            "target_agent": "eco_gatherer2",
+            "offer_items": [{"good_slug": "berries", "quantity": 3}],
+            "request_items": [{"good_slug": "wood", "quantity": 2}],
+            "offer_money": 0.0,
+            "request_money": 0.0,
+        },
+    )
     trade_id_2 = propose2["trade"]["id"]
 
-    reject = await agent_b.call("trade", {
-        "action": "respond", "trade_id": trade_id_2, "accept": False,
-    })
+    reject = await agent_b.call(
+        "trade",
+        {
+            "action": "respond",
+            "trade_id": trade_id_2,
+            "accept": False,
+        },
+    )
     assert reject["status"] == "rejected"
 
     # Verify escrow returned
     berries_after_reject = await get_inventory_qty(app, "eco_gatherer1", "berries")
-    assert berries_after_reject == berries_before_reject, \
+    assert berries_after_reject == berries_before_reject, (
         f"Berries should be returned: before={berries_before_reject}, after={berries_after_reject}"
+    )
     print(f"  Trade rejected, escrow returned: berries={berries_after_reject}")
 
     # --- 5c: Propose and cancel ---
@@ -89,38 +106,50 @@ async def run_phase_5(agents: dict[str, TestAgent], client, app, clock, run_tick
     await give_inventory(app, "eco_gatherer1", "stone", 5)
     stone_before = await get_inventory_qty(app, "eco_gatherer1", "stone")
 
-    propose3 = await agent_a.call("trade", {
-        "action": "propose",
-        "target_agent": "eco_gatherer2",
-        "offer_items": [{"good_slug": "stone", "quantity": 3}],
-        "request_items": [{"good_slug": "wood", "quantity": 1}],
-    })
+    propose3 = await agent_a.call(
+        "trade",
+        {
+            "action": "propose",
+            "target_agent": "eco_gatherer2",
+            "offer_items": [{"good_slug": "stone", "quantity": 3}],
+            "request_items": [{"good_slug": "wood", "quantity": 1}],
+        },
+    )
     trade_id_3 = propose3["trade"]["id"]
 
-    cancel_trade = await agent_a.call("trade", {
-        "action": "cancel", "trade_id": trade_id_3,
-    })
+    cancel_trade = await agent_a.call(
+        "trade",
+        {
+            "action": "cancel",
+            "trade_id": trade_id_3,
+        },
+    )
     assert cancel_trade["status"] == "cancelled"
 
     stone_after = await get_inventory_qty(app, "eco_gatherer1", "stone")
-    assert stone_after == stone_before, \
-        f"Stone should be returned: before={stone_before}, after={stone_after}"
+    assert stone_after == stone_before, f"Stone should be returned: before={stone_before}, after={stone_after}"
     print(f"  Trade cancelled, escrow returned: stone={stone_after}")
 
     # --- 5d: Messaging ---
     print_section("Messaging")
 
-    send_result = await agents["eco_trader"].call("messages", {
-        "action": "send",
-        "to_agent": "eco_baker",
-        "text": "I have 20 berries to sell. Interested?",
-    })
+    send_result = await agents["eco_trader"].call(
+        "messages",
+        {
+            "action": "send",
+            "to_agent": "eco_baker",
+            "text": "I have 20 berries to sell. Interested?",
+        },
+    )
     assert "message_id" in send_result or "sent" in str(send_result).lower()
     print("  Message sent: trader -> baker")
 
-    read_result = await agents["eco_baker"].call("messages", {
-        "action": "read",
-    })
+    read_result = await agents["eco_baker"].call(
+        "messages",
+        {
+            "action": "read",
+        },
+    )
     assert "messages" in read_result
     msgs = read_result["messages"]
     assert len(msgs) > 0, "Baker should have at least one message"

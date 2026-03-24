@@ -7,9 +7,9 @@ from typing import TYPE_CHECKING
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.errors import (
+    IN_JAIL,
     INSUFFICIENT_FUNDS,
     INSUFFICIENT_INVENTORY,
-    IN_JAIL,
     INVALID_PARAMS,
     NOT_FOUND,
     STORAGE_FULL,
@@ -28,11 +28,11 @@ if TYPE_CHECKING:
 
 async def _handle_trade(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Direct agent-to-agent trade with escrow.
@@ -77,15 +77,16 @@ async def _handle_trade(
     # Jail check — cannot propose new trades while jailed (respond/cancel are allowed)
     if action == "propose":
         from backend.government.jail import check_jail
+
         try:
             check_jail(agent, clock)
         except ValueError as e:
             raise ToolError(IN_JAIL, str(e)) from e
 
     from decimal import Decimal
-    from backend.marketplace.trading import propose_trade, respond_trade, cancel_trade
 
     from backend.hints import get_pending_events
+    from backend.marketplace.trading import cancel_trade, propose_trade, respond_trade
 
     if action == "propose":
         target_agent = params.get("target_agent")

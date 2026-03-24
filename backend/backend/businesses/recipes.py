@@ -9,13 +9,11 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from backend.models.recipe import Recipe
 
 if TYPE_CHECKING:
     import redis.asyncio as aioredis
@@ -32,7 +30,7 @@ def _work_cooldown_key(agent_id: uuid.UUID) -> str:
     return f"cooldown:work:{agent_id}"
 
 
-async def _get_government_modifier(db: AsyncSession, settings: "Settings") -> float:
+async def _get_government_modifier(db: AsyncSession, settings: Settings) -> float:
     """
     Get the current government production_cooldown_modifier.
 
@@ -40,8 +38,9 @@ async def _get_government_modifier(db: AsyncSession, settings: "Settings") -> fl
     Falls back to 1.0 if government tables don't exist or state is missing.
     """
     try:
-        from backend.models.government import GovernmentState
         from backend.government.service import get_policy_params
+        from backend.models.government import GovernmentState
+
         result = await db.execute(select(GovernmentState).where(GovernmentState.id == 1))
         govt = result.scalar_one_or_none()
         if not govt:
@@ -53,9 +52,9 @@ async def _get_government_modifier(db: AsyncSession, settings: "Settings") -> fl
 
 
 async def get_work_cooldown_remaining(
-    redis: "aioredis.Redis",
-    agent: "Agent",
-    clock: "Clock",
+    redis: aioredis.Redis,
+    agent: Agent,
+    clock: Clock,
 ) -> int | None:
     """
     Check how many seconds remain on an agent's work cooldown.
@@ -73,11 +72,11 @@ async def get_work_cooldown_remaining(
     try:
         expiry_dt = datetime.fromisoformat(stored_expiry)
         if expiry_dt.tzinfo is None:
-            expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+            expiry_dt = expiry_dt.replace(tzinfo=UTC)
         now = clock.now()
         if now < expiry_dt:
             return int((expiry_dt - now).total_seconds())
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         pass
 
     return None

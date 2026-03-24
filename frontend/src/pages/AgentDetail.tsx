@@ -1,11 +1,20 @@
-import { useParams, Link } from 'react-router-dom';
-import { useAgent } from '../api';
+import { useParams, Link } from "react-router-dom";
+import { useAgent } from "../api";
 import {
-  Loading, ErrorMsg, PageHeader, Section, Card, StatCard, Grid,
-  Badge, KV, DetailGrid, DataTable, fmt, fmtTime, fmtDate,
-  slugToName, txTypeColor,
-} from '../components/shared';
-import type { Column } from '../components/shared';
+  Loading,
+  ErrorMsg,
+  PageHeader,
+  Section,
+  Card,
+  StatCard,
+  Grid,
+  Badge,
+  KV,
+  DetailGrid,
+  DataTable,
+} from "../components/shared";
+import { fmt, fmtTime, fmtDate, slugToName, txTypeColor } from "../components/formatters";
+import type { Column } from "../components/shared";
 
 export default function AgentDetail() {
   const { id } = useParams<{ id: string }>();
@@ -19,20 +28,33 @@ export default function AgentDetail() {
     <div className="animate-fade-in">
       <PageHeader
         title={a.name}
-        subtitle={[
-          a.model && `Model: ${a.model}`,
-          `Joined ${fmtDate(a.created_at)}`,
-        ].filter(Boolean).join(' · ')}
-        right={<Link to="/agents" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>← Back to agents</Link>}
+        subtitle={[a.model && `Model: ${a.model}`, `Joined ${fmtDate(a.created_at)}`]
+          .filter(Boolean)
+          .join(" · ")}
+        right={
+          <Link to="/agents" style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
+            ← Back to agents
+          </Link>
+        }
       />
 
       {/* ── Key stats ── */}
       <Section title="Financials">
         <Grid cols={4}>
-          <StatCard label="Total Wealth" value={fmt(a.total_wealth)} color="var(--accent)" icon="$" />
+          <StatCard
+            label="Total Wealth"
+            value={fmt(a.total_wealth)}
+            color="var(--accent)"
+            icon="$"
+          />
           <StatCard label="Wallet" value={fmt(a.balance)} icon=">" />
           <StatCard label="Bank Balance" value={fmt(a.bank_balance)} color="var(--cyan)" icon="~" />
-          <StatCard label="Bankruptcies" value={String(a.bankruptcy_count)} color={a.bankruptcy_count > 0 ? 'var(--danger)' : 'var(--text-muted)'} icon="!" />
+          <StatCard
+            label="Bankruptcies"
+            value={String(a.bankruptcy_count)}
+            color={a.bankruptcy_count > 0 ? "var(--danger)" : "var(--text-muted)"}
+            icon="!"
+          />
         </Grid>
       </Section>
 
@@ -41,25 +63,43 @@ export default function AgentDetail() {
         <Section title="Status">
           <Card>
             <KV label="Housing">
-              {a.housing_zone
-                ? <span>{a.housing_zone.name} <span style={{ color: 'var(--text-muted)' }}>({a.housing_zone.slug})</span></span>
-                : <Badge color="var(--danger)">Homeless</Badge>}
+              {a.housing_zone ? (
+                <span>
+                  {a.housing_zone.name}{" "}
+                  <span style={{ color: "var(--text-muted)" }}>({a.housing_zone.slug})</span>
+                </span>
+              ) : (
+                <Badge color="var(--danger)">Homeless</Badge>
+              )}
             </KV>
             <KV label="Employment">
-              {a.employment
-                ? <span>
-                    <Link to={`/businesses/${a.employment.business_id}`} style={{ color: 'var(--accent)' }}>
-                      {a.employment.business_name}
-                    </Link>
-                    <span style={{ color: 'var(--text-muted)' }}> · {slugToName(a.employment.product_slug)} · {fmt(a.employment.wage_per_work)}/work</span>
+              {a.employment ? (
+                <span>
+                  <Link
+                    to={`/businesses/${a.employment.business_id}`}
+                    style={{ color: "var(--accent)" }}
+                  >
+                    {a.employment.business_name}
+                  </Link>
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {" "}
+                    · {slugToName(a.employment.product_slug)} · {fmt(a.employment.wage_per_work)}
+                    /work
                   </span>
-                : <Badge color="var(--text-muted)">Unemployed</Badge>}
+                </span>
+              ) : (
+                <Badge color="var(--text-muted)">Unemployed</Badge>
+              )}
             </KV>
             <KV label="Violations">{a.criminal_record.violation_count}</KV>
             <KV label="Jailed">
-              {a.criminal_record.jailed
-                ? <Badge color="var(--danger)">Until {a.criminal_record.jail_until ? fmtDate(a.criminal_record.jail_until) : '?'}</Badge>
-                : <span style={{ color: 'var(--text-muted)' }}>No</span>}
+              {a.criminal_record.jailed ? (
+                <Badge color="var(--danger)">
+                  Until {a.criminal_record.jail_until ? fmtDate(a.criminal_record.jail_until) : "?"}
+                </Badge>
+              ) : (
+                <span style={{ color: "var(--text-muted)" }}>No</span>
+              )}
             </KV>
           </Card>
         </Section>
@@ -68,17 +108,29 @@ export default function AgentDetail() {
         <Section title="Inventory">
           <Card>
             {a.inventory.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>Empty inventory</div>
+              <div style={{ color: "var(--text-muted)", fontSize: "var(--text-sm)" }}>
+                Empty inventory
+              </div>
             ) : (
               a.inventory.map((item, i) => (
-                <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between',
-                  padding: '6px 0', borderBottom: '1px solid var(--border)',
-                }}>
-                  <Link to={`/market/${item.good_slug}`} style={{ color: 'var(--text-primary)', fontSize: 'var(--text-sm)' }}>
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    padding: "6px 0",
+                    borderBottom: "1px solid var(--border)",
+                  }}
+                >
+                  <Link
+                    to={`/market/${item.good_slug}`}
+                    style={{ color: "var(--text-primary)", fontSize: "var(--text-sm)" }}
+                  >
                     {slugToName(item.good_slug)}
                   </Link>
-                  <span style={{ color: 'var(--accent)', fontWeight: 500, fontSize: 'var(--text-sm)' }}>
+                  <span
+                    style={{ color: "var(--accent)", fontWeight: 500, fontSize: "var(--text-sm)" }}
+                  >
                     ×{item.quantity}
                   </span>
                 </div>
@@ -91,12 +143,20 @@ export default function AgentDetail() {
       {/* ── Businesses ── */}
       {a.businesses.length > 0 && (
         <Section title="Owned Businesses">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-            {a.businesses.map(b => (
-              <Link to={`/businesses/${b.id}`} key={b.id} style={{ textDecoration: 'none' }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))",
+              gap: 12,
+            }}
+          >
+            {a.businesses.map((b) => (
+              <Link to={`/businesses/${b.id}`} key={b.id} style={{ textDecoration: "none" }}>
                 <Card hover>
-                  <div style={{ fontWeight: 500, color: 'var(--text-primary)', marginBottom: 4 }}>{b.name}</div>
-                  <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
+                  <div style={{ fontWeight: 500, color: "var(--text-primary)", marginBottom: 4 }}>
+                    {b.name}
+                  </div>
+                  <div style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
                     {slugToName(b.type_slug)} · {slugToName(b.zone_slug)}
                   </div>
                 </Card>
@@ -118,25 +178,44 @@ export default function AgentDetail() {
   );
 }
 
-const txColumns: Column<{ id: string; type: string; amount: number; created_at: string; from_agent_name?: string | null; to_agent_name?: string | null }>[] = [
+const txColumns: Column<{
+  id: string;
+  type: string;
+  amount: number;
+  created_at: string;
+  from_agent_name?: string | null;
+  to_agent_name?: string | null;
+}>[] = [
   {
-    key: 'type', header: 'Type',
+    key: "type",
+    header: "Type",
     render: (t) => <Badge color={txTypeColor(t.type)}>{t.type}</Badge>,
   },
   {
-    key: 'amount', header: 'Amount', align: 'right',
-    render: (t) => <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>{fmt(t.amount)}</span>,
+    key: "amount",
+    header: "Amount",
+    align: "right",
+    render: (t) => (
+      <span style={{ fontWeight: 500, color: "var(--text-primary)" }}>{fmt(t.amount)}</span>
+    ),
   },
   {
-    key: 'parties', header: 'Parties',
+    key: "parties",
+    header: "Parties",
     render: (t) => (
-      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>
-        {t.from_agent_name || '—'} → {t.to_agent_name || '—'}
+      <span style={{ fontSize: "var(--text-xs)", color: "var(--text-secondary)" }}>
+        {t.from_agent_name || "—"} → {t.to_agent_name || "—"}
       </span>
     ),
   },
   {
-    key: 'time', header: 'Time', align: 'right',
-    render: (t) => <span style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>{fmtTime(t.created_at)}</span>,
+    key: "time",
+    header: "Time",
+    align: "right",
+    render: (t) => (
+      <span style={{ color: "var(--text-muted)", fontSize: "var(--text-xs)" }}>
+        {fmtTime(t.created_at)}
+      </span>
+    ),
   },
 ];

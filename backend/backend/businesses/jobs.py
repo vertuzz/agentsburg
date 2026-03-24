@@ -14,7 +14,7 @@ import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
@@ -61,9 +61,7 @@ async def post_job(
     # Minimum wage floor to prevent exploitation of NPC workers
     MIN_WAGE = 5.0
     if wage < MIN_WAGE:
-        raise ValueError(
-            f"Wage must be at least {MIN_WAGE} per work call (minimum wage). Got {wage}."
-        )
+        raise ValueError(f"Wage must be at least {MIN_WAGE} per work call (minimum wage). Got {wage}.")
     if max_workers < 1 or max_workers > 20:
         raise ValueError(f"max_workers must be 1-20, got {max_workers}")
 
@@ -93,7 +91,11 @@ async def post_job(
 
     logger.info(
         "Business %r posted job %r (product=%s, wage=%.2f, max_workers=%d)",
-        business.name, title, product_slug, wage, max_workers,
+        business.name,
+        title,
+        product_slug,
+        wage,
+        max_workers,
     )
 
     return {
@@ -151,6 +153,7 @@ async def list_jobs(
     if zone_slug is not None:
         # Need to join with Zone to filter by slug
         from backend.models.zone import Zone
+
         query = query.join(Zone, Business.zone_id == Zone.id).where(Zone.slug == zone_slug)
 
     if type_slug is not None:
@@ -170,21 +173,25 @@ async def list_jobs(
     for posting, business in rows:
         # Count current workers for this posting
         worker_count_result = await db.execute(
-            select(func.count()).select_from(Employment).where(
+            select(func.count())
+            .select_from(Employment)
+            .where(
                 Employment.job_posting_id == posting.id,
                 Employment.terminated_at.is_(None),
             )
         )
         worker_count = worker_count_result.scalar() or 0
 
-        items.append({
-            **posting.to_dict(),
-            "business_name": business.name,
-            "business_type": business.type_slug,
-            "zone_id": str(business.zone_id),
-            "current_workers": worker_count,
-            "slots_available": max(0, posting.max_workers - worker_count),
-        })
+        items.append(
+            {
+                **posting.to_dict(),
+                "business_name": business.name,
+                "business_type": business.type_slug,
+                "zone_id": str(business.zone_id),
+                "current_workers": worker_count,
+                "slots_available": max(0, posting.max_workers - worker_count),
+            }
+        )
 
     return {
         "items": items,
@@ -199,7 +206,7 @@ async def apply_job(
     db: AsyncSession,
     agent: Agent,
     job_id: uuid.UUID,
-    clock: "Clock",
+    clock: Clock,
 ) -> dict:
     """
     Apply for a job posting.
@@ -224,9 +231,7 @@ async def apply_job(
     now = clock.now()
 
     # Look up the job posting
-    result = await db.execute(
-        select(JobPosting).where(JobPosting.id == job_id)
-    )
+    result = await db.execute(select(JobPosting).where(JobPosting.id == job_id))
     posting = result.scalar_one_or_none()
 
     if posting is None:
@@ -236,9 +241,7 @@ async def apply_job(
         raise ValueError("This job posting is no longer accepting applications.")
 
     # Look up the business
-    biz_result = await db.execute(
-        select(Business).where(Business.id == posting.business_id)
-    )
+    biz_result = await db.execute(select(Business).where(Business.id == posting.business_id))
     business = biz_result.scalar_one_or_none()
 
     if business is None or not business.is_open():
@@ -254,13 +257,14 @@ async def apply_job(
     existing = existing_emp.scalar_one_or_none()
     if existing is not None:
         raise ValueError(
-            "You are already employed. Quit your current job first with "
-            "manage_employees(action='quit_job')."
+            "You are already employed. Quit your current job first with manage_employees(action='quit_job')."
         )
 
     # Check capacity
     worker_count_result = await db.execute(
-        select(func.count()).select_from(Employment).where(
+        select(func.count())
+        .select_from(Employment)
+        .where(
             Employment.job_posting_id == posting.id,
             Employment.terminated_at.is_(None),
         )
@@ -287,7 +291,10 @@ async def apply_job(
 
     logger.info(
         "Agent %s hired at business %r (job=%r, product=%s, wage=%.2f)",
-        agent.name, business.name, posting.title, posting.product_slug,
+        agent.name,
+        business.name,
+        posting.title,
+        posting.product_slug,
         float(posting.wage_per_work),
     )
 

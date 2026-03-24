@@ -19,12 +19,11 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from decimal import Decimal
 
 from backend.agents.inventory import add_to_inventory, get_storage_used
 from backend.models.agent import Agent
@@ -46,11 +45,11 @@ def _gather_cooldown_key(agent_id: uuid.UUID, resource_slug: str) -> str:
 
 async def gather(
     db: AsyncSession,
-    redis: "aioredis.Redis",
+    redis: aioredis.Redis,
     agent: Agent,
     resource_slug: str,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Gather one unit of a gatherable resource.
@@ -113,7 +112,7 @@ async def gather(
                 expiry_dt = datetime.fromisoformat(stored_expiry)
                 # Make timezone-aware if needed
                 if expiry_dt.tzinfo is None:
-                    expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+                    expiry_dt = expiry_dt.replace(tzinfo=UTC)
                 if now < expiry_dt:
                     remaining = int((expiry_dt - now).total_seconds())
                     raise ValueError(
@@ -172,6 +171,7 @@ async def gather(
 
         # Store cooldown expiry timestamp using clock time
         from datetime import timedelta
+
         expiry_time = now + timedelta(seconds=cooldown_seconds)
         expiry_str = expiry_time.isoformat()
 

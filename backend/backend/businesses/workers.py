@@ -14,7 +14,7 @@ import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.agent import Agent
@@ -35,7 +35,7 @@ async def fire_employee(
     agent: Agent,
     business_id: uuid.UUID,
     employee_id: uuid.UUID,
-    clock: "Clock",
+    clock: Clock,
 ) -> dict:
     """
     Terminate an employee's contract.
@@ -80,8 +80,7 @@ async def fire_employee(
 
     if employment is None:
         raise ValueError(
-            f"Active employment not found: {employee_id}. "
-            f"The employee may have already quit or been terminated."
+            f"Active employment not found: {employee_id}. The employee may have already quit or been terminated."
         )
 
     employment.terminated_at = now
@@ -89,7 +88,8 @@ async def fire_employee(
 
     logger.info(
         "Business %r: terminated employee (employment_id=%s)",
-        business.name, employee_id,
+        business.name,
+        employee_id,
     )
 
     return {
@@ -103,7 +103,7 @@ async def fire_employee(
 async def quit_job(
     db: AsyncSession,
     agent: Agent,
-    clock: "Clock",
+    clock: Clock,
 ) -> dict:
     """
     Quit the agent's current job.
@@ -139,9 +139,7 @@ async def quit_job(
     employment.terminated_at = now
 
     # Get business name for the response
-    biz_result = await db.execute(
-        select(Business).where(Business.id == employment.business_id)
-    )
+    biz_result = await db.execute(select(Business).where(Business.id == employment.business_id))
     business = biz_result.scalar_one_or_none()
     business_name = business.name if business else "Unknown"
 
@@ -149,7 +147,9 @@ async def quit_job(
 
     logger.info(
         "Agent %s quit job at business %r (employment_id=%s)",
-        agent.name, business_name, employment.id,
+        agent.name,
+        business_name,
+        employment.id,
     )
 
     return {
@@ -164,8 +164,8 @@ async def hire_npc_worker(
     db: AsyncSession,
     agent: Agent,
     business_id: uuid.UUID,
-    settings: "Settings",
-    clock: "Clock",
+    settings: Settings,
+    clock: Clock,
 ) -> dict:
     """
     Hire an NPC worker for a business.
@@ -210,7 +210,9 @@ async def hire_npc_worker(
     # Check NPC worker cap
     npc_cap = getattr(settings.economy, "npc_worker_max_per_business", 5)
     npc_count_result = await db.execute(
-        select(func.count()).select_from(Employment).where(
+        select(func.count())
+        .select_from(Employment)
+        .where(
             Employment.business_id == business_id,
             Employment.agent_id == NPC_WORKER_SENTINEL_ID,
             Employment.terminated_at.is_(None),
@@ -219,24 +221,22 @@ async def hire_npc_worker(
     npc_count = npc_count_result.scalar() or 0
 
     if npc_count >= npc_cap:
-        raise ValueError(
-            f"NPC worker cap reached ({npc_count}/{npc_cap}). "
-            f"Cannot hire more NPC workers."
-        )
+        raise ValueError(f"NPC worker cap reached ({npc_count}/{npc_cap}). Cannot hire more NPC workers.")
 
     # Find an active job posting to use for the NPC
     posting_result = await db.execute(
-        select(JobPosting).where(
+        select(JobPosting)
+        .where(
             JobPosting.business_id == business_id,
             JobPosting.is_active.is_(True),
-        ).limit(1)
+        )
+        .limit(1)
     )
     posting = posting_result.scalar_one_or_none()
 
     if posting is None:
         raise ValueError(
-            "No active job postings for this business. "
-            "Post a job first with manage_employees(action='post_job', ...)."
+            "No active job postings for this business. Post a job first with manage_employees(action='post_job', ...)."
         )
 
     # NPC wage is multiplied by the configured multiplier
@@ -256,7 +256,9 @@ async def hire_npc_worker(
 
     logger.info(
         "Business %r hired NPC worker (product=%s, npc_wage=%.2f)",
-        business.name, posting.product_slug, float(npc_wage),
+        business.name,
+        posting.product_slug,
+        float(npc_wage),
     )
 
     return {

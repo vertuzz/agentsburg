@@ -45,8 +45,8 @@ _BASE_BUY_PER_GOOD_PER_TICK = 20
 
 async def simulate_npc_marketplace_demand(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Central bank buys raw goods from marketplace sell orders.
@@ -67,6 +67,7 @@ async def simulate_npc_marketplace_demand(
 
     # Scale buy cap with active player population
     from sqlalchemy import func
+
     active_count_result = await db.execute(
         select(func.count(Agent.id)).where(
             Agent.is_active == True,  # noqa: E712
@@ -98,9 +99,7 @@ async def simulate_npc_marketplace_demand(
         return _empty_result(now)
 
     # Load central bank (locked for update)
-    bank_result = await db.execute(
-        select(CentralBank).where(CentralBank.id == 1).with_for_update()
-    )
+    bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1).with_for_update())
     central_bank = bank_result.scalar_one_or_none()
     if central_bank is None:
         return _empty_result(now)
@@ -161,9 +160,7 @@ async def simulate_npc_marketplace_demand(
                 cost = sell_price * can_buy
 
             # Load seller agent (locked)
-            seller_result = await db.execute(
-                select(Agent).where(Agent.id == order.agent_id).with_for_update()
-            )
+            seller_result = await db.execute(select(Agent).where(Agent.id == order.agent_id).with_for_update())
             seller = seller_result.scalar_one_or_none()
             if seller is None:
                 order.status = "cancelled"
@@ -203,15 +200,20 @@ async def simulate_npc_marketplace_demand(
 
             logger.debug(
                 "NPC marketplace buy: %dx %s @ %.2f from %s",
-                can_buy, good_slug, float(sell_price), seller.name,
+                can_buy,
+                good_slug,
+                float(sell_price),
+                seller.name,
             )
 
         if units_bought_this_good > 0:
-            purchase_details.append({
-                "good_slug": good_slug,
-                "units_bought": units_bought_this_good,
-                "max_price": float(max_price),
-            })
+            purchase_details.append(
+                {
+                    "good_slug": good_slug,
+                    "units_bought": units_bought_this_good,
+                    "max_price": float(max_price),
+                }
+            )
 
     # Deduct total from bank reserves
     if total_spent > 0:
@@ -220,7 +222,8 @@ async def simulate_npc_marketplace_demand(
 
     logger.info(
         "NPC marketplace demand: %d fills, spent %.2f from bank reserves",
-        total_purchases, float(total_spent),
+        total_purchases,
+        float(total_spent),
     )
 
     return {
@@ -234,8 +237,8 @@ async def simulate_npc_marketplace_demand(
 
 async def place_npc_buy_orders(
     db: AsyncSession,
-    clock: "Clock",
-    settings: "Settings",
+    clock: Clock,
+    settings: Settings,
 ) -> dict:
     """
     Place visible NPC buy orders on the marketplace for tier-1 and tier-2 goods.
@@ -249,7 +252,8 @@ async def place_npc_buy_orders(
     are funded from bank reserves.  Old unfilled NPC orders are cleaned up first.
     """
     import uuid as _uuid
-    now = clock.now()
+
+    clock.now()
 
     NPC_BUYER_SENTINEL = _uuid.UUID("00000000-0000-0000-0000-000000000002")
 
@@ -268,9 +272,7 @@ async def place_npc_buy_orders(
         old.status = "cancelled"
 
     # Load central bank
-    bank_result = await db.execute(
-        select(CentralBank).where(CentralBank.id == 1).with_for_update()
-    )
+    bank_result = await db.execute(select(CentralBank).where(CentralBank.id == 1).with_for_update())
     central_bank = bank_result.scalar_one_or_none()
     if central_bank is None:
         return {"type": "npc_buy_orders", "orders_placed": 0}
@@ -293,6 +295,7 @@ async def place_npc_buy_orders(
 
     # Scale order size with active agent count
     from sqlalchemy import func
+
     active_count_result = await db.execute(
         select(func.count(Agent.id)).where(Agent.is_active == True)  # noqa: E712
     )
@@ -326,7 +329,8 @@ async def place_npc_buy_orders(
 
     logger.info(
         "NPC buy orders: placed %d orders, total locked %.2f",
-        orders_placed, float(total_locked),
+        orders_placed,
+        float(total_locked),
     )
 
     return {

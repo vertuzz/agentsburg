@@ -51,28 +51,32 @@ async def phase1_free_market(client, app, clock, run_tick, redis_client) -> dict
     print("  Housing: 3 outskirts, 2 suburbs, 1 industrial")
 
     # Register businesses
-    mill_reg = await agents[0].call("register_business", {
-        "name": "Gov Mill",
-        "type": "mill",
-        "zone": "industrial",
-    })
+    mill_reg = await agents[0].call(
+        "register_business",
+        {
+            "name": "Gov Mill",
+            "type": "mill",
+            "zone": "industrial",
+        },
+    )
     mill_id = mill_reg["business_id"]
-    print(f"  Registered mill")
+    print("  Registered mill")
 
-    bakery_reg = await agents[1].call("register_business", {
-        "name": "Gov Bakery",
-        "type": "bakery",
-        "zone": "suburbs",
-    })
+    bakery_reg = await agents[1].call(
+        "register_business",
+        {
+            "name": "Gov Bakery",
+            "type": "bakery",
+            "zone": "suburbs",
+        },
+    )
     bakery_id = bakery_reg["business_id"]
-    print(f"  Registered bakery")
+    print("  Registered bakery")
 
     # Force free_market government
     gov_data = await agents[0].call("get_economy", {"section": "government"})
     async with app.state.session_factory() as session:
-        gov_state = await session.execute(
-            select(GovernmentState).where(GovernmentState.id == 1)
-        )
+        gov_state = await session.execute(select(GovernmentState).where(GovernmentState.id == 1))
         gs = gov_state.scalar_one()
         gs.current_template_slug = "free_market"
         await session.commit()
@@ -81,17 +85,12 @@ async def phase1_free_market(client, app, clock, run_tick, redis_client) -> dict
     # Re-fetch to confirm
     gov_data = await agents[0].call("get_economy", {"section": "government"})
     current = gov_data["current_template"]
-    assert current["slug"] == "free_market", (
-        f"Expected free_market, got {current['slug']}"
-    )
+    assert current["slug"] == "free_market", f"Expected free_market, got {current['slug']}"
     free_market_tax = current["tax_rate"]
     free_market_enforcement = current["enforcement_probability"]
-    print(f"  Free market: tax={free_market_tax}, "
-          f"enforcement={free_market_enforcement}")
+    print(f"  Free market: tax={free_market_tax}, enforcement={free_market_enforcement}")
     assert free_market_tax == 0.05, f"Expected 5% tax, got {free_market_tax}"
-    assert free_market_enforcement == 0.10, (
-        f"Expected 10% enforcement, got {free_market_enforcement}"
-    )
+    assert free_market_enforcement == 0.10, f"Expected 10% enforcement, got {free_market_enforcement}"
 
     # Run 3 days of simulation under free market
     print("  Running 3 days under free_market...")

@@ -49,12 +49,8 @@ class PriceAggregate(Base):
     )
 
     good_slug: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    period_type: Mapped[str] = mapped_column(
-        String(16), nullable=False
-    )  # "hourly" or "daily"
-    period_start: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    period_type: Mapped[str] = mapped_column(String(16), nullable=False)  # "hourly" or "daily"
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     # OHLCV data
     open_price: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False)

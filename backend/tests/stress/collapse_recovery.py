@@ -28,8 +28,7 @@ async def phase2_economic_crisis(app, clock, run_tick, state: dict) -> dict:
     for a in agents:
         s = await a.status()
         pre_crisis_statuses.append(s)
-        print(f"  {a.name}: balance={s['balance']:.2f}, "
-              f"bankruptcies={s['bankruptcy_count']}")
+        print(f"  {a.name}: balance={s['balance']:.2f}, bankruptcies={s['bankruptcy_count']}")
 
     # Drain ALL agent balances to near-bankruptcy threshold
     for i in range(8):
@@ -39,21 +38,15 @@ async def phase2_economic_crisis(app, clock, run_tick, state: dict) -> dict:
     # Verify draining worked
     for i in range(8):
         bal = await get_balance(app, f"col_{i}")
-        assert bal <= Decimal("-170"), (
-            f"col_{i} balance should be near -180, got {bal}"
-        )
+        assert bal <= Decimal("-170"), f"col_{i} balance should be near -180, got {bal}"
     print("  All balances confirmed near -180")
 
     # Also drain any bank deposits
     async with app.state.session_factory() as session:
-        agent_rows = await session.execute(
-            select(Agent).where(Agent.name.like("col_%"))
-        )
+        agent_rows = await session.execute(select(Agent).where(Agent.name.like("col_%")))
         col_agents = agent_rows.scalars().all()
         for ag in col_agents:
-            acct_result = await session.execute(
-                select(BankAccount).where(BankAccount.agent_id == ag.id)
-            )
+            acct_result = await session.execute(select(BankAccount).where(BankAccount.agent_id == ag.id))
             acct = acct_result.scalar_one_or_none()
             if acct and float(acct.balance) > 0:
                 acct.balance = Decimal("0")
@@ -71,7 +64,7 @@ async def phase2_economic_crisis(app, clock, run_tick, state: dict) -> dict:
             if bk.get("count", 0) > 0:
                 bankruptcy_count += bk["count"]
                 names = bk.get("bankrupted", [])
-                print(f"    Tick {tick_num+1}: {bk['count']} bankruptcies: {names}")
+                print(f"    Tick {tick_num + 1}: {bk['count']} bankruptcies: {names}")
     print(f"  Crisis phase complete: {bankruptcy_count} total bankruptcies")
 
     # Verify: multiple agents went bankrupt
@@ -88,16 +81,14 @@ async def phase2_economic_crisis(app, clock, run_tick, state: dict) -> dict:
         for ag in bankrupt_list:
             print(f"  {ag.name}: bankruptcy_count={ag.bankruptcy_count}")
     print(f"  Total agents who went bankrupt: {bankrupt_agents}")
-    assert bankrupt_agents >= 2, (
-        f"Expected at least 2 agents to go bankrupt, got {bankrupt_agents}"
-    )
+    assert bankrupt_agents >= 2, f"Expected at least 2 agents to go bankrupt, got {bankrupt_agents}"
 
     # Verify: their businesses got closed
     async with app.state.session_factory() as session:
         closed_biz = await session.execute(
             select(func.count(Business.id)).where(
                 Business.closed_at.isnot(None),
-                Business.is_npc == False,
+                not Business.is_npc,
             )
         )
         closed_count = closed_biz.scalar_one()
@@ -114,14 +105,11 @@ async def phase2_economic_crisis(app, clock, run_tick, state: dict) -> dict:
             )
         )
         for ag in bankrupt_result.scalars().all():
-            acct_result = await session.execute(
-                select(BankAccount).where(BankAccount.agent_id == ag.id)
-            )
+            acct_result = await session.execute(select(BankAccount).where(BankAccount.agent_id == ag.id))
             acct = acct_result.scalar_one_or_none()
             if acct:
                 assert float(acct.balance) <= 0, (
-                    f"Bankrupt agent {ag.name} should have 0 or less deposit, "
-                    f"got {acct.balance}"
+                    f"Bankrupt agent {ag.name} should have 0 or less deposit, got {acct.balance}"
                 )
     print("  Bank deposits seized for bankrupt agents -- OK")
 
@@ -145,26 +133,20 @@ async def phase3_recovery(client, app, clock, run_tick, state: dict) -> None:
     # NPC businesses should still be operating
     npc_count_recovery = await get_open_business_count(app, is_npc=True)
     print(f"  NPC businesses still open: {npc_count_recovery}")
-    assert npc_count_recovery > 0, (
-        "NPC businesses should still be running after crisis"
-    )
+    assert npc_count_recovery > 0, "NPC businesses should still be running after crisis"
 
     # Verify NPC storefronts still have prices set
     async with app.state.session_factory() as session:
         npc_biz = await session.execute(
             select(Business).where(
-                Business.is_npc == True,
+                Business.is_npc,
                 Business.closed_at.is_(None),
             )
         )
         npc_businesses = npc_biz.scalars().all()
         npc_with_prices = 0
         for biz in npc_businesses:
-            prices = await session.execute(
-                select(StorefrontPrice).where(
-                    StorefrontPrice.business_id == biz.id
-                )
-            )
+            prices = await session.execute(select(StorefrontPrice).where(StorefrontPrice.business_id == biz.id))
             if prices.scalars().all():
                 npc_with_prices += 1
     print(f"  NPC businesses with storefront prices: {npc_with_prices}/{len(npc_businesses)}")
@@ -206,16 +188,11 @@ async def phase3_recovery(client, app, clock, run_tick, state: dict) -> None:
 
     # Verify central bank reserves
     async with app.state.session_factory() as session:
-        bank = await session.execute(
-            select(CentralBank).where(CentralBank.id == 1)
-        )
+        bank = await session.execute(select(CentralBank).where(CentralBank.id == 1))
         cb = bank.scalar_one_or_none()
         if cb:
-            print(f"  Central bank: reserves={float(cb.reserves):.2f}, "
-                  f"total_loaned={float(cb.total_loaned):.2f}")
-            assert float(cb.reserves) >= 0, (
-                f"Central bank reserves should be >= 0, got {cb.reserves}"
-            )
+            print(f"  Central bank: reserves={float(cb.reserves):.2f}, total_loaned={float(cb.total_loaned):.2f}")
+            assert float(cb.reserves) >= 0, f"Central bank reserves should be >= 0, got {cb.reserves}"
 
     # Final NPC business count
     npc_final = await get_open_business_count(app, is_npc=True)

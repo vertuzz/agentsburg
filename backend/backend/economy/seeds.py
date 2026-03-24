@@ -18,9 +18,9 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.zone import Zone
 from backend.models.good import Good
 from backend.models.recipe import Recipe
+from backend.models.zone import Zone
 
 if TYPE_CHECKING:
     from backend.config import Settings
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-async def seed_zones(db: AsyncSession, settings: "Settings") -> None:
+async def seed_zones(db: AsyncSession, settings: Settings) -> None:
     """
     Upsert Zone records from the zones.yaml config.
 
@@ -88,7 +88,7 @@ async def seed_zones(db: AsyncSession, settings: "Settings") -> None:
     logger.info("Zone seeding complete (%d zones processed)", len(zones_config))
 
 
-async def seed_goods(db: AsyncSession, settings: "Settings") -> None:
+async def seed_goods(db: AsyncSession, settings: Settings) -> None:
     """
     Upsert Good records from the goods.yaml config.
 
@@ -146,7 +146,7 @@ async def seed_goods(db: AsyncSession, settings: "Settings") -> None:
     logger.info("Good seeding complete (%d goods processed)", len(goods_config))
 
 
-async def seed_recipes(db: AsyncSession, settings: "Settings") -> None:
+async def seed_recipes(db: AsyncSession, settings: Settings) -> None:
     """
     Upsert Recipe records from the recipes.yaml config.
 

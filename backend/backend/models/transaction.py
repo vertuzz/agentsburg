@@ -44,12 +44,12 @@ TRANSACTION_TYPES = frozenset(
         "fine",
         "trade",
         "marketplace",
-        "storefront",    # NPC consumer purchases from business storefronts
+        "storefront",  # NPC consumer purchases from business storefronts
         "loan_payment",
         "deposit_interest",
         "loan_disbursement",
-        "deposit",       # agent deposits into bank account
-        "withdrawal",    # agent withdraws from bank account
+        "deposit",  # agent deposits into bank account
+        "withdrawal",  # agent withdraws from bank account
         "gathering",
         "business_reg",
         "bankruptcy_liquidation",
@@ -72,14 +72,10 @@ class Transaction(UUIDMixin, TimestampMixin, Base):
     type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
 
     # Source agent (null = bank/system origin)
-    from_agent_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
-    )
+    from_agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
 
     # Destination agent (null = bank/system destination)
-    to_agent_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), nullable=True, index=True
-    )
+    to_agent_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True, index=True)
 
     # Amount transferred (always positive; direction encoded by from/to)
     amount: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False)
@@ -88,7 +84,4 @@ class Transaction(UUIDMixin, TimestampMixin, Base):
     metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     def __repr__(self) -> str:
-        return (
-            f"<Transaction type={self.type!r} amount={self.amount} "
-            f"from={self.from_agent_id} to={self.to_agent_id}>"
-        )
+        return f"<Transaction type={self.type!r} amount={self.amount} from={self.from_agent_id} to={self.to_agent_id}>"

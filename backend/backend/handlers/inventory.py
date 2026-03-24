@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid as _uuid
+from datetime import UTC
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
@@ -10,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.errors import (
     COOLDOWN_ACTIVE,
-    INSUFFICIENT_INVENTORY,
     IN_JAIL,
+    INSUFFICIENT_INVENTORY,
     INVALID_PARAMS,
     NOT_FOUND,
     STORAGE_FULL,
@@ -29,11 +30,11 @@ if TYPE_CHECKING:
 
 async def _handle_business_inventory(
     params: dict,
-    agent: "Agent | None",
+    agent: Agent | None,
     db: AsyncSession,
-    clock: "Clock",
-    redis: "aioredis.Redis",
-    settings: "Settings",
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
 ) -> dict:
     """
     Transfer goods between personal inventory and a business the agent owns.
@@ -46,6 +47,7 @@ async def _handle_business_inventory(
         raise ToolError(UNAUTHORIZED, "Authentication required.")
 
     from backend.government.jail import check_jail
+
     try:
         check_jail(agent, clock)
     except ValueError as e:
@@ -72,9 +74,7 @@ async def _handle_business_inventory(
     except ValueError:
         raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id!r}")
 
-    biz_result = await db.execute(
-        select(Business).where(Business.id == biz_uuid)
-    )
+    biz_result = await db.execute(select(Business).where(Business.id == biz_uuid))
     business = biz_result.scalar_one_or_none()
 
     if business is None:
@@ -87,18 +87,19 @@ async def _handle_business_inventory(
     # --- View action: return business inventory without cooldown ---
     if action == "view":
         from backend.agents.inventory import get_inventory, get_storage_used
+
         inventory_items = await get_inventory(db, "business", biz_uuid)
         biz_storage_used = await get_storage_used(db, "business", biz_uuid, settings)
         biz_capacity = settings.economy.business_storage_capacity
 
         from backend.hints import get_pending_events
+
         pending_events = await get_pending_events(db, agent)
 
         # Also show storefront prices
         from backend.models.business import StorefrontPrice
-        prices_result = await db.execute(
-            select(StorefrontPrice).where(StorefrontPrice.business_id == biz_uuid)
-        )
+
+        prices_result = await db.execute(select(StorefrontPrice).where(StorefrontPrice.business_id == biz_uuid))
         prices = list(prices_result.scalars().all())
 
         return {
@@ -112,17 +113,11 @@ async def _handle_business_inventory(
                 "capacity": biz_capacity,
                 "free": biz_capacity - biz_storage_used,
             },
-            "storefront_prices": [
-                {"good": p.good_slug, "price": float(p.price)}
-                for p in prices
-            ],
+            "storefront_prices": [{"good": p.good_slug, "price": float(p.price)} for p in prices],
             "_hints": {
                 "pending_events": pending_events,
                 "check_back_seconds": 60,
-                "message": (
-                    f"Business {business.name!r} inventory: "
-                    f"{biz_storage_used}/{biz_capacity} storage used."
-                ),
+                "message": (f"Business {business.name!r} inventory: {biz_storage_used}/{biz_capacity} storage used."),
             },
         }
 
@@ -158,7 +153,8 @@ async def _handle_business_inventory(
             raise ToolError(COOLDOWN_ACTIVE, "Transfer already in progress. Try again shortly.")
 
         try:
-            from datetime import datetime, timedelta, timezone
+            from datetime import datetime, timedelta
+
             cooldown_key = f"cooldown:transfer:{agent.id}"
             stored_expiry = await redis.get(cooldown_key)
             now = clock.now()
@@ -167,7 +163,7 @@ async def _handle_business_inventory(
                 try:
                     expiry_dt = datetime.fromisoformat(stored_expiry)
                     if expiry_dt.tzinfo is None:
-                        expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+                        expiry_dt = expiry_dt.replace(tzinfo=UTC)
                     if now < expiry_dt:
                         remaining = int((expiry_dt - now).total_seconds())
                         raise ToolError(
@@ -176,7 +172,7 @@ async def _handle_business_inventory(
                         )
                 except ToolError:
                     raise
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
 
             from backend.agents.inventory import (
@@ -228,6 +224,7 @@ async def _handle_business_inventory(
             await redis.delete(lock_key)
 
         from backend.hints import get_pending_events
+
         pending_events = await get_pending_events(db, agent)
 
         return {
@@ -280,7 +277,8 @@ async def _handle_business_inventory(
 
     try:
         # Check cooldown
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
+
         cooldown_key = f"cooldown:transfer:{agent.id}"
         stored_expiry = await redis.get(cooldown_key)
         now = clock.now()
@@ -289,7 +287,7 @@ async def _handle_business_inventory(
             try:
                 expiry_dt = datetime.fromisoformat(stored_expiry)
                 if expiry_dt.tzinfo is None:
-                    expiry_dt = expiry_dt.replace(tzinfo=timezone.utc)
+                    expiry_dt = expiry_dt.replace(tzinfo=UTC)
                 if now < expiry_dt:
                     remaining = int((expiry_dt - now).total_seconds())
                     raise ToolError(
@@ -298,7 +296,7 @@ async def _handle_business_inventory(
                     )
             except ToolError:
                 raise
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass  # Corrupted key — ignore
 
         from backend.agents.inventory import (
@@ -347,6 +345,7 @@ async def _handle_business_inventory(
         await redis.delete(lock_key)
 
     from backend.hints import get_pending_events
+
     pending_events = await get_pending_events(db, agent)
 
     return {

@@ -7,7 +7,7 @@ This makes time injectable for testing via MockClock.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Protocol
 
 
@@ -23,7 +23,7 @@ class RealClock:
     """Production clock that returns actual UTC time."""
 
     def now(self) -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
 
 class MockClock:
@@ -37,7 +37,7 @@ class MockClock:
     def __init__(self, start: datetime | None = None) -> None:
         if start is None:
             # Default to a fixed epoch for reproducibility
-            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+            start = datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
         self._current: datetime = start
 
     def now(self) -> datetime:
