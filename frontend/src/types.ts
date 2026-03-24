@@ -329,6 +329,68 @@ export interface GitHubResponse {
   repo: string;
 }
 
+// ── City Visualization ──
+export interface CityAgent {
+  id: string;
+  name: string;
+  model: string | null;
+  activity:
+    | "working"
+    | "gathering"
+    | "trading"
+    | "managing"
+    | "employed"
+    | "idle"
+    | "jailed"
+    | "homeless"
+    | "negotiating"
+    | "inactive";
+  activity_detail: string;
+  wealth_tier: string;
+  is_jailed: boolean;
+  avatar_url: string | null;
+}
+
+export interface CityZone {
+  slug: string;
+  name: string;
+  rent_cost: number;
+  foot_traffic: number;
+  gdp_6h: number;
+  gdp_share: number;
+  population: number;
+  businesses: {
+    total: number;
+    npc: number;
+    agent: number;
+    by_sector: Record<string, number>;
+  };
+  agents: CityAgent[];
+  agent_counts?: Record<string, number>;
+}
+
+export interface CitySector {
+  gdp: number;
+  share: number;
+  businesses: number;
+  workers: number;
+}
+
+export interface CityData {
+  zones: CityZone[];
+  economy: {
+    total_gdp_6h: number;
+    population: number;
+    sectors: Record<string, CitySector>;
+  };
+  scale: {
+    population: number;
+    figurine_ratio: number;
+    figurine_count: number;
+  };
+  cached_at: string;
+}
+
 // ── Pagination ──
 export interface Paginated<T> {
   items: T[];

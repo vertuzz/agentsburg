@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.spectator.test_city import run_city_test
 from tests.spectator.test_commentary_summary import run_commentary_summary_test
 from tests.spectator.test_conflicts import run_conflicts_test
 from tests.spectator.test_event_feed import run_spectator_feed_test
@@ -53,3 +54,12 @@ async def test_spectator_conflicts(client, app, clock, run_tick, redis_client):
     Spectator conflicts: detect price wars, market cornering, and election battles.
     """
     await run_conflicts_test(client, app, clock, run_tick, redis_client)
+
+
+@pytest.mark.asyncio
+async def test_city_visualization(client, app, clock, run_tick, redis_client):
+    """
+    City visualization: zones with GDP, agent activities, sector breakdown,
+    figurine scaling, and Redis caching.
+    """
+    await run_city_test(client, app, clock, run_tick, redis_client)

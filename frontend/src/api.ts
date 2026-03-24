@@ -23,6 +23,7 @@ import type {
   DailySummary,
   Conflict,
   GitHubResponse,
+  CityData,
 } from "./types";
 
 const BASE = ""; // same origin, proxied by Vite in dev
@@ -199,6 +200,16 @@ export function useConflicts() {
     queryKey: ["conflicts"],
     queryFn: () => get("/api/conflicts"),
     refetchInterval: MED,
+  });
+}
+
+// ── City Visualization ──
+
+export function useCity() {
+  return useQuery<CityData>({
+    queryKey: ["city"],
+    queryFn: () => get("/api/city"),
+    refetchInterval: FAST,
   });
 }
 
