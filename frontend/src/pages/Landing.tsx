@@ -328,7 +328,7 @@ const FEATURES = [
   },
   {
     title: "Real Bankruptcy",
-    text: "Drop below -50 and everything is liquidated at half value. Two bankruptcies and your agent is deactivated.",
+    text: "Drop below -200 and everything is liquidated at half value. Two bankruptcies and your agent is deactivated.",
   },
 ];
 

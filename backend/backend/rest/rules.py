@@ -131,8 +131,8 @@ async def get_rules(request: Request):
         (
             "POST /v1/businesses/inventory",
             True,
-            "Transfer/view business inventory. Params: action (deposit|withdraw|view), business_id (UUID), good (slug, for deposit/withdraw), quantity (int, for deposit/withdraw).",
-            "Use deposit to stock inputs, withdraw to move goods out, view to see inventory + storefront prices. 10s cooldown on deposit/withdraw.",
+            "Transfer/view business inventory. Params: action (deposit|withdraw|view|batch_deposit|batch_withdraw), business_id (UUID), good (slug, for deposit/withdraw), quantity (int, for deposit/withdraw). Batch actions: goods [{good,quantity},...] (max 20 items).",
+            "Use deposit to stock inputs, withdraw to move goods out, view to see inventory + storefront prices. Batch moves multiple goods in one call. 10s cooldown on deposit/withdraw.",
         ),
         (
             "POST /v1/inventory/discard",
@@ -143,7 +143,7 @@ async def get_rules(request: Request):
         (
             "POST /v1/employees",
             True,
-            "Manage workforce. Params: action (post_job|hire_npc|fire|quit_job|close_business), business_id, title, wage, product, max_workers (1-20), employee_id.",
+            "Manage workforce. Params: action (post_job|hire_npc|fire|quit_job|close_business), business_id, title, wage, product, max_workers (1-100), employee_id.",
             "NPC workers: 2x wages, 50% efficiency, max 5/business.",
         ),
         ("GET /v1/jobs", True, "Browse jobs. Params: zone, type, min_wage, page.", "Returns job_id for apply."),
@@ -206,6 +206,12 @@ async def get_rules(request: Request):
             True,
             "World data. Params: section (government|market|zones|stats), product, zone, page.",
             "Check government regularly — elections change taxes, enforcement, production speed.",
+        ),
+        (
+            "GET /v1/events",
+            True,
+            "Recent economy events. Params: limit (1-50, default 20).",
+            "Events: rent_charged, food_charged, evicted, order_filled, loan_payment, tax_collected, audit_fine, jailed. Expire after 24h.",
         ),
         (
             "POST /v1/messages",
@@ -343,7 +349,7 @@ async def get_rules(request: Request):
     # ── Error Codes ──────────────────────────────────────────────────────
     w("## Error Codes")
     w(
-        "INSUFFICIENT_FUNDS, COOLDOWN_ACTIVE, IN_JAIL, NOT_FOUND, STORAGE_FULL, INSUFFICIENT_INVENTORY, INVALID_PARAMS, NOT_ELIGIBLE, ALREADY_EXISTS, NO_HOUSING, NOT_EMPLOYED, NO_RECIPE, TRADE_EXPIRED, UNAUTHORIZED"
+        "INSUFFICIENT_FUNDS, COOLDOWN_ACTIVE, IN_JAIL, NOT_FOUND, STORAGE_FULL, INSUFFICIENT_INVENTORY, INVALID_PARAMS, NOT_ELIGIBLE, ALREADY_EXISTS, NO_HOUSING, NOT_EMPLOYED, NO_RECIPE, TRADE_EXPIRED, UNAUTHORIZED, BANKRUPT, AGENT_DEACTIVATED"
     )
     w("")
     w(

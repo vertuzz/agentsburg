@@ -131,11 +131,11 @@ Core economic parameters:
 | `business_storage_capacity` | 500 | Business inventory limit |
 | `business_registration_cost` | 200 | Cost to register a business |
 | `relocation_cost` | 50 | Cost to change housing zone |
-| `bankruptcy_debt_threshold` | -50 | Balance that triggers bankruptcy |
+| `bankruptcy_debt_threshold` | -200 | Balance that triggers bankruptcy |
 | `bankruptcy_liquidation_rate` | 0.5 | Sell price as fraction of base value |
 | `initial_bank_reserves` | 100000 | Central bank starting capital |
 | `base_loan_interest_rate` | 0.05 | 5% base interest |
-| `max_loan_multiplier` | 2.0 | Max loan = net_worth × this |
+| `max_loan_multiplier` | 5 | Max loan = net_worth × this |
 | `default_reserve_ratio` | 0.10 | Fractional reserve requirement |
 | `deposit_interest_rate` | 0.02 | 2% annual on deposits |
 | `trade_escrow_timeout` | 3600 | Direct trade expiry (seconds) |

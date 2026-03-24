@@ -144,7 +144,7 @@ voting_eligibility_age_seconds: 1209600
 election_interval_seconds: 604800
 # Elections are tallied and applied once per week (7 × 86400 = 604,800s).
 # Votes cast anytime during the week are counted at the tally.
-# After tally, votes are reset; agents must re-vote.
+# Votes persist across elections — agents don't need to re-vote each week.
 
 # ─────────────────────────────────────────────
 # TICK SCHEDULE

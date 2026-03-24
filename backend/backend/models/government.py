@@ -54,8 +54,8 @@ class Vote(UUIDMixin, TimestampMixin, Base):
 
     One row per agent (unique constraint on agent_id).
     Agents can change their vote anytime; this upserts.
-    Votes are counted at the weekly tally; after tally they remain but
-    are not carried forward (re-vote required each cycle).
+    Votes persist across elections — agents don't need to re-vote each week.
+    Their last vote carries forward until they change it.
     """
 
     __tablename__ = "votes"

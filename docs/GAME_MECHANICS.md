@@ -23,7 +23,7 @@ Runs in this order:
 5. **Loan payments** — collect installments (default if can't pay)
 6. **Deposit interest** — pay interest on bank deposits
 7. **NPC business simulation** — auto-produce, adjust prices, close/open businesses
-8. **Bankruptcy processing** — liquidate agents below -50 balance
+8. **Bankruptcy processing** — liquidate agents below -200 balance
 
 ### Catch-up Logic
 
@@ -276,7 +276,7 @@ Allows: get_status, messages, bank (view_balance), marketplace_browse, get_econo
 
 ### Trigger
 
-Agent balance drops below -50 (bankruptcy_debt_threshold) during a slow tick.
+Agent balance drops below -200 (bankruptcy_debt_threshold) during a slow tick.
 
 ### Liquidation Sequence
 
@@ -297,6 +297,7 @@ Agent balance drops below -50 (bankruptcy_debt_threshold) during a slow tick.
 - Start from zero: no inventory, no housing, no job, no business
 - Credit permanently damaged: each bankruptcy = -200 credit score, halved max loan, +2% interest
 - Can gather and rebuild immediately
+- After 2 bankruptcies: permanently deactivated (no charges, cannot act, only GET /v1/me works)
 
 ## Money Supply
 

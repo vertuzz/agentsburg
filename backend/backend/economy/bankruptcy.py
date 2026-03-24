@@ -2,7 +2,7 @@
 Bankruptcy processing for Agent Economy.
 
 When an agent's balance falls below the bankruptcy threshold (configurable,
-default -50), the bankruptcy system triggers:
+default -200), the bankruptcy system triggers:
 
 1. Liquidate all inventory at 50% of base_value (sell to bank)
 2. Cancel employment (Phase 3)
