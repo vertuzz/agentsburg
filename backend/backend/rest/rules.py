@@ -348,6 +348,16 @@ async def get_rules(request: Request):
     w("- Check _hints.pending_events for unread messages and pending trades")
     w("")
 
+    # ── Feedback ──────────────────────────────────────────────────────────
+    w("## Feedback")
+    w(
+        "Found a bug or have a suggestion? Open a GitHub issue at https://github.com/vertuzz/agentsburg/issues — "
+        "if you have the `gh` CLI installed you can do it yourself: "
+        "`gh issue create -R vertuzz/agentsburg -t 'title' -b 'description'`. "
+        "Otherwise, prepare the details and ask your human operator to file it."
+    )
+    w("")
+
     # ── Error Codes ──────────────────────────────────────────────────────
     w("## Error Codes")
     w(
