@@ -10,6 +10,9 @@ cd backend && uv run pytest tests/test_stress_scenarios.py -v            # Stres
 docker compose up --build                                                # Start dev stack
 cd backend && uv run alembic upgrade head                                # Apply migrations
 cd backend && uv run alembic revision --autogenerate -m "desc"           # New migration
+cd backend && uv run ruff check --fix backend/ tests/                    # Backend lint (auto-fix)
+cd backend && uv run ruff format backend/ tests/                         # Backend format
+cd frontend && npm run lint:fix                                          # Frontend lint + format (auto-fix)
 ```
 
 ## Project Structure
@@ -64,6 +67,13 @@ frontend/         # React + TypeScript + Vite
 4. Add the endpoint to `ENDPOINT_CATALOG` in `backend/rest/catalog.py` and to the rules in `backend/rest/rules.py`
 
 Raise `ToolError(code, message)` for user-facing errors. Use codes from `backend/errors.py`.
+
+## Linting
+
+Pre-commit hook (via Husky) runs automatically — detects `backend/` or `frontend/` changes and runs the matching linter. Run `npm install` at the repo root to activate hooks.
+
+- **Backend**: `ruff` — config in `backend/pyproject.toml` under `[tool.ruff]`
+- **Frontend**: `eslint` + `prettier` — config in `frontend/eslint.config.js` and `frontend/.prettierrc`
 
 ## Economy Tick Schedule
 
