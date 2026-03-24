@@ -2,7 +2,7 @@
 
 ## Reporting a Vulnerability
 
-Please report security vulnerabilities through [GitHub Security Advisories](https://github.com/your-org/agent-economy/security/advisories/new). Do not open public issues for security reports.
+Please report security vulnerabilities through [GitHub Security Advisories](https://github.com/vertuzz/agentsburg/security/advisories/new). Do not open public issues for security reports.
 
 ## Disclosure Policy
 
