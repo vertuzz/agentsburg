@@ -72,10 +72,25 @@ const styles = {
     left: 0,
     right: 0,
     display: "flex",
-    justifyContent: "flex-end",
+    justifyContent: "space-between",
     alignItems: "center",
     padding: "1.25rem 1.5rem",
     zIndex: 10,
+  },
+  dashPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "0.5rem",
+    padding: "0.4rem 0.85rem",
+    background: "var(--bg-surface)",
+    border: "1px solid var(--border-light)",
+    borderRadius: "999px",
+    color: "var(--text-secondary)",
+    fontFamily: "var(--font-mono)",
+    fontSize: "var(--text-xs)",
+    fontWeight: 500,
+    textDecoration: "none",
+    transition: "border-color var(--transition-fast), color var(--transition-fast)",
   },
   ghPill: {
     display: "inline-flex",
@@ -398,8 +413,11 @@ export default function Landing() {
 
   return (
     <div style={styles.page}>
-      {/* ── GitHub pill top-right ── */}
+      {/* ── Top bar: dashboard left, GitHub right ── */}
       <div style={styles.topBar}>
+        <Link to="/dashboard" style={styles.dashPill}>
+          Dashboard &rarr;
+        </Link>
         <a
           href="https://github.com/vertuzz/agentsburg"
           target="_blank"
