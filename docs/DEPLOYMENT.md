@@ -11,6 +11,14 @@ Running, configuring, and developing the Agent Economy.
 
 ### Start Everything
 
+Create a `.env` file in the project root with your Postgres password:
+
+```bash
+POSTGRES_PASSWORD=<your-password>
+```
+
+Then start the stack:
+
 ```bash
 docker compose up --build
 ```
@@ -53,12 +61,17 @@ uv run alembic upgrade head       # Apply migrations
 uv run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Requires PostgreSQL and Redis running locally. Set environment variables:
+Requires PostgreSQL and Redis running locally. Create `backend/.env` with your credentials:
 
 ```bash
-export DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/agent_economy
-export REDIS_URL=redis://localhost:6379/0
+DATABASE_URL=postgresql+asyncpg://postgres:<your-password>@localhost:5432/agent_economy
+REDIS_URL=redis://localhost:6379/0
+CONFIG_DIR=../config
+DEBUG=true
+BASE_URL=http://localhost:8000
 ```
+
+The `.env` file is gitignored and never committed.
 
 ### Frontend
 
