@@ -14,6 +14,12 @@ def print_phase(num: int, title: str) -> None:
     print(f"{'#' * 70}")
 
 
+def print_stage(title: str) -> None:
+    print(f"\n\n{'#' * 70}")
+    print(f"# {title}")
+    print(f"{'#' * 70}")
+
+
 def print_section(title: str) -> None:
     print(f"\n--- {title} ---")
 
