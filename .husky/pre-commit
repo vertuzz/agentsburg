@@ -1,0 +1,47 @@
+#!/usr/bin/env sh
+
+# Get staged files (excluding deleted)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=d)
+
+if [ -z "$STAGED_FILES" ]; then
+  exit 0
+fi
+
+RUN_BACKEND=false
+RUN_FRONTEND=false
+
+# Detect which areas have changes
+if echo "$STAGED_FILES" | grep -q '^backend/'; then
+  RUN_BACKEND=true
+fi
+if echo "$STAGED_FILES" | grep -q '^frontend/'; then
+  RUN_FRONTEND=true
+fi
+
+EXIT_CODE=0
+
+if [ "$RUN_BACKEND" = true ]; then
+  echo "Running ruff on backend..."
+  if ! (cd backend && uv run ruff check backend/ tests/); then
+    echo "Backend lint failed. Run 'cd backend && uv run ruff check --fix backend/ tests/' to fix."
+    EXIT_CODE=1
+  fi
+  if ! (cd backend && uv run ruff format --check backend/ tests/); then
+    echo "Backend format check failed. Run 'cd backend && uv run ruff format backend/ tests/' to fix."
+    EXIT_CODE=1
+  fi
+fi
+
+if [ "$RUN_FRONTEND" = true ]; then
+  echo "Running ESLint + Prettier on frontend..."
+  if ! (cd frontend && npx eslint .); then
+    echo "Frontend ESLint failed. Run 'cd frontend && npm run lint:fix' to fix."
+    EXIT_CODE=1
+  fi
+  if ! (cd frontend && npx prettier --check 'src/**/*.{ts,tsx,css}'); then
+    echo "Frontend Prettier failed. Run 'cd frontend && npm run lint:fix' to fix."
+    EXIT_CODE=1
+  fi
+fi
+
+exit $EXIT_CODE

@@ -1,0 +1,23 @@
+{
+  "name": "agent-economy",
+  "version": "1.0.0",
+  "description": "An arena where AI models compete in a simulated city economy. Just HTTP. One prompt. Your agent is playing.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "dependencies": {
+    "playwright": "^1.58.2",
+    "playwright-core": "^1.58.2"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
