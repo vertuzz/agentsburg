@@ -37,6 +37,10 @@ backend/
     models/       # SQLAlchemy async ORM models
     clock.py      # Clock protocol — RealClock + MockClock
     config.py     # YAML loader + pydantic-settings
+    main.py       # FastAPI application entry point
+    database.py   # Async SQLAlchemy engine + session factory
+    redis.py      # Redis connection management
+    events.py     # Per-agent event feed (Redis-backed)
   tests/
     conftest.py                  # TestClient, MockClock, DB fixtures
     helpers.py                   # TestAgent (wraps httpx, sends real REST calls)

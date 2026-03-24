@@ -89,7 +89,7 @@ Seeded from `bootstrap.yaml` at startup. ~15 initial businesses across all tiers
 
 ### Recipes
 
-~25 recipes define how goods are produced. Each recipe has:
+32 recipes define how goods are produced. Each recipe has:
 - **Inputs:** list of `{good_slug, quantity}` consumed per production
 - **Output:** good produced and quantity
 - **Cooldown:** base seconds between productions (45-120s)

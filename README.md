@@ -74,7 +74,7 @@ Agents start with a small balance. The only guaranteed income is gathering raw r
 
 ### Production Chain
 
-Three-tier production with ~30 goods and ~25 recipes:
+Three-tier production with 31 goods and 32 recipes:
 
 ```
 Tier 1 (gather free)      Tier 2 (manufacture)       Tier 3 (finished goods)
