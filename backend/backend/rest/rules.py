@@ -133,12 +133,12 @@ async def get_rules(request: Request):
             "POST /v1/businesses/inventory",
             True,
             "Transfer/view business inventory. Params: action (deposit|withdraw|view|batch_deposit|batch_withdraw), business_id (UUID), good (slug, for deposit/withdraw), quantity (int, for deposit/withdraw). Batch actions: goods [{good,quantity},...] (max 20 items).",
-            "Use deposit to stock inputs, withdraw to move goods out, view to see inventory + storefront prices. Batch moves multiple goods in one call. 10s cooldown on deposit/withdraw.",
+            "Use deposit to stock inputs, withdraw to move goods out, view to see inventory + storefront prices. Batch moves multiple goods in one call. 3s cooldown on deposit/withdraw.",
         ),
         (
             "POST /v1/inventory/discard",
             True,
-            "Destroy goods from personal inventory. Params: good (slug), quantity (int).",
+            "Destroy goods from personal inventory. Single: good (slug), quantity (int). Bulk: goods [{good_slug, quantity}, ...] (max 20). 3s cooldown.",
             "Use to free storage when stuck (storage full, can't cancel orders). Goods are permanently lost.",
         ),
         (
@@ -147,7 +147,12 @@ async def get_rules(request: Request):
             "Manage workforce. Params: action (post_job|hire_npc|fire|quit_job|close_business), business_id, title, wage, product, max_workers (1-100), employee_id.",
             "NPC workers: 2x wages, 50% efficiency, max 5/business.",
         ),
-        ("GET /v1/jobs", True, "Browse jobs. Params: zone, type, min_wage, page.", "Returns job_id for apply."),
+        (
+            "GET /v1/jobs",
+            True,
+            "Browse jobs. Params: zone, type, min_wage, page.",
+            "Returns job_id for apply. Each listing includes employer_can_pay (bool) — check before applying.",
+        ),
         (
             "POST /v1/jobs/apply",
             True,
@@ -157,8 +162,8 @@ async def get_rules(request: Request):
         (
             "POST /v1/work",
             True,
-            "Produce goods. No params — routes auto: employed=employer(wage), own business=self(no wage).",
-            "Employees auto-deposit personal inputs if business is short. NPC businesses auto-restock. Cooldown stacks: type bonus(0.65x), commute(1.5x), govt modifier, homeless(2x).",
+            "Produce goods. Optional param: business_id (UUID, pick which business if you own multiple). Routes auto: employed=employer(wage), own business=self(no wage).",
+            "If you own multiple businesses and omit business_id, auto-selects one with production configured. Employees auto-deposit personal inputs if business is short. NPC businesses auto-restock. Cooldown stacks: type bonus(0.65x), commute(1.5x), govt modifier, homeless(2x).",
         ),
         (
             "POST /v1/market/orders",
@@ -171,6 +176,12 @@ async def get_rules(request: Request):
             True,
             "Browse order books. Params: product (opt), page.",
             "Summary: last_price, best_bid/ask, 24h volume. Detail: full depth + recent trades.",
+        ),
+        (
+            "GET /v1/market/demand",
+            True,
+            "View NPC demand — what goods NPCs buy, reference prices, and price sensitivity. No params.",
+            "High-demand goods sell faster from storefronts. Price below reference_price for more buyers. Elasticity: low=essential, high=luxury.",
         ),
         (
             "GET /v1/market/my-orders",
@@ -212,7 +223,7 @@ async def get_rules(request: Request):
             "GET /v1/events",
             True,
             "Recent economy events. Params: limit (1-50, default 20).",
-            "Events: rent_charged, food_charged, evicted, order_filled, loan_payment, tax_collected, audit_fine, jailed. Expire after 24h.",
+            "Events: rent_charged, food_charged, evicted, order_filled, loan_payment, storefront_sale, tax_collected, audit_fine, jailed. Expire after 24h.",
         ),
         (
             "POST /v1/messages",
@@ -254,7 +265,7 @@ async def get_rules(request: Request):
     )
     w("")
     w(
-        "**Stocking a business**: Use POST /v1/businesses/inventory with action='deposit' to move goods from your personal inventory into business storage. Use action='withdraw' to pull goods out. Use action='view' to see business inventory and storefront prices. 10s cooldown per transfer."
+        "**Stocking a business**: Use POST /v1/businesses/inventory with action='deposit' to move goods from your personal inventory into business storage. Use action='withdraw' to pull goods out. Use action='view' to see business inventory and storefront prices. 3s cooldown per transfer."
     )
     w("")
     w(

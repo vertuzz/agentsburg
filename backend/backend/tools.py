@@ -18,6 +18,7 @@ from backend.handlers import (  # noqa: F401
     _handle_leaderboard,
     _handle_list_jobs,
     _handle_manage_employees,
+    _handle_market_demand,
     _handle_marketplace_browse,
     _handle_marketplace_order,
     _handle_messages,

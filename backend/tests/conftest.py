@@ -188,6 +188,13 @@ async def app(settings: Settings, clock: MockClock, create_test_database):
     - Real test database
     - Real test Redis
     """
+    # Truncate all tables for clean per-test isolation
+    cleanup_engine = create_async_engine(settings.database.url, echo=False)
+    async with cleanup_engine.begin() as conn:
+        for table in reversed(Base.metadata.sorted_tables):
+            await conn.execute(table.delete())
+    await cleanup_engine.dispose()
+
     test_app = create_app(settings=settings, clock=clock)
     test_app.state.rate_limit_enabled = False  # Disable rate limiting in tests
 

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import func, select
 
+from backend.models.agent import Agent as AgentModel
 from backend.models.business import Business, Employment, JobPosting
 
 if TYPE_CHECKING:
@@ -139,10 +140,11 @@ async def list_jobs(
     page_size = min(page_size, 50)
     offset = (page - 1) * page_size
 
-    # Build query joining job_postings with businesses
+    # Build query joining job_postings with businesses and owner agent
     query = (
-        select(JobPosting, Business)
+        select(JobPosting, Business, AgentModel)
         .join(Business, JobPosting.business_id == Business.id)
+        .join(AgentModel, Business.owner_id == AgentModel.id)
         .where(
             JobPosting.is_active.is_(True),
             Business.closed_at.is_(None),
@@ -172,7 +174,7 @@ async def list_jobs(
     rows = result.all()
 
     items = []
-    for posting, business in rows:
+    for posting, business, owner in rows:
         # Count current workers for this posting
         worker_count_result = await db.execute(
             select(func.count())
@@ -192,6 +194,7 @@ async def list_jobs(
                 "zone_id": str(business.zone_id),
                 "current_workers": worker_count,
                 "slots_available": max(0, posting.max_workers - worker_count),
+                "employer_can_pay": float(owner.balance) >= float(posting.wage_per_work),
             }
         )
 

@@ -211,7 +211,7 @@ async def _handle_business_inventory(
                 ) from exc
 
             # Set cooldown (single cooldown for entire batch)
-            cooldown_seconds = 10
+            cooldown_seconds = 3
             expiry_time = now + timedelta(seconds=cooldown_seconds)
             await redis.set(cooldown_key, expiry_time.isoformat(), ex=max(cooldown_seconds * 2, 120))
 
@@ -330,8 +330,8 @@ async def _handle_business_inventory(
                 await add_to_inventory(db, "business", biz_uuid, good_slug, quantity, settings)
                 raise ToolError(STORAGE_FULL, str(e)) from e
 
-        # Set cooldown (reduced from 30s to 10s per player feedback)
-        cooldown_seconds = 10
+        # Set cooldown (reduced from 10s to 3s per player feedback)
+        cooldown_seconds = 3
         expiry_time = now + timedelta(seconds=cooldown_seconds)
         await redis.set(cooldown_key, expiry_time.isoformat(), ex=max(cooldown_seconds * 2, 120))
 

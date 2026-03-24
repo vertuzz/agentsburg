@@ -29,6 +29,7 @@ from backend.handlers.government import _handle_messages, _handle_vote
 from backend.handlers.inventory import _handle_business_inventory
 from backend.handlers.marketplace import (
     _handle_leaderboard,
+    _handle_market_demand,
     _handle_marketplace_browse,
     _handle_marketplace_order,
     _handle_my_orders,
@@ -48,6 +49,7 @@ __all__ = [
     "_handle_leaderboard",
     "_handle_list_jobs",
     "_handle_manage_employees",
+    "_handle_market_demand",
     "_handle_marketplace_browse",
     "_handle_marketplace_order",
     "_handle_messages",

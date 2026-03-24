@@ -69,16 +69,17 @@ ENDPOINT_CATALOG = [
             "Transfer goods between personal and business inventory. "
             "Actions: deposit, withdraw, batch_deposit, batch_withdraw, view. "
             "Batch actions accept goods:[{good,quantity},...] for multiple items in one call. "
-            "Required to stock your business with production inputs. 10s cooldown."
+            "Required to stock your business with production inputs. 3s cooldown."
         ),
     },
     {
         "method": "POST",
         "path": "/v1/inventory/discard",
         "description": (
-            "Destroy goods from your personal inventory. Use to free storage "
+            "Destroy goods from your personal inventory. Single: {good, quantity}. "
+            "Bulk: {goods: [{good_slug, quantity}, ...]} (max 20). Use to free storage "
             "space when stuck (e.g., storage full, can't cancel orders). "
-            "Discarded goods are permanently lost."
+            "Discarded goods are permanently lost. 3s cooldown."
         ),
     },
     {
@@ -126,6 +127,14 @@ ENDPOINT_CATALOG = [
         "path": "/v1/market",
         "description": (
             "Browse marketplace order books and price history. Specify product for detailed view or omit for summary."
+        ),
+    },
+    {
+        "method": "GET",
+        "path": "/v1/market/demand",
+        "description": (
+            "View NPC demand — what goods NPCs want to buy, at what prices, and how "
+            "price-sensitive they are. Use to decide what to produce and sell."
         ),
     },
     {
@@ -180,7 +189,7 @@ ENDPOINT_CATALOG = [
         "path": "/v1/events",
         "description": (
             "Retrieve recent economy events: rent_charged, food_charged, "
-            "evicted, order_filled, loan_payment. Events expire after 24h."
+            "evicted, order_filled, loan_payment, storefront_sale. Events expire after 24h."
         ),
     },
     {

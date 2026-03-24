@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 
 from backend.agents.inventory import add_to_inventory, remove_from_inventory
+from backend.businesses.recipes import _work_cooldown_key
 from backend.models.agent import Agent
 from backend.models.business import Business, Employment, JobPosting
 from backend.models.inventory import InventoryItem
@@ -27,10 +29,10 @@ from backend.models.recipe import Recipe
 from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
+    import redis.asyncio as aioredis
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from backend.clock import Clock
     from backend.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -50,8 +52,16 @@ async def resolve_work_context(
     db: AsyncSession,
     agent: Agent,
     business_id: str | None = None,
+    redis: aioredis.Redis | None = None,
+    clock: Clock | None = None,
 ) -> WorkContext:
-    """Determine whether the agent is employed or self-employed."""
+    """Determine whether the agent is employed or self-employed.
+
+    When ``business_id`` is omitted and the agent owns multiple businesses,
+    iterates all open businesses and picks the first one that has production
+    configured.  When the work cooldown is active, raises a helpful error
+    listing all owned businesses so the agent can target a specific one.
+    """
     emp_result = await db.execute(
         select(Employment).where(
             Employment.agent_id == agent.id,
@@ -93,21 +103,27 @@ async def resolve_work_context(
         if business is None:
             raise ValueError(f"Business {business_id!r} not found, not owned by you, or closed.")
     else:
+        # Fetch ALL open businesses for this agent
         owned_result = await db.execute(
-            select(Business)
-            .where(
+            select(Business).where(
                 Business.owner_id == agent.id,
                 Business.closed_at.is_(None),
             )
-            .limit(1)
         )
-        business = owned_result.scalar_one_or_none()
-    if business is None:
-        raise ValueError(
-            "You are not employed and have no open business. "
-            "Apply for a job with apply_job(job_id) or register a business "
-            "with register_business(name, type, zone)."
-        )
+        owned_businesses = list(owned_result.scalars().all())
+
+        if not owned_businesses:
+            raise ValueError(
+                "You are not employed and have no open business. "
+                "Apply for a job with apply_job(job_id) or register a business "
+                "with register_business(name, type, zone)."
+            )
+
+        # Smart routing: pick best business (cooldown-aware if redis+clock available)
+        if redis is not None and clock is not None and len(owned_businesses) > 1:
+            business = await _pick_available_business(owned_businesses, agent, redis, clock)
+        else:
+            business = owned_businesses[0]
 
     if business.default_recipe_slug is not None:
         # Try direct recipe slug lookup first (new format).
@@ -141,6 +157,49 @@ async def resolve_work_context(
         is_employed=False,
         employment=None,
     )
+
+
+async def _pick_available_business(
+    businesses: list[Business],
+    agent: Agent,
+    redis: aioredis.Redis,
+    clock: Clock,
+) -> Business:
+    """Pick the best business when an agent owns multiple.
+
+    The work cooldown is per-agent (global), not per-business.  When the
+    cooldown is active, raise a helpful error listing all owned businesses
+    so the agent knows to pass ``business_id`` next time.  When the cooldown
+    is NOT active, return the first business that has production configured
+    (``default_recipe_slug`` set), falling back to the first business.
+    """
+    now = clock.now()
+    cooldown_key = _work_cooldown_key(agent.id)
+    stored_expiry = await redis.get(cooldown_key)
+
+    if stored_expiry:
+        try:
+            expiry_dt = datetime.fromisoformat(stored_expiry)
+            if expiry_dt.tzinfo is None:
+                expiry_dt = expiry_dt.replace(tzinfo=UTC)
+        except ValueError, TypeError:
+            # Corrupted expiry value — ignore and proceed
+            expiry_dt = None
+
+        if expiry_dt is not None and now < expiry_dt:
+            remaining = int((expiry_dt - now).total_seconds())
+            biz_list = ", ".join(f"{b.name} (id={b.id})" for b in businesses)
+            raise ValueError(
+                f"Work cooldown active. Try again in {remaining} seconds. "
+                f"You own {len(businesses)} businesses: {biz_list}. "
+                f"Tip: pass business_id to target a specific business when cooldown expires."
+            )
+
+    # No cooldown — prefer a business with production already configured
+    for b in businesses:
+        if b.default_recipe_slug is not None:
+            return b
+    return businesses[0]
 
 
 async def select_recipe(

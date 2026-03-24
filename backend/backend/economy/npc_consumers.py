@@ -42,6 +42,7 @@ from backend.models.transaction import Transaction
 from backend.models.zone import Zone
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
@@ -54,6 +55,7 @@ async def simulate_npc_purchases(
     db: AsyncSession,
     clock: Clock,
     settings: Settings,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Simulate NPC consumer purchases across all zones and goods.
@@ -283,6 +285,28 @@ async def simulate_npc_purchases(
                         "revenue": float(revenue),
                     }
                 )
+
+                # Emit storefront_sale event to business owner
+                if redis is not None and biz.owner_id is not None:
+                    from backend.events import emit_event
+
+                    await emit_event(
+                        redis,
+                        biz.owner_id,
+                        "storefront_sale",
+                        {
+                            "business_name": biz.name,
+                            "good_slug": good_slug,
+                            "quantity": units_to_sell,
+                            "price_per_unit": price,
+                            "revenue": float(revenue),
+                            "message": (
+                                f"Your storefront sold {units_to_sell} {good_slug} "
+                                f"at ${price:.2f}/ea (${float(revenue):.2f} revenue)"
+                            ),
+                        },
+                        clock,
+                    )
 
                 total_transactions += 1
                 total_revenue_float += float(revenue)

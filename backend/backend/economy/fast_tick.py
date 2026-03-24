@@ -59,7 +59,7 @@ async def run_fast_tick(
     # --- NPC storefront purchases ---
     from backend.economy.npc_consumers import simulate_npc_purchases
 
-    npc_result = await simulate_npc_purchases(db, clock, settings)
+    npc_result = await simulate_npc_purchases(db, clock, settings, redis=redis)
     processed.append(
         {
             "type": "npc_purchases",

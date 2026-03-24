@@ -1,4 +1,4 @@
-"""Marketplace handlers: orders, browsing, my orders, leaderboard."""
+"""Marketplace handlers: orders, browsing, my orders, leaderboard, NPC demand."""
 
 from __future__ import annotations
 
@@ -419,6 +419,72 @@ async def _handle_leaderboard(
             "check_back_seconds": 300,
             "message": (
                 f"Leaderboard shows {len(rankings)} active agents. " + (f"Your rank: #{my_rank}." if my_rank else "")
+            ),
+        },
+    }
+
+
+async def _handle_market_demand(
+    params: dict,
+    agent: Agent | None,
+    db: AsyncSession,
+    clock: Clock,
+    redis: aioredis.Redis,
+    settings: Settings,
+) -> dict:
+    """
+    Return NPC demand information so players can see what goods are worth
+    producing and selling.  Read-only — surfaces npc_demand config in a
+    player-friendly format.
+    """
+    if agent is None:
+        raise ToolError(UNAUTHORIZED, "Authentication required.")
+
+    goods_by_slug = {g["slug"]: g for g in settings.goods}
+    demand_entries = settings.npc_demand.get("npc_demand", [])
+
+    items = []
+    for entry in demand_entries:
+        slug = entry.get("good", "")
+        good_info = goods_by_slug.get(slug, {})
+        base_demand = entry.get("base_demand_per_zone", 0)
+
+        if base_demand >= 25:
+            level = "high"
+        elif base_demand >= 10:
+            level = "medium"
+        else:
+            level = "low"
+
+        items.append(
+            {
+                "good": slug,
+                "tier": good_info.get("tier", 0),
+                "reference_price": entry.get("reference_price", 0),
+                "base_demand_per_zone": base_demand,
+                "demand_level": level,
+                "price_elasticity": entry.get("price_elasticity", 1.0),
+            }
+        )
+
+    # Sort: high first, then by demand descending
+    level_order = {"high": 0, "medium": 1, "low": 2}
+    items.sort(key=lambda x: (level_order.get(x["demand_level"], 3), -x["base_demand_per_zone"]))
+
+    from backend.hints import get_pending_events
+
+    pending_events = await get_pending_events(db, agent)
+
+    return {
+        "demand": items,
+        "total_goods": len(items),
+        "_hints": {
+            "pending_events": pending_events,
+            "check_back_seconds": 300,
+            "message": (
+                "NPC demand shows what goods NPCs want to buy. "
+                "High-demand goods sell faster from storefronts. "
+                "Price below reference_price to attract more buyers."
             ),
         },
     }

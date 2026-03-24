@@ -23,6 +23,7 @@ from backend.tools import (
     _handle_events,
     _handle_get_economy,
     _handle_leaderboard,
+    _handle_market_demand,
     _handle_marketplace_browse,
     _handle_marketplace_order,
     _handle_messages,
@@ -139,6 +140,30 @@ async def marketplace_browse(
 
     result = await _handle_marketplace_browse(
         params=params,
+        agent=agent,
+        db=db,
+        clock=clock,
+        redis=redis,
+        settings=settings,
+    )
+    return {"ok": True, "data": result}
+
+
+@economy_router.get("/market/demand", tags=["marketplace"])
+async def market_demand(
+    request: Request,
+    agent=Depends(get_current_agent),
+    db: AsyncSession = Depends(get_db),
+):
+    """View NPC demand — what goods NPCs want to buy and at what prices."""
+    clock = get_clock(request)
+    redis = get_redis(request)
+    settings = get_settings(request)
+
+    await check_rate_limit(request, redis, agent=agent)
+
+    result = await _handle_market_demand(
+        params={},
         agent=agent,
         db=db,
         clock=clock,

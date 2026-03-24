@@ -130,8 +130,9 @@ async def _handle_inventory_discard(
     """
     Destroy goods from the agent's personal inventory.
 
+    Accepts either a single item (good + quantity) or a bulk list (goods: [{good_slug, quantity}, ...]).
     Use this to free storage space when stuck (e.g., storage full, can't cancel orders).
-    Discarded goods are permanently lost.
+    Discarded goods are permanently lost. 3s cooldown for the whole operation.
     """
     if agent is None:
         raise ToolError(UNAUTHORIZED, "Authentication required.")
@@ -143,6 +144,102 @@ async def _handle_inventory_discard(
     except ValueError as e:
         raise ToolError(IN_JAIL, str(e)) from e
 
+    # Check discard cooldown
+    from datetime import UTC, datetime, timedelta
+
+    cooldown_key = f"cooldown:discard:{agent.id}"
+    stored_expiry = await redis.get(cooldown_key)
+    now = clock.now()
+
+    if stored_expiry:
+        try:
+            expiry_dt = datetime.fromisoformat(
+                stored_expiry if isinstance(stored_expiry, str) else stored_expiry.decode()
+            )
+            if expiry_dt.tzinfo is None:
+                expiry_dt = expiry_dt.replace(tzinfo=UTC)
+            if now < expiry_dt:
+                remaining = int((expiry_dt - now).total_seconds())
+                raise ToolError(
+                    COOLDOWN_ACTIVE,
+                    f"Discard cooldown active. Try again in {remaining} seconds.",
+                )
+        except ToolError:
+            raise
+        except ValueError, TypeError:
+            pass  # Corrupted key — ignore
+
+    goods_config = {g["slug"]: g for g in settings.goods}
+
+    from backend.agents.inventory import get_storage_used, remove_from_inventory
+
+    # --- Bulk mode: goods list provided ---
+    goods_list = params.get("goods")
+    if goods_list is not None:
+        if not isinstance(goods_list, list) or not goods_list:
+            raise ToolError(
+                INVALID_PARAMS,
+                "Parameter 'goods' must be a non-empty list of {good_slug, quantity} objects.",
+            )
+        if len(goods_list) > 20:
+            raise ToolError(INVALID_PARAMS, "Maximum 20 goods per bulk discard.")
+
+        # Validate all items upfront
+        validated: list[tuple[str, int]] = []
+        for i, item in enumerate(goods_list):
+            if not isinstance(item, dict):
+                raise ToolError(INVALID_PARAMS, f"Item {i}: must be an object with 'good_slug' and 'quantity'.")
+            g = item.get("good_slug")
+            q = item.get("quantity")
+            if not g or not isinstance(g, str) or g not in goods_config:
+                raise ToolError(INVALID_PARAMS, f"Item {i}: unknown or missing good_slug {g!r}.")
+            if not isinstance(q, int) or isinstance(q, bool) or q <= 0:
+                raise ToolError(INVALID_PARAMS, f"Item {i}: quantity must be a positive integer.")
+            validated.append((g, q))
+
+        # Remove all items
+        discarded: list[dict] = []
+        for g, q in validated:
+            try:
+                await remove_from_inventory(db, "agent", agent.id, g, q)
+            except ValueError as e:
+                raise ToolError(INSUFFICIENT_INVENTORY, str(e)) from e
+            discarded.append({"good_slug": g, "quantity": q})
+
+        # Set cooldown
+        cooldown_seconds = 3
+        expiry_time = now + timedelta(seconds=cooldown_seconds)
+        await redis.set(cooldown_key, expiry_time.isoformat(), ex=max(cooldown_seconds * 2, 30))
+
+        storage_used = await get_storage_used(db, "agent", agent.id, settings)
+        capacity = settings.economy.agent_storage_capacity
+
+        from backend.hints import get_pending_events
+
+        pending_events = await get_pending_events(db, agent)
+
+        total_discarded = sum(d["quantity"] for d in discarded)
+        return {
+            "discarded": discarded,
+            "count": len(discarded),
+            "total_quantity": total_discarded,
+            "storage": {
+                "used": storage_used,
+                "capacity": capacity,
+                "free": capacity - storage_used,
+            },
+            "cooldown_seconds": cooldown_seconds,
+            "_hints": {
+                "pending_events": pending_events,
+                "check_back_seconds": cooldown_seconds,
+                "message": (
+                    f"Bulk discarded {total_discarded} items across {len(discarded)} goods. "
+                    f"Storage: {storage_used}/{capacity}."
+                ),
+            },
+        }
+
+    # --- Single-item mode (backwards compatible) ---
     good_slug = params.get("good")
     if not good_slug or not isinstance(good_slug, str):
         raise ToolError(INVALID_PARAMS, "Parameter 'good' (good slug) is required.")
@@ -151,17 +248,18 @@ async def _handle_inventory_discard(
     if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity <= 0:
         raise ToolError(INVALID_PARAMS, "Parameter 'quantity' must be a positive integer.")
 
-    # Validate good exists
-    goods_config = {g["slug"]: g for g in settings.goods}
     if good_slug not in goods_config:
         raise ToolError(INVALID_PARAMS, f"Unknown good: {good_slug!r}.")
-
-    from backend.agents.inventory import get_storage_used, remove_from_inventory
 
     try:
         await remove_from_inventory(db, "agent", agent.id, good_slug, quantity)
     except ValueError as e:
         raise ToolError(INSUFFICIENT_INVENTORY, str(e)) from e
+
+    # Set cooldown
+    cooldown_seconds = 3
+    expiry_time = now + timedelta(seconds=cooldown_seconds)
+    await redis.set(cooldown_key, expiry_time.isoformat(), ex=max(cooldown_seconds * 2, 30))
 
     storage_used = await get_storage_used(db, "agent", agent.id, settings)
     capacity = settings.economy.agent_storage_capacity
@@ -180,9 +278,10 @@ async def _handle_inventory_discard(
             "capacity": capacity,
             "free": capacity - storage_used,
         },
+        "cooldown_seconds": cooldown_seconds,
         "_hints": {
             "pending_events": pending_events,
-            "check_back_seconds": 60,
+            "check_back_seconds": cooldown_seconds,
             "message": f"Discarded {quantity}x {good_slug}. Storage: {storage_used}/{capacity}.",
         },
     }

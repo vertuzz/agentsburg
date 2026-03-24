@@ -157,7 +157,78 @@ async def run_business_transfers(client, app, clock, agents):
     assert err == "INVALID_PARAMS"
     print("  PASSED: Cannot discard zero quantity")
 
-    # 15i: Batch deposit rollback on failure
+    # 15i: Bulk discard — multiple items in one call
+    discard_agent = await TestAgent.signup(client, "discard_bulk_agent")
+    await give_inventory(app, "discard_bulk_agent", "wheat", 10)
+    await give_inventory(app, "discard_bulk_agent", "wood", 5)
+
+    clock.advance(10)
+    result = await discard_agent.call(
+        "inventory_discard",
+        {
+            "goods": [
+                {"good_slug": "wheat", "quantity": 3},
+                {"good_slug": "wood", "quantity": 2},
+            ],
+        },
+    )
+    assert result["count"] == 2, f"Expected 2 items discarded, got {result['count']}"
+    assert result["total_quantity"] == 5, f"Expected total 5, got {result['total_quantity']}"
+    assert isinstance(result["discarded"], list)
+    print("  PASSED: Bulk discard works (multiple items)")
+
+    # 15j: Bulk discard — cooldown enforced
+    _, err = await discard_agent.try_call(
+        "inventory_discard",
+        {
+            "goods": [
+                {"good_slug": "wheat", "quantity": 1},
+            ],
+        },
+    )
+    assert err == "COOLDOWN_ACTIVE", f"Expected COOLDOWN_ACTIVE, got {err}"
+    print("  PASSED: Bulk discard cooldown enforced")
+
+    # 15k: Bulk discard — insufficient inventory
+    clock.advance(10)
+    _, err = await discard_agent.try_call(
+        "inventory_discard",
+        {
+            "goods": [
+                {"good_slug": "wheat", "quantity": 999},
+            ],
+        },
+    )
+    assert err == "INSUFFICIENT_INVENTORY"
+    print("  PASSED: Bulk discard rejects insufficient inventory")
+
+    # 15l: Bulk discard — invalid item in list
+    clock.advance(10)
+    _, err = await discard_agent.try_call(
+        "inventory_discard",
+        {
+            "goods": [
+                {"good_slug": "unobtainium", "quantity": 1},
+            ],
+        },
+    )
+    assert err == "INVALID_PARAMS"
+    print("  PASSED: Bulk discard rejects unknown good")
+
+    # 15m: Single discard — cooldown also enforced
+    clock.advance(10)
+    await discard_agent.call(
+        "inventory_discard",
+        {"good": "wheat", "quantity": 1},
+    )
+    _, err = await discard_agent.try_call(
+        "inventory_discard",
+        {"good": "wheat", "quantity": 1},
+    )
+    assert err == "COOLDOWN_ACTIVE", f"Expected COOLDOWN_ACTIVE on single discard, got {err}"
+    print("  PASSED: Single discard cooldown enforced")
+
+    # 15n: Batch deposit rollback on failure (renamed from 15i)
     rollback_owner = await TestAgent.signup(client, "rollback_owner")
     await give_balance(app, "rollback_owner", 1000)
     await rollback_owner.call("rent_housing", {"zone": "outskirts"})

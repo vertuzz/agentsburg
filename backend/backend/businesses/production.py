@@ -80,7 +80,7 @@ async def work(
     now = clock.now()
 
     # Step 1: Determine context — employed or self-employed
-    ctx = await resolve_work_context(db, agent, business_id=business_id)
+    ctx = await resolve_work_context(db, agent, business_id=business_id, redis=redis, clock=clock)
 
     # Step 2: Get the recipe for the product
     recipe = await select_recipe(db, ctx.product_slug, ctx.business.type_slug)

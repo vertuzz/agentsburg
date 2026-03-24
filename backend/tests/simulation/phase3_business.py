@@ -454,6 +454,7 @@ async def run_phase_3(agents: dict[str, TestAgent], client, app, clock, run_tick
     assert discard_result["storage"]["used"] < storage_before
     print(f"  Discarded 5 stone, storage: {discard_result['storage']['used']}/{discard_result['storage']['capacity']}")
 
+    clock.advance(5)  # wait out discard cooldown
     _, err = await agents["eco_gatherer1"].try_call(
         "inventory_discard",
         {
@@ -498,7 +499,7 @@ async def run_phase_3(agents: dict[str, TestAgent], client, app, clock, run_tick
     )
     assert batch_dep["count"] == 3, f"batch_deposit should transfer 3 goods, got {batch_dep['count']}"
     assert len(batch_dep["transferred"]) == 3
-    assert batch_dep["cooldown_seconds"] == 10
+    assert batch_dep["cooldown_seconds"] == 3
     print(f"  Batch deposited 3 goods to farm (cooldown={batch_dep['cooldown_seconds']}s)")
 
     # Verify business got the goods
@@ -731,6 +732,34 @@ async def run_phase_3(agents: dict[str, TestAgent], client, app, clock, run_tick
     # Run 2 days of ticks
     await run_tick(hours=48)
     print("  Ran 2 days of ticks")
+
+    # --- 3q: Verify storefront_sale events emitted to business owners ---
+    print_section("Storefront sale events")
+
+    # Check that business owners received storefront_sale events after NPC purchases
+    for name in ["eco_baker", "eco_miller", "eco_lumberjack"]:
+        events_result = await agents[name].call("events", {})
+        sale_events = [e for e in events_result.get("events", []) if e["type"] == "storefront_sale"]
+        if sale_events:
+            ev = sale_events[0]
+            assert "business_name" in ev["detail"], "storefront_sale should include business_name"
+            assert "good_slug" in ev["detail"], "storefront_sale should include good_slug"
+            assert "revenue" in ev["detail"], "storefront_sale should include revenue"
+            assert "message" in ev["detail"], "storefront_sale should include message"
+            print(f"  {name}: {len(sale_events)} storefront_sale events (e.g. {ev['detail']['message']})")
+        else:
+            # Some businesses may not have had NPC demand for their goods
+            print(f"  {name}: no storefront_sale events (no NPC demand for stocked goods)")
+
+    # At least one business owner should have received sales
+    all_sale_events = []
+    for name in ["eco_baker", "eco_miller", "eco_lumberjack"]:
+        events_result = await agents[name].call("events", {})
+        all_sale_events.extend(e for e in events_result.get("events", []) if e["type"] == "storefront_sale")
+    assert len(all_sale_events) > 0, (
+        "At least one business owner should have storefront_sale events after 2 days of ticks"
+    )
+    print(f"  Total storefront_sale events across owners: {len(all_sale_events)}")
 
     print("\n  Phase 3 COMPLETE")
 
