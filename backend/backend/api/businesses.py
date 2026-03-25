@@ -23,6 +23,7 @@ router = APIRouter(tags=["api"])
 async def get_businesses_list(
     zone: str | None = Query(None, description="Filter by zone slug"),
     type: str | None = Query(None, description="Filter by business type slug"),
+    exclude_npc: bool = Query(False, description="Exclude NPC-owned businesses"),
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -32,6 +33,8 @@ async def get_businesses_list(
     """
     # Build base query filters
     filters = [Business.closed_at.is_(None)]
+    if exclude_npc:
+        filters.append(Business.is_npc.is_(False))
 
     if zone:
         zone_result = await db.execute(select(Zone).where(Zone.slug == zone))

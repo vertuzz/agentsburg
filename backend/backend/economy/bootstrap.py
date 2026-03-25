@@ -196,6 +196,7 @@ async def seed_npc_businesses(db: AsyncSession, settings: Settings) -> None:
             action_token=f"npc_{secrets.token_urlsafe(32)}",
             view_token=f"npc_{secrets.token_urlsafe(32)}",
             balance=float(initial_balance),
+            is_npc=True,
         )
         db.add(npc_agent)
         await db.flush()  # Get npc_agent.id

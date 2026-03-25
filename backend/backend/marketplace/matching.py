@@ -252,13 +252,14 @@ async def match_orders(
         }
         trade_details.append(trade_detail)
 
-        # Emit spectator event for each fill
+        # Emit spectator event for each fill (skip NPC-only trades)
         if redis is not None:
             try:
                 from backend.spectator.events import emit_spectator_event
 
+                both_npc = getattr(buyer, "is_npc", False) and getattr(seller, "is_npc", False)
                 drama = "notable" if trade_detail["total_value"] > 50 else "routine"
-                await emit_spectator_event(redis, "marketplace_fill", trade_detail, clock, drama)
+                await emit_spectator_event(redis, "marketplace_fill", trade_detail, clock, drama, is_npc=both_npc)
             except Exception:
                 pass
 

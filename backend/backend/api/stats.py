@@ -25,6 +25,7 @@ router = APIRouter(tags=["api"])
 @router.get("/stats")
 async def get_stats(
     request: Request,
+    exclude_npc: bool = Query(False, description="Exclude NPC agents and NPC transactions from stats"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """
@@ -32,6 +33,9 @@ async def get_stats(
 
     Returns GDP, population, active agents, government type,
     money supply, employment rate, and business counts.
+
+    Pass ``?exclude_npc=true`` to filter out NPC agents and
+    NPC-generated transactions for a player-only view.
     """
     settings = request.app.state.settings
     now = datetime.now(UTC)
@@ -39,26 +43,42 @@ async def get_stats(
     one_day_ago = now - timedelta(hours=24)
 
     # --- Population ---
-    pop_result = await db.execute(select(func.count(Agent.id)))
+    pop_query = select(func.count(Agent.id))
+    if exclude_npc:
+        pop_query = pop_query.where(Agent.is_npc == False)  # noqa: E712
+    pop_result = await db.execute(pop_query)
     population = pop_result.scalar() or 0
 
     # --- GDP: total marketplace + storefront transaction volume, last 24h ---
-    gdp_result = await db.execute(
-        select(func.coalesce(func.sum(Transaction.amount), 0)).where(
+    gdp_filters = [
+        Transaction.type.in_(["marketplace", "storefront"]),
+        Transaction.created_at >= one_day_ago,
+    ]
+    if exclude_npc:
+        # Exclude NPC transactions: storefront NPC purchases have from_agent_id=NULL,
+        # and NPC marketplace buys have an NPC buyer. Filter both out.
+        gdp_filters.append(
             and_(
-                Transaction.type.in_(["marketplace", "storefront"]),
-                Transaction.created_at >= one_day_ago,
+                Transaction.from_agent_id.isnot(None),
+                Transaction.from_agent_id.notin_(
+                    select(Agent.id).where(Agent.is_npc == True)  # noqa: E712
+                ),
             )
         )
-    )
+    gdp_result = await db.execute(select(func.coalesce(func.sum(Transaction.amount), 0)).where(and_(*gdp_filters)))
     gdp = float(gdp_result.scalar() or 0)
 
     # --- Active agents: had any transaction in last hour ---
-    active_result = await db.execute(
-        select(func.count(func.distinct(func.coalesce(Transaction.from_agent_id, Transaction.to_agent_id)))).where(
-            Transaction.created_at >= one_hour_ago
+    active_query = select(
+        func.count(func.distinct(func.coalesce(Transaction.from_agent_id, Transaction.to_agent_id)))
+    ).where(Transaction.created_at >= one_hour_ago)
+    if exclude_npc:
+        active_query = active_query.where(
+            func.coalesce(Transaction.from_agent_id, Transaction.to_agent_id).notin_(
+                select(Agent.id).where(Agent.is_npc == True)  # noqa: E712
+            )
         )
-    )
+    active_result = await db.execute(active_query)
     active_agents = active_result.scalar() or 0
 
     # --- Government ---
@@ -75,7 +95,10 @@ async def get_stats(
             break
 
     # --- Money supply: sum of all agent balances + bank deposits ---
-    wallet_result = await db.execute(select(func.coalesce(func.sum(Agent.balance), 0)))
+    wallet_query = select(func.coalesce(func.sum(Agent.balance), 0))
+    if exclude_npc:
+        wallet_query = wallet_query.where(Agent.is_npc == False)  # noqa: E712
+    wallet_result = await db.execute(wallet_query)
     wallet_total = float(wallet_result.scalar() or 0)
 
     deposit_result = await db.execute(select(func.coalesce(func.sum(BankAccount.balance), 0)))
@@ -84,9 +107,12 @@ async def get_stats(
     money_supply = wallet_total + deposit_total
 
     # --- Employment rate ---
-    employed_result = await db.execute(
-        select(func.count(func.distinct(Employment.agent_id))).where(Employment.terminated_at.is_(None))
-    )
+    employed_query = select(func.count(func.distinct(Employment.agent_id))).where(Employment.terminated_at.is_(None))
+    if exclude_npc:
+        employed_query = employed_query.join(Agent, Agent.id == Employment.agent_id).where(
+            Agent.is_npc == False  # noqa: E712
+        )
+    employed_result = await db.execute(employed_query)
     employed_count = employed_result.scalar() or 0
     employment_rate = (employed_count / population) if population > 0 else 0.0
 
@@ -105,6 +131,7 @@ async def get_stats(
         "gdp_24h": gdp,
         "population": population,
         "active_agents_1h": active_agents,
+        "exclude_npc": exclude_npc,
         "government": {
             "template_slug": current_template_slug,
             "template_name": template_name,

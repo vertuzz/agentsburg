@@ -211,11 +211,30 @@ async def spawn_demand_gap_businesses(
     recipes_by_output: dict[str, list[Recipe]],
     central_bank: CentralBank | None,
     now,
+    activity_factor: float = 1.0,
 ) -> list[dict]:
-    """Spawn new NPC businesses for goods with high demand but low supply."""
+    """Spawn new NPC businesses for goods with high demand but low supply.
+
+    Checks player business coverage first — skips spawning if ≥2 player
+    businesses already produce the good. Scales wages by activity factor.
+    """
     demand_entries = settings.npc_demand.get("npc_demand", [])
     zones_result = await db.execute(select(Zone))
     zones = {z.slug: z for z in zones_result.scalars().all()}
+
+    # Pre-load player business coverage per good (using default_recipe_slug)
+    player_coverage: dict[str, int] = {}
+    player_biz_result = await db.execute(
+        select(Business.default_recipe_slug, func.count(Business.id))
+        .where(
+            Business.is_npc.is_(False),
+            Business.closed_at.is_(None),
+            Business.default_recipe_slug.isnot(None),
+        )
+        .group_by(Business.default_recipe_slug)
+    )
+    for row in player_biz_result.all():
+        player_coverage[row[0]] = row[1]
 
     spawned: list[dict] = []
     max_spawns_per_tick = 2
@@ -252,6 +271,11 @@ async def spawn_demand_gap_businesses(
             continue
         recipe = producing_recipes[0]
 
+        # Skip if players already cover this good adequately
+        recipe_coverage = player_coverage.get(recipe.slug, 0)
+        if recipe_coverage >= 2:
+            continue
+
         goods_config = {g["slug"]: g for g in settings.goods}
         good_tier = goods_config.get(good_slug, {}).get("tier", 2)
         spawn_zone_slug = {1: "outskirts", 2: "industrial"}.get(good_tier, "suburbs")
@@ -270,6 +294,7 @@ async def spawn_demand_gap_businesses(
             balance=float(initial_balance),
             action_token=f"npc_{secrets.token_urlsafe(32)}",
             view_token=f"npc_{secrets.token_urlsafe(32)}",
+            is_npc=True,
         )
         db.add(npc_agent)
         await db.flush()
@@ -303,12 +328,16 @@ async def spawn_demand_gap_businesses(
             )
         )
         default_wage = float(getattr(settings.economy, "default_wage_per_work_call", 30))
+        # Boost wages when few players online to attract them
+        wage_boost = float(getattr(settings.economy, "npc_job_wage_boost_factor", 1.5))
+        # activity_factor high (1.0) = 0 players → boost wages; low (0.1) = many players → default
+        effective_wage = round(default_wage * (1 + activity_factor * (wage_boost - 1)), 2)
         db.add(
             JobPosting(
                 business_id=new_biz.id,
                 product_slug=good_slug,
                 title=f"{good_slug.replace('_', ' ').title()} Worker",
-                wage_per_work=default_wage,
+                wage_per_work=effective_wage,
                 max_workers=3,
                 is_active=True,
             )

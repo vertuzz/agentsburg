@@ -28,27 +28,33 @@ async def get_agents_list(
     request: Request,
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(50, ge=1, le=100),
+    exclude_npc: bool = Query(False, description="Exclude NPC agents"),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """
     Public list of all agents with limited info, ordered by total wealth DESC.
     """
     # Count total agents
-    count_result = await db.execute(select(func.count(Agent.id)))
+    count_query = select(func.count(Agent.id))
+    if exclude_npc:
+        count_query = count_query.where(Agent.is_npc == False)  # noqa: E712
+    count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
 
     offset = (page - 1) * page_size
 
     # Fetch all agents (limited page)
+    agents_query = select(Agent)
+    if exclude_npc:
+        agents_query = agents_query.where(Agent.is_npc == False)  # noqa: E712
     await db.execute(
-        select(Agent)
-        .order_by(desc(Agent.balance))
+        agents_query.order_by(desc(Agent.balance))
         .limit(page_size * 3)  # over-fetch to sort by total wealth
         .offset(0)
     )
     # We need total wealth = wallet + bank, so fetch all agents then sort
     # For correctness with pagination, fetch all and sort in Python
-    all_agents_result = await db.execute(select(Agent))
+    all_agents_result = await db.execute(agents_query)
     all_agents = all_agents_result.scalars().all()
 
     # Get bank accounts for all agents

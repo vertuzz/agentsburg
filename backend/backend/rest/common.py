@@ -45,6 +45,15 @@ async def _resolve_agent(
             status_code=401,
             detail="Invalid token. Use signup to get a valid action_token.",
         )
+
+    # Track agent activity for NPC scaling (30-min TTL)
+    try:
+        app_redis = getattr(request.app.state, "redis", None)
+        if app_redis is not None and not getattr(agent, "is_npc", False):
+            await app_redis.setex(f"agent:active:{agent.id}", 1800, "1")
+    except Exception:
+        pass  # Never fail auth due to activity tracking
+
     return agent
 
 

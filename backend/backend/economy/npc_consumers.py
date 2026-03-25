@@ -75,7 +75,14 @@ async def simulate_npc_purchases(
     Returns:
         Summary dict of all purchases made.
     """
+    from backend.economy.npc_scaling import compute_npc_activity_factor, get_online_player_count
+
     now = clock.now()
+
+    # Scale NPC demand based on online player count
+    online_count = await get_online_player_count(redis) if redis else 0
+    activity_factor = compute_npc_activity_factor(online_count, settings)
+
     npc_demand_config = settings.npc_demand
 
     # Parse demand config into a dict keyed by good slug
@@ -209,8 +216,8 @@ async def simulate_npc_purchases(
             amplification = min(price_ratio**elasticity, 2.0)
             effective_demand = base_demand * amplification
 
-            # Scale by zone multipliers
-            effective_demand *= foot_traffic * demand_multiplier
+            # Scale by zone multipliers and NPC activity factor
+            effective_demand *= foot_traffic * demand_multiplier * activity_factor
 
             if effective_demand <= 0:
                 continue
@@ -281,6 +288,7 @@ async def simulate_npc_purchases(
                         "units_sold": units_to_sell,
                         "price_per_unit": price,
                         "tick_time": now.isoformat(),
+                        "is_npc_transaction": True,
                     },
                 )
                 db.add(txn)

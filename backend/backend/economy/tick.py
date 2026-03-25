@@ -201,7 +201,7 @@ async def _run_slow_tick(
     try:
         from backend.economy.npc_businesses import simulate_npc_businesses
 
-        npc_biz_results = await simulate_npc_businesses(db, clock, settings)
+        npc_biz_results = await simulate_npc_businesses(db, clock, settings, redis=redis)
     except Exception:
         logger.exception("NPC business simulation failed — continuing")
 

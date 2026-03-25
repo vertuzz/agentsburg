@@ -65,9 +65,12 @@ async def process_survival_costs(
     now = clock.now()
     survival_cost = Decimal(str(settings.economy.survival_cost_per_hour)) * hours
 
-    # Count active agents first (for return value) — skip deactivated agents
+    # Count active non-NPC agents (NPCs are funded differently, no survival cost)
     count_result = await db.execute(
-        select(sqlfunc.count(Agent.id)).where(Agent.is_active == True)  # noqa: E712
+        select(sqlfunc.count(Agent.id)).where(
+            Agent.is_active == True,  # noqa: E712
+            Agent.is_npc == False,  # noqa: E712
+        )
     )
     agent_count = count_result.scalar_one()
 
@@ -79,16 +82,22 @@ async def process_survival_costs(
             "total_deducted": 0.0,
         }
 
-    # Batch UPDATE: deduct survival cost from all active agents in one query
+    # Batch UPDATE: deduct survival cost from all active non-NPC agents
     await db.execute(
         update(Agent)
-        .where(Agent.is_active == True)  # noqa: E712
+        .where(
+            Agent.is_active == True,  # noqa: E712
+            Agent.is_npc == False,  # noqa: E712
+        )
         .values(balance=Agent.balance - float(survival_cost))
     )
 
-    # Bulk insert transactions — one per active agent
+    # Bulk insert transactions — one per active non-NPC agent
     agent_ids_result = await db.execute(
-        select(Agent.id).where(Agent.is_active == True)  # noqa: E712
+        select(Agent.id).where(
+            Agent.is_active == True,  # noqa: E712
+            Agent.is_npc == False,  # noqa: E712
+        )
     )
     agent_ids = [row[0] for row in agent_ids_result.all()]
 
@@ -179,11 +188,12 @@ async def process_rent(
     if not zones_by_id:
         return {"type": "rent", "agents_charged": 0, "agents_evicted": 0, "total_collected": 0.0}
 
-    # Check if any active agents are housed
+    # Check if any active non-NPC agents are housed
     housed_check = await db.execute(
         select(sqlfunc.count(Agent.id)).where(
             Agent.housing_zone_id.is_not(None),
             Agent.is_active == True,  # noqa: E712
+            Agent.is_npc == False,  # noqa: E712
         )
     )
     housed_count = housed_check.scalar_one()
@@ -205,13 +215,13 @@ async def process_rent(
         if rent_due <= 0:
             continue
 
-        # Step 1: Find active agents in this zone who CAN pay rent
-        # Use a batch UPDATE with a WHERE clause for balance >= rent_due
+        # Step 1: Find active non-NPC agents in this zone who CAN pay rent
         can_pay_result = await db.execute(
             select(Agent.id).where(
                 Agent.housing_zone_id == zone.id,
                 Agent.balance >= float(rent_due),
                 Agent.is_active == True,  # noqa: E712
+                Agent.is_npc == False,  # noqa: E712
             )
         )
         can_pay_ids = [row[0] for row in can_pay_result.all()]
@@ -258,12 +268,13 @@ async def process_rent(
                         clock,
                     )
 
-        # Step 2: Evict active agents in this zone who CANNOT pay rent
+        # Step 2: Evict active non-NPC agents in this zone who CANNOT pay rent
         cant_pay_result = await db.execute(
             select(Agent.id, Agent.name).where(
                 Agent.housing_zone_id == zone.id,
                 Agent.balance < float(rent_due),
                 Agent.is_active == True,  # noqa: E712
+                Agent.is_npc == False,  # noqa: E712
             )
         )
         cant_pay = cant_pay_result.all()

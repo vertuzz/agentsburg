@@ -32,6 +32,7 @@ from backend.models.marketplace import MarketOrder
 from backend.models.transaction import Transaction
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
@@ -48,6 +49,7 @@ async def simulate_npc_marketplace_demand(
     db: AsyncSession,
     clock: Clock,
     settings: Settings,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Central bank buys raw goods from marketplace sell orders.
@@ -64,18 +66,14 @@ async def simulate_npc_marketplace_demand(
     Returns:
         Summary dict of purchases made.
     """
+    from backend.economy.npc_scaling import compute_npc_activity_factor, get_online_player_count
+
     now = clock.now()
 
-    # Scale buy cap with active player population
-    from sqlalchemy import func
-
-    active_count_result = await db.execute(
-        select(func.count(Agent.id)).where(
-            Agent.is_active == True,  # noqa: E712
-        )
-    )
-    active_agents = active_count_result.scalar_one() or 0
-    max_buy_per_good = max(_BASE_BUY_PER_GOOD_PER_TICK, active_agents * 3)
+    # Scale buy cap based on online player count (inversely)
+    online_count = await get_online_player_count(redis) if redis else 0
+    activity_factor = compute_npc_activity_factor(online_count, settings)
+    max_buy_per_good = max(10, int(_BASE_BUY_PER_GOOD_PER_TICK * activity_factor * 3))
 
     # Build lookup: good_slug -> reference_price from npc_demand config
     npc_demand_config = settings.npc_demand
@@ -190,6 +188,7 @@ async def simulate_npc_marketplace_demand(
                     "price_per_unit": float(sell_price),
                     "sell_order_id": str(order.id),
                     "npc_buyer": True,
+                    "is_npc_transaction": True,
                     "tick_time": now.isoformat(),
                 },
             )
@@ -240,6 +239,7 @@ async def place_npc_buy_orders(
     db: AsyncSession,
     clock: Clock,
     settings: Settings,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Place visible NPC buy orders on the marketplace for tier-1 and tier-2 goods.
@@ -294,14 +294,12 @@ async def place_npc_buy_orders(
     orders_placed = 0
     total_locked = Decimal("0")
 
-    # Scale order size with active agent count
-    from sqlalchemy import func
+    # Scale order size based on NPC activity factor
+    from backend.economy.npc_scaling import compute_npc_activity_factor, get_online_player_count
 
-    active_count_result = await db.execute(
-        select(func.count(Agent.id)).where(Agent.is_active == True)  # noqa: E712
-    )
-    active_agents = active_count_result.scalar_one() or 0
-    base_qty = max(10, active_agents * 2)
+    online_count = await get_online_player_count(redis) if redis else 0
+    activity_factor = compute_npc_activity_factor(online_count, settings)
+    base_qty = max(5, int(20 * activity_factor))
 
     for good_slug, ref_price in sorted(ref_prices.items()):
         # Determine order quantity based on demand

@@ -37,8 +37,15 @@ async def emit_spectator_event(
     detail: dict,
     clock: Clock,
     drama: str = "routine",
+    is_npc: bool = False,
 ) -> None:
-    """Push an event to the global spectator feed with narrative text."""
+    """Push an event to the global spectator feed with narrative text.
+
+    If ``is_npc`` is True, the event is silently dropped to keep
+    the spectator feed free of NPC-only noise.
+    """
+    if is_npc:
+        return
     if drama not in DRAMA_LEVELS:
         drama = "routine"
 

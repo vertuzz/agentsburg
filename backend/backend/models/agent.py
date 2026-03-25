@@ -70,6 +70,9 @@ class Agent(UUIDMixin, TimestampMixin, Base):
     # Whether the agent is active. Deactivated after max bankruptcies.
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
 
+    # Whether this agent is an NPC (non-player character) controlled by the economy engine
+    is_npc: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
     def __repr__(self) -> str:
         return f"<Agent name={self.name!r} balance={self.balance}>"
 

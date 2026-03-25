@@ -42,12 +42,13 @@ from backend.economy.npc_production import (
 )
 from backend.models.agent import Agent
 from backend.models.banking import CentralBank
-from backend.models.business import Business, StorefrontPrice
+from backend.models.business import Business, JobPosting, StorefrontPrice
 from backend.models.inventory import InventoryItem
 from backend.models.recipe import Recipe
 from backend.models.zone import Zone
 
 if TYPE_CHECKING:
+    import redis.asyncio as aioredis
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.clock import Clock
@@ -76,6 +77,7 @@ async def simulate_npc_businesses(
     db: AsyncSession,
     clock: Clock,
     settings: Settings,
+    redis: aioredis.Redis | None = None,
 ) -> dict:
     """
     Run all NPC business simulation logic for one slow tick.
@@ -86,8 +88,15 @@ async def simulate_npc_businesses(
       3. Check demand gaps → spawn new NPC businesses
       4. Adjust prices based on inventory levels
     """
+    from backend.economy.npc_scaling import compute_npc_activity_factor, get_online_player_count
+
     now = clock.now()
-    npc_efficiency = float(settings.economy.npc_worker_efficiency)
+
+    # Scale NPC production based on online player count
+    online_count = await get_online_player_count(redis) if redis else 0
+    activity_factor = compute_npc_activity_factor(online_count, settings)
+
+    npc_efficiency = float(settings.economy.npc_worker_efficiency) * activity_factor
     npc_wage_mult = float(settings.economy.npc_worker_wage_multiplier)
 
     # Load all open NPC businesses
@@ -145,30 +154,38 @@ async def simulate_npc_businesses(
         recipes_by_output,
         central_bank,
         now,
+        activity_factor=activity_factor,
     )
 
     # --- Step 5: Price adjustment ---
     price_adjustments = await _adjust_prices(db, settings)
 
+    # --- Step 6: Adjust NPC job wages based on player activity ---
+    wage_adjustments = await _adjust_job_wages(db, npc_businesses, activity_factor, settings)
+
     await db.flush()
 
     logger.info(
-        "NPC businesses: %d drained, %d produced, %d closed, %d spawned, %d price adjustments",
+        "NPC businesses: %d drained, %d produced, %d closed, %d spawned, %d price adj, %d wage adj (factor=%.2f)",
         len(drain_log),
         len(production_log),
         len(closures),
         len(spawned),
         len(price_adjustments),
+        len(wage_adjustments),
+        activity_factor,
     )
 
     return {
         "type": "npc_businesses",
         "timestamp": now.isoformat(),
+        "activity_factor": activity_factor,
         "drain": drain_log,
         "production": production_log,
         "closures": closures,
         "spawned": spawned,
         "price_adjustments": price_adjustments,
+        "wage_adjustments": wage_adjustments,
     }
 
 
@@ -287,7 +304,16 @@ async def _adjust_prices(
     db: AsyncSession,
     settings: Settings,
 ) -> list[dict]:
-    """Step 4: Adjust NPC storefront prices based on inventory levels."""
+    """Step 4: Adjust NPC storefront prices — market-aware and competition-aware.
+
+    Strategy:
+    - If player businesses sell the same good in the same zone, NPC retreats
+      toward ``reference_price * 1.1`` instead of undercutting.
+    - If marketplace sell orders exist, NPC uses the avg market price as a signal.
+    - Falls back to inventory-based adjustments when no market context exists.
+    """
+    from backend.models.marketplace import MarketOrder
+
     demand_entries = settings.npc_demand.get("npc_demand", [])
 
     active_npc_result = await db.execute(
@@ -302,6 +328,31 @@ async def _adjust_prices(
     prices_by_biz: dict[str, list[StorefrontPrice]] = {}
     for sp in prices_result.scalars().all():
         prices_by_biz.setdefault(str(sp.business_id), []).append(sp)
+
+    # Pre-load player storefront competition: {(zone_id, good_slug): count}
+    player_competition: dict[tuple, int] = {}
+    player_sp_result = await db.execute(
+        select(StorefrontPrice.good_slug, Business.zone_id, func.count(StorefrontPrice.id))
+        .join(Business, Business.id == StorefrontPrice.business_id)
+        .where(
+            Business.is_npc.is_(False),
+            Business.closed_at.is_(None),
+        )
+        .group_by(StorefrontPrice.good_slug, Business.zone_id)
+    )
+    for row in player_sp_result.all():
+        player_competition[(str(row[1]), row[0])] = row[2]
+
+    # Pre-load average marketplace sell prices per good
+    market_avg_result = await db.execute(
+        select(MarketOrder.good_slug, func.avg(MarketOrder.price))
+        .where(
+            MarketOrder.side == "sell",
+            MarketOrder.status.in_(["open", "partially_filled"]),
+        )
+        .group_by(MarketOrder.good_slug)
+    )
+    market_avg_prices: dict[str, float] = {row[0]: float(row[1]) for row in market_avg_result.all()}
 
     price_adjustments: list[dict] = []
 
@@ -334,15 +385,41 @@ async def _adjust_prices(
 
             ticks_of_stock = current_stock / expected if expected > 0 else float("inf")
 
+            # Check for player competition in this zone
+            zone_id_str = str(biz.zone_id) if biz.zone_id else ""
+            has_player_competition = player_competition.get((zone_id_str, good_slug), 0) > 0
+
+            # Get market context
+            market_price = market_avg_prices.get(good_slug)
+
             new_price = current_price
-            if current_stock == 0:
+
+            if has_player_competition:
+                # Players sell this good here — NPC retreats toward reference_price * 1.1
+                # to avoid undercutting players while still being available
+                retreat_target = Decimal(str(ref_price * 1.1))
+                if current_price < retreat_target:
+                    new_price = current_price * Decimal(str(PRICE_INCREASE_FACTOR))
+                    new_price = min(new_price, retreat_target)
+                elif current_price > retreat_target * Decimal("1.3"):
+                    # Too far above target, come down slowly
+                    new_price = current_price * Decimal(str(PRICE_REDUCTION_FACTOR))
+            elif current_stock == 0:
                 new_price = current_price * Decimal(str(PRICE_INCREASE_FACTOR))
                 new_price = min(new_price, Decimal(str(ref_price * 3.0)))
             elif ticks_of_stock > 5:
                 new_price = current_price * Decimal(str(PRICE_REDUCTION_FACTOR))
                 new_price = max(new_price, MIN_PRICE)
                 new_price = max(new_price, Decimal(str(ref_price * 0.5)))
+            elif market_price is not None:
+                # Align toward market price if significantly different
+                market_dec = Decimal(str(market_price))
+                if current_price > market_dec * Decimal("1.3"):
+                    new_price = current_price * Decimal(str(PRICE_REDUCTION_FACTOR))
+                elif current_price < market_dec * Decimal("0.7") and current_stock < expected * 2:
+                    new_price = current_price * Decimal(str(PRICE_INCREASE_FACTOR))
 
+            new_price = max(new_price, MIN_PRICE)
             new_price = round(new_price, 2)
             if new_price != current_price:
                 sp.price = float(new_price)
@@ -353,7 +430,53 @@ async def _adjust_prices(
                         "old_price": float(current_price),
                         "new_price": float(new_price),
                         "stock": current_stock,
+                        "player_competition": has_player_competition,
                     }
                 )
 
     return price_adjustments
+
+
+async def _adjust_job_wages(
+    db: AsyncSession,
+    npc_businesses: list[Business],
+    activity_factor: float,
+    settings: Settings,
+) -> list[dict]:
+    """Step 6: Adjust NPC job wages based on online player count.
+
+    When few players are online, boost wages to attract them.
+    When many players are online, return to default wages.
+    """
+    default_wage = float(getattr(settings.economy, "default_wage_per_work_call", 30))
+    wage_boost = float(getattr(settings.economy, "npc_job_wage_boost_factor", 1.5))
+    # activity_factor is high (1.0) when 0 players → boost wages to attract them
+    # activity_factor is low (0.1) when many players → wages at default
+    target_wage = round(default_wage * (1 + activity_factor * (wage_boost - 1)), 2)
+
+    npc_biz_ids = [biz.id for biz in npc_businesses]
+    if not npc_biz_ids:
+        return []
+
+    jobs_result = await db.execute(
+        select(JobPosting).where(
+            JobPosting.business_id.in_(npc_biz_ids),
+            JobPosting.is_active == True,  # noqa: E712
+        )
+    )
+    jobs = list(jobs_result.scalars().all())
+
+    adjustments: list[dict] = []
+    for job in jobs:
+        old_wage = float(job.wage_per_work)
+        if abs(old_wage - target_wage) >= 0.5:
+            job.wage_per_work = target_wage
+            adjustments.append(
+                {
+                    "job_title": job.title,
+                    "old_wage": old_wage,
+                    "new_wage": target_wage,
+                }
+            )
+
+    return adjustments

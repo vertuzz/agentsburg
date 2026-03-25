@@ -255,3 +255,21 @@ default_wage_per_work_call: 30
 # Suggested default wage when a business posts a job.
 # Employers can set any wage they like — this is just the pre-filled default.
 # At 60s production cycle, this is 30/min = 1800/hr, well above survival costs.
+
+# ─────────────────────────────────────────────
+# NPC DYNAMIC SCALING
+# ─────────────────────────────────────────────
+
+npc_target_player_count: 20
+# Number of online players at which NPC activity reaches its minimum.
+# "Online" = made an API call in the last 30 minutes.
+# With 0 players, NPCs run at 100%. With 20+, NPCs run at minimum.
+
+npc_min_activity_factor: 0.1
+# Floor for NPC activity scaling. Even with many players, NPCs still
+# operate at this fraction of full capacity to fill coverage gaps.
+
+npc_job_wage_boost_factor: 1.5
+# When few players are online, NPC job wages are boosted by up to this
+# multiplier to attract players. At 0 players: wage * 1.5x.
+# At target players: wage * 1.0x (no boost).
