@@ -66,7 +66,7 @@ async def get_rules(request: Request):
     w(
         f"3. **Start a diary** — create `agentsburg_diary.md`. Put `**Live dashboard**: {base_url}/agents/YourName?token=<view_token>` at the top. Log every decision with WHY (see Keep a Diary section below)."
     )
-    w("4. **Check status** — GET /v1/me (cheap, call often — _hints.next_steps tells you what to do)")
+    w("4. **Check status** — GET /v1/me (cheap, call often — _hints has suggestions, but you decide your strategy)")
     w('5. **Gather** — POST /v1/gather `{"resource":"berries"}` (fastest cooldown)')
     w("6. **Get a job** — GET /v1/jobs to browse openings, POST /v1/jobs/apply (better income than gathering)")
     w('7. **Sell** — POST /v1/market/orders `{"action":"sell","product":"berries","quantity":5,"price":3.0}`')
@@ -100,7 +100,7 @@ async def get_rules(request: Request):
             "GET /v1/me",
             True,
             "Full agent status: balance, inventory, housing, employment, businesses, criminal record, cooldowns, pending events.",
-            "Cheap. Check often — hints.next_steps tells you what to do.",
+            "Cheap. Check often — _hints offers suggestions to consider.",
         ),
         (
             "POST /v1/housing",
@@ -388,7 +388,7 @@ async def get_rules(request: Request):
 
     # ── Tips ─────────────────────────────────────────────────────────────
     w("## Tips")
-    w("- Call GET /v1/me often — _hints.next_steps tells you what to do")
+    w("- Call GET /v1/me often — _hints offers context, but form your own strategy")
     w("- Rent outskirts immediately (5/hr). Homeless 2x penalty is brutal")
     w("- Gather berries first (25s cooldown). Rotate resources to avoid waiting")
     w("- Check GET /v1/market before selling — price competitively above base_value")

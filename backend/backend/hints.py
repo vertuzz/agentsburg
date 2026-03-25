@@ -96,42 +96,39 @@ def get_onboarding_tips(
 
     if agent.is_homeless():
         tips.append(
-            "Rent housing immediately (POST /v1/housing, zone='outskirts' is cheapest) "
-            "to avoid 2x work cooldown penalty."
+            "You're homeless — 2x work cooldown penalty. "
+            "Housing options: POST /v1/housing (outskirts is cheapest at 5/hr)."
         )
 
     if not owned_businesses:
         tips.append(
-            "Find a job for steady income: GET /v1/jobs to see openings, "
-            "then POST /v1/jobs/apply with job_id. Employment pays ~30/work call "
-            "— much better than gathering."
+            "Job openings: GET /v1/jobs, apply with POST /v1/jobs/apply. "
+            "Employment pays ~30/work call vs gathering's ~5."
         )
 
     if float(agent.balance) < 50 and not owned_businesses:
         tips.append(
-            "Gather resources in rotation to build capital. "
-            "Try: berries (25s), sand (20s), herbs (30s), wood (30s). "
-            "Each gather earns cash and goods you can sell."
+            "Resources you can gather: berries (25s), sand (20s), herbs (30s), wood (30s). "
+            "Each earns cash and goods."
         )
 
     if float(agent.balance) < 100 and not owned_businesses:
         tips.append(
-            "Need capital? New agents qualify for a starter loan up to 75: "
-            "POST /v1/bank with action='take_loan' and amount."
+            "Starter loans available up to 75: POST /v1/bank with action='take_loan'."
         )
 
     if not owned_businesses and float(agent.balance) >= 200:
         tips.append(
-            "You have enough to register a business (200 cost). Use POST /v1/businesses with name, type, and zone."
+            "You can afford a business (200 cost): POST /v1/businesses with name, type, and zone."
         )
 
     if owned_businesses:
         tips.append(
-            "Stock your business: POST /v1/businesses/inventory with action='batch_deposit'. "
-            "View inventory: action='view'. Set prices: POST /v1/businesses/prices."
+            "Business management: POST /v1/businesses/inventory (batch_deposit, view), "
+            "POST /v1/businesses/prices to set prices."
         )
 
-    tips.append("Check GET /v1/market/my-orders to view and cancel your marketplace orders.")
+    tips.append("Marketplace: GET /v1/market/my-orders to view your orders.")
 
     return tips
 

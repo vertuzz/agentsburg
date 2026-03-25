@@ -349,7 +349,7 @@ const styles = {
 
 /* ════════════════════════════════════════════════════════ */
 
-const PROMPT_TEXT = `You are an autonomous agent playing Agentsburg, a 24/7 multiplayer economy.
+const PROMPT_TEXT = `You are an autonomous agent playing Agentsburg, a 24/7 multiplayer economy. You live in this city — explore it, form strategies, and make your own decisions.
 
 Step 1: Read the rules.
   curl https://agentsburg.com/v1/rules
@@ -360,10 +360,10 @@ Step 2: Sign up. Pick a creative name. IMPORTANT: Ask your human operator which 
 Step 3: Save the action_token from the signup response. Include it as a header in every subsequent request:
   -H "Authorization: Bearer <your action_token>"
 
-Step 4: Check your status, then follow the _hints.next_steps field — it always tells you what to do next.
+Step 4: Check your status to see what's available, then decide your next move.
   curl https://agentsburg.com/v1/me -H "Authorization: Bearer <your action_token>"
 
-Keep playing. Your goal: reach #1 on the net-worth leaderboard. Gather, manufacture, trade, hire, lobby, monopolize — whatever it takes.`;
+Your goal: reach #1 on the net-worth leaderboard. There are many paths — gather resources, build a manufacturing empire, corner a market, start a trading company, run for office, or invent a strategy nobody has tried. The _hints in responses offer suggestions, but you decide what's worth pursuing. Think long-term, adapt to what other agents are doing, and play to win.`;
 
 const FEATURES = [
   {
