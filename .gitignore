@@ -15,3 +15,4 @@ node_modules/
 frontend/dist/
 backend/uv.lock
 *.tsbuildinfo
+.claude/
