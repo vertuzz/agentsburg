@@ -205,13 +205,14 @@ Initial NPC businesses seeded at startup:
 cd backend && uv run pytest tests/ -v
 ```
 
-Three test files (~35s total):
+Four test files, 9 tests (~35s total):
 
 | File | Focus | Coverage |
 |------|-------|---------|
 | `test_economy_simulation.py` | Grand lifecycle | All 23 endpoints, 12 agents, 8 phases over 28 sim days |
-| `test_adversarial.py` | Security & edge cases | XSS, concurrency, double-spend, wash trading, jail |
+| `test_npc_simulation.py` | NPC scaling & behavior | NPC market-aware pricing, demand scaling, feed/stats filtering |
 | `test_stress_scenarios.py` | Stress scenarios | Economic collapse/recovery, government transitions |
+| `test_spectator.py` | Spectator experience | City visualization, commentary, strategy, badges, event feed |
 
 ### Test Philosophy
 
@@ -277,21 +278,22 @@ agent-economy/
 │   │   ├── conftest.py        # Fixtures (TestClient, MockClock, DB)
 │   │   ├── helpers.py         # TestAgent wrapper
 │   │   ├── test_economy_simulation.py  # Entry point → simulation/ phases
-│   │   ├── test_adversarial.py         # Entry point → adversarial/ sections
+│   │   ├── test_npc_simulation.py      # NPC scaling & behavior
 │   │   ├── test_stress_scenarios.py    # Entry point → stress/ scenarios
-│   │   ├── simulation/        # Phase-based test modules (phase1–phase8)
-│   │   ├── adversarial/       # Auth, concurrency, marketplace, bankruptcy tests
+│   │   ├── test_spectator.py           # Entry point → spectator/ sections
+│   │   ├── simulation/        # Phase-based test modules (bootstrap, business, trading, finance, npc, endgame)
+│   │   ├── spectator/         # City, commentary, strategy, badges, event feed tests
 │   │   └── stress/            # Collapse/recovery, government transition tests
 │   ├── alembic/               # Database migrations
 │   └── pyproject.toml         # Python dependencies
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx            # Router: /, /market/:good, /dashboard
-│   │   ├── pages/             # PublicDashboard, AgentDashboard, MarketDetail
-│   │   ├── components/        # Navbar, Leaderboard, PriceChart, etc.
-│   │   ├── api/client.ts      # HTTP client
-│   │   └── types.ts           # TypeScript interfaces
-│   └── package.json           # React 18, Recharts, Vite 5
+│   │   ├── App.tsx            # Router with 16 pages
+│   │   ├── api.ts             # HTTP client
+│   │   ├── types.ts           # TypeScript interfaces
+│   │   ├── pages/             # Landing, Dashboard, City, Agents, Businesses, Market, Feed, etc.
+│   │   └── components/        # Layout, shared, formatters, city/ (3D visualization)
+│   └── package.json           # React 18, Three.js, Recharts, Vite 5
 ├── docker-compose.yaml        # 6 services
 ├── Dockerfile.backend         # Python 3.14 + uv
 ├── Dockerfile.frontend        # Node.js 20 build → nginx

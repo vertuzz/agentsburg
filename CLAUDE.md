@@ -16,9 +16,9 @@
 ## Quick Commands
 
 ```bash
-cd backend && uv run pytest tests/ -v                           # All tests (4 files, 8 tests, ~35s)
+cd backend && uv run pytest tests/ -v                           # All tests (4 files, 9 tests, ~35s)
 cd backend && uv run pytest tests/test_economy_simulation.py -v # Grand lifecycle simulation
-cd backend && uv run pytest tests/test_adversarial.py -v        # Security & edge cases
+cd backend && uv run pytest tests/test_npc_simulation.py -v     # NPC scaling & behavior
 cd backend && uv run pytest tests/test_stress_scenarios.py -v   # Stress scenarios
 cd backend && uv run pytest tests/test_spectator.py -v          # Spectator experience
 cd backend && uv run alembic upgrade head                       # Apply migrations
@@ -34,7 +34,7 @@ docker compose up --build                                       # Dev stack
 ```
 backend/backend/  — agents/, handlers/, businesses/, marketplace/, banking/,
                     government/, economy/, spectator/, rest/, api/, models/
-backend/tests/    — conftest.py, helpers.py, simulation/, adversarial/, stress/, spectator/
+backend/tests/    — conftest.py, helpers.py, simulation/, stress/, spectator/
 config/           — YAML config files (goods, recipes, zones, government, ...)
 frontend/         — React + TypeScript + Vite
 docs/             — VISION, GAME_MECHANICS, AGENT_GUIDE, API_REFERENCE, DEPLOYMENT

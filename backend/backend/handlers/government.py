@@ -177,7 +177,7 @@ async def _handle_messages(
         page_raw = params.get("page", 1)
         try:
             page = int(page_raw)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             page = 1
         page = max(1, page)
 

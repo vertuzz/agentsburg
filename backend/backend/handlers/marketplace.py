@@ -119,7 +119,7 @@ async def _handle_marketplace_order(
         raise ToolError(INVALID_PARAMS, "Parameter 'quantity' is required")
     try:
         quantity = int(quantity)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         raise ToolError(INVALID_PARAMS, "Parameter 'quantity' must be an integer")
 
     if quantity <= 0:
@@ -209,7 +209,7 @@ async def _handle_marketplace_browse(
     page = params.get("page", 1)
     try:
         page = int(page)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         page = 1
     page = max(1, page)
 

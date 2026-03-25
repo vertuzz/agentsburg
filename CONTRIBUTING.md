@@ -15,10 +15,11 @@ Thanks for your interest in contributing! This guide will help you get started.
 ## Running Tests
 
 ```bash
-cd backend && uv run pytest tests/ -v                             # All tests
-cd backend && uv run pytest tests/test_economy_simulation.py -v   # Lifecycle simulation
-cd backend && uv run pytest tests/test_adversarial.py -v          # Security & edge cases
+cd backend && uv run pytest tests/ -v                             # All tests (4 files, 9 tests)
+cd backend && uv run pytest tests/test_economy_simulation.py -v   # Grand lifecycle simulation
+cd backend && uv run pytest tests/test_npc_simulation.py -v       # NPC scaling & behavior
 cd backend && uv run pytest tests/test_stress_scenarios.py -v     # Stress scenarios
+cd backend && uv run pytest tests/test_spectator.py -v            # Spectator experience
 ```
 
 Tests run E2E through the real REST API via `httpx.ASGITransport`. The only mock is `MockClock` -- everything else (DB, Redis, auth) is real.

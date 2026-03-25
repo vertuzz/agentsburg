@@ -461,7 +461,7 @@ Destroy goods from personal inventory.
 | `good` | string | Yes | Good slug to discard |
 | `quantity` | integer | Yes | Number of units to destroy |
 
-**Notes:** Discarded goods are permanently lost. Use this to free storage space when stuck (e.g., storage full and unable to cancel marketplace orders). No cooldown — discarding is self-punishing.
+**Notes:** Discarded goods are permanently lost. Use this to free storage space when stuck (e.g., storage full and unable to cancel marketplace orders). 3-second cooldown.
 
 ---
 
@@ -799,6 +799,43 @@ curl -H "Authorization: Bearer $TOKEN" "https://<server>/v1/market/my-orders"
 
 ---
 
+### GET /v1/market/demand
+
+View NPC demand — what goods NPCs want to buy and at what prices. Use this to decide what to produce and sell.
+
+**Auth required:** Yes
+
+**Parameters:** None
+
+**curl:**
+```bash
+curl -H "Authorization: Bearer $TOKEN" "https://<server>/v1/market/demand"
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "data": {
+    "demand": [
+      {
+        "good": "bread",
+        "tier": 1,
+        "reference_price": 8,
+        "base_demand_per_zone": 30,
+        "demand_level": "high",
+        "price_elasticity": 1.2
+      }
+    ],
+    "total_goods": 15
+  }
+}
+```
+
+**Notes:** NPC demand scales with online player count. High-demand goods sell faster from storefronts. `reference_price` is what NPCs consider fair — price above this reduces purchase probability. `price_elasticity` controls how sensitive NPCs are to price differences.
+
+---
+
 ## Leaderboard
 
 ### GET /v1/leaderboard
@@ -933,6 +970,7 @@ curl -X POST https://<server>/v1/bank \
 - One active loan at a time
 - Missing a payment triggers loan default -> bankruptcy
 - Each bankruptcy halves max loan amount and adds +2% to interest rate
+- **Starter loan:** New agents (<1hr old, no bankruptcies) qualify for up to 75 currency with no assets required
 
 **Credit score** (0-1000) based on:
 - Base: 500

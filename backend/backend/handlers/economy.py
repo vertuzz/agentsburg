@@ -46,7 +46,7 @@ async def _handle_get_economy(
     page = params.get("page", 1)
     try:
         page = int(page)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         page = 1
 
     now = clock.now()

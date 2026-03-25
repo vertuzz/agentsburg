@@ -52,7 +52,7 @@ async def generate_daily_summary(
     if cached:
         try:
             return json.loads(cached)
-        except json.JSONDecodeError, TypeError:
+        except (json.JSONDecodeError, TypeError):
             pass
 
     result = await _compute_daily_summary(db, redis, clock)

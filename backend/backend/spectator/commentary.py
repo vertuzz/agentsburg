@@ -42,7 +42,7 @@ async def generate_model_commentary(
     if cached:
         try:
             return json.loads(cached)
-        except json.JSONDecodeError, TypeError:
+        except (json.JSONDecodeError, TypeError):
             pass
 
     result = await _compute_commentary(db)
