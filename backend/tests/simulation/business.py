@@ -10,6 +10,7 @@ Covers:
 - Workers producing goods, wage verification, work cooldowns
 - Self-employed flag and multi-business work routing
 - Employee auto-deposit and NPC business auto-restock
+- Employee overflow: goods go to personal inventory when business storage is full
 - Extraction recipes (zero-input production)
 - Inventory discard (single, bulk) with edge cases
 - Batch deposit rollback on partial failure
@@ -654,6 +655,95 @@ async def run_business(agents: dict[str, TestAgent], client, app, clock, run_tic
             print("  No NPC job posting found, skipping NPC restock test")
     else:
         print("  No NPC business with input recipe found, skipping NPC restock test")
+
+    # ------------------------------------------------------------------
+    # Employee overflow: goods to personal inventory when business full
+    # ------------------------------------------------------------------
+    print_section("Employee overflow (storage full)")
+
+    # Create a tiny-storage business for overflow testing
+    overflow_owner = await TestAgent.signup(client, "overflow_boss")
+    overflow_worker = await TestAgent.signup(client, "overflow_worker")
+    await give_balance(app, "overflow_boss", 5000)
+    await give_balance(app, "overflow_worker", 500)
+    await overflow_owner.call("rent_housing", {"zone": "outskirts"})
+    await overflow_worker.call("rent_housing", {"zone": "outskirts"})
+
+    overflow_biz = await overflow_owner.call(
+        "register_business",
+        {"name": "Tiny Farm", "type": "farm", "zone": "outskirts"},
+    )
+    overflow_biz_id = overflow_biz["business_id"]
+    await overflow_owner.call(
+        "configure_production",
+        {"business_id": overflow_biz_id, "product": "wheat"},
+    )
+
+    # Post a job and hire the worker
+    overflow_job = await overflow_owner.call(
+        "manage_employees",
+        {
+            "business_id": overflow_biz_id,
+            "action": "post_job",
+            "title": "Wheat Farmer",
+            "wage": 10.0,
+            "product": "wheat",
+            "max_workers": 1,
+        },
+    )
+    await overflow_worker.call("apply_job", {"job_id": overflow_job["job_id"]})
+
+    # Fill business storage to near-capacity via direct DB insert
+    async with app.state.session_factory() as session:
+        biz_uuid = _uuid.UUID(overflow_biz_id)
+        # wheat has storage_size=1, business_capacity=500
+        # Fill with 498 wheat so producing 5 more would exceed capacity
+        session.add(
+            InventoryItem(
+                owner_type="business",
+                owner_id=biz_uuid,
+                good_slug="wheat",
+                quantity=498,
+            )
+        )
+        await session.commit()
+
+    # Worker works — business is nearly full, output (5 wheat) overflows to employee
+    clock.advance(120)
+    worker_bal_before = await get_balance(app, "overflow_worker")
+    overflow_result = await overflow_worker.call("work", {})
+
+    assert overflow_result["produced"]["good"] == "wheat"
+    assert overflow_result["produced"]["overflow_to_employee"] is True, (
+        "Expected overflow_to_employee=True when business storage is full"
+    )
+    assert overflow_result["employed"] is True
+    assert overflow_result["wage_earned"] == 10.0
+
+    # Verify worker got paid
+    worker_bal_after = await get_balance(app, "overflow_worker")
+    assert float(worker_bal_after - worker_bal_before) == 10.0
+
+    # Verify goods are in worker's personal inventory, not business
+    worker_wheat = await get_inventory_qty(app, "overflow_worker", "wheat")
+    assert worker_wheat >= 5, f"Worker should have ≥5 wheat from overflow, got {worker_wheat}"
+
+    # Verify business inventory didn't change (still 498)
+    async with app.state.session_factory() as session:
+        biz_inv = (
+            await session.execute(
+                select(InventoryItem).where(
+                    InventoryItem.owner_type == "business",
+                    InventoryItem.owner_id == _uuid.UUID(overflow_biz_id),
+                    InventoryItem.good_slug == "wheat",
+                )
+            )
+        ).scalar_one_or_none()
+        assert biz_inv.quantity == 498, f"Business wheat should stay at 498, got {biz_inv.quantity}"
+    print(f"  Overflow: worker got {worker_wheat} wheat + wage 10.0, business stayed at 498")
+
+    # Clean up: quit job
+    await overflow_worker.call("manage_employees", {"action": "quit_job"})
 
     # ------------------------------------------------------------------
     # Closed business transfer test

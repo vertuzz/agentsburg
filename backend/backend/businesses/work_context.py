@@ -347,10 +347,17 @@ async def produce_output(
     recipe: Recipe,
     inputs: list[dict[str, Any]],
     settings: Settings,
-) -> InventoryItem:
-    """Add produced goods to business inventory; rolls back inputs on storage-full."""
+    employee_agent: Agent | None = None,
+) -> tuple[InventoryItem, bool]:
+    """Add produced goods to business inventory; rolls back inputs on storage-full.
+
+    When *employee_agent* is provided and the business is full, the output
+    overflows into the employee's personal inventory instead of failing.
+    Returns ``(inventory_item, overflowed)`` where *overflowed* is True when
+    goods were placed in the employee's inventory rather than the business.
+    """
     try:
-        return await add_to_inventory(
+        item = await add_to_inventory(
             db=db,
             owner_type="business",
             owner_id=business.id,
@@ -358,7 +365,30 @@ async def produce_output(
             quantity=recipe.output_quantity,
             settings=settings,
         )
+        return item, False
     except ValueError:
+        # Business storage full — try overflow to employee if applicable
+        if employee_agent is not None:
+            try:
+                item = await add_to_inventory(
+                    db=db,
+                    owner_type="agent",
+                    owner_id=employee_agent.id,
+                    good_slug=recipe.output_good,
+                    quantity=recipe.output_quantity,
+                    settings=settings,
+                )
+                logger.info(
+                    "Business %r storage full — overflow %dx %s to employee %s",
+                    business.name,
+                    recipe.output_quantity,
+                    recipe.output_good,
+                    employee_agent.name,
+                )
+                return item, True
+            except ValueError:
+                pass  # Employee inventory also full — fall through to error
+
         logger.warning(
             "Business %r storage full during work() — re-adding inputs",
             business.name,

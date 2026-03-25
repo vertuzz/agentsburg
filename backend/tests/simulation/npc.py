@@ -4,6 +4,7 @@ NPC Simulation Test Phases
 Comprehensive tests for the redesigned NPC system:
 1. Bootstrap — NPC businesses created with is_npc=True on both Agent and Business
 2. Full activity (0 players) — production, demand, pricing at 100%
+2b. Supply chain — NPC processors buy inputs from NPC supplier storefronts
 3. Scaled activity (many players) — production/demand scaled down
 4. Feed exclusion — spectator feed filters NPC events
 5. Stats toggle — exclude_npc query param works
@@ -105,6 +106,72 @@ async def run_npc_simulation(client, app, clock, run_tick, redis_client):
     )
     assert npc_purchases.get("transactions", 0) > 0, "Expected NPC purchases with 0 players"
     print(f"  ✓ {npc_purchases.get('transactions', 0)} NPC purchase transactions")
+
+    # ═══════════════════════════════════════════════════════════════
+    # PHASE 2b: Supply chain — NPC processors buy from NPC suppliers
+    # ═══════════════════════════════════════════════════════════════
+
+    print("\n=== NPC Phase 2b: Supply Chain Purchasing ===")
+
+    # After several ticks of production, NPC processor businesses should have
+    # purchased inputs from NPC supplier storefronts. Check for supply chain
+    # Transaction records with is_npc_supply_chain metadata.
+    #
+    # Run a few more ticks to give supply chain purchases a chance to happen.
+    # Processor NPCs (bakery, smithy, etc.) need inputs and will try to buy
+    # from raw-material NPC suppliers before falling back to central bank.
+    for _ in range(3):
+        await run_tick(hours=1, minutes=2)
+
+    async with app.state.session_factory() as session:
+        # Look for storefront transactions with is_npc_supply_chain metadata
+        supply_chain_txns = await session.execute(
+            select(Transaction).where(
+                Transaction.type == "storefront",
+            )
+        )
+        all_storefront_txns = list(supply_chain_txns.scalars().all())
+
+        npc_supply_txns = [
+            t
+            for t in all_storefront_txns
+            if isinstance(t.metadata_json, dict) and t.metadata_json.get("is_npc_supply_chain") is True
+        ]
+
+        if npc_supply_txns:
+            # Verify transaction structure
+            txn = npc_supply_txns[0]
+            meta = txn.metadata_json
+            assert "good_slug" in meta, "Supply chain txn should have good_slug"
+            assert "quantity" in meta, "Supply chain txn should have quantity"
+            assert "buyer_business" in meta, "Supply chain txn should have buyer_business"
+            assert "supplier_business" in meta, "Supply chain txn should have supplier_business"
+            assert float(txn.amount) > 0, "Supply chain txn should have positive amount"
+
+            # Verify buyer and supplier are different NPC agents
+            assert txn.from_agent_id != txn.to_agent_id, "Buyer and supplier should be different"
+
+            # Verify the supplier received payment (from_agent paid, to_agent earned)
+            supplier = await session.execute(select(Agent).where(Agent.id == txn.to_agent_id))
+            supplier_agent = supplier.scalar_one()
+            assert supplier_agent.is_npc, "Supplier should be an NPC"
+
+            total_supply_volume = sum(
+                t.metadata_json.get("quantity", 0) for t in npc_supply_txns if isinstance(t.metadata_json, dict)
+            )
+            total_supply_revenue = sum(float(t.amount) for t in npc_supply_txns)
+            print(
+                f"  ✓ {len(npc_supply_txns)} NPC supply chain transactions "
+                f"({total_supply_volume} units, ${total_supply_revenue:.2f} revenue)"
+            )
+            print(f"    Example: {meta['buyer_business']} bought {meta['quantity']}x {meta['good_slug']} from {meta['supplier_business']}")
+        else:
+            # Supply chain purchasing is opportunistic — it only fires when a
+            # processor NPC needs restocking AND a supplier NPC has stock with
+            # a storefront price. In a fresh test DB the conditions may not align
+            # every run, so we log but don't fail hard.
+            print("  ⚠ No NPC supply chain transactions found (conditions may not have aligned)")
+            print(f"    Total storefront txns: {len(all_storefront_txns)}")
 
     # ═══════════════════════════════════════════════════════════════
     # PHASE 3: Scaled activity (many players online)

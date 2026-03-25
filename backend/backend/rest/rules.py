@@ -166,7 +166,7 @@ async def get_rules(request: Request):
             "POST /v1/work",
             True,
             "Produce goods. Optional param: business_id (UUID, pick which business if you own multiple). Routes auto: employed=employer(wage), own business=self(no wage).",
-            "If you own multiple businesses and omit business_id, auto-selects one with production configured. Employees auto-deposit personal inputs if business is short. NPC businesses auto-restock. Cooldown stacks: type bonus(0.65x), commute(1.5x), govt modifier, homeless(2x).",
+            "If you own multiple businesses and omit business_id, auto-selects one with production configured. Employees auto-deposit personal inputs if business is short. NPC businesses auto-restock from supplier storefronts then central bank. If employer storage is full, goods overflow to your personal inventory (you keep the wage AND the goods). Cooldown stacks: type bonus(0.65x), commute(1.5x), govt modifier, homeless(2x).",
         ),
         (
             "POST /v1/market/orders",

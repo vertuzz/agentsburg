@@ -3,7 +3,8 @@ NPC Production & Spawning Logic for Agent Economy.
 
 Extracted from npc_businesses.py. Handles:
   - Auto-produce: NPC businesses produce goods each tick using their recipe.
-  - Auto-stock: Buy missing recipe inputs from the central bank at base_value.
+  - Auto-stock: Buy missing recipe inputs — first from NPC supplier storefronts
+    (creating a real supply chain), then from the central bank as fallback.
   - Demand gap spawning: Create new NPC businesses for under-supplied goods.
 """
 
@@ -34,6 +35,109 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def _buy_from_npc_suppliers(
+    db: AsyncSession,
+    buyer_biz: Business,
+    buyer_owner: Agent,
+    good_slug: str,
+    quantity_needed: int,
+    settings: Settings,
+) -> int:
+    """Try to buy inputs from NPC supplier storefronts.
+
+    Queries all NPC businesses that have *good_slug* in stock with a
+    storefront price, ordered by price ascending (cheapest first).
+    Purchases as much as possible up to *quantity_needed*.
+
+    Returns the total quantity acquired.
+    """
+    from backend.agents.inventory import add_to_inventory as _add_inv
+
+    # Find NPC suppliers with stock and a storefront price for this good
+    supplier_q = (
+        select(StorefrontPrice, InventoryItem, Business, Agent)
+        .join(Business, Business.id == StorefrontPrice.business_id)
+        .join(Agent, Agent.id == Business.owner_id)
+        .join(
+            InventoryItem,
+            (InventoryItem.owner_type == "business")
+            & (InventoryItem.owner_id == Business.id)
+            & (InventoryItem.good_slug == StorefrontPrice.good_slug),
+        )
+        .where(
+            StorefrontPrice.good_slug == good_slug,
+            Business.is_npc == True,  # noqa: E712
+            Business.closed_at.is_(None),
+            Business.id != buyer_biz.id,
+            InventoryItem.quantity > 0,
+        )
+        .order_by(StorefrontPrice.price)
+    )
+    result = await db.execute(supplier_q)
+    rows = result.all()
+
+    total_acquired = 0
+    buyer_balance = Decimal(str(buyer_owner.balance))
+
+    for sp, inv_item, supplier_biz, supplier_owner in rows:
+        if total_acquired >= quantity_needed:
+            break
+
+        still_need = quantity_needed - total_acquired
+        can_buy = min(still_need, inv_item.quantity)
+        unit_price = Decimal(str(sp.price))
+        total_cost = unit_price * can_buy
+
+        # Check buyer can afford
+        if total_cost > buyer_balance:
+            can_buy = int(buyer_balance / unit_price) if unit_price > 0 else 0
+            if can_buy <= 0:
+                continue
+            total_cost = unit_price * can_buy
+
+        # Execute the purchase
+        inv_item.quantity -= can_buy
+        buyer_balance -= total_cost
+        buyer_owner.balance = float(buyer_balance)
+        supplier_owner.balance = float(Decimal(str(supplier_owner.balance)) + total_cost)
+
+        with contextlib.suppress(ValueError):
+            await _add_inv(db, "business", buyer_biz.id, good_slug, can_buy, settings)
+
+        # Record the transaction
+        db.add(
+            Transaction(
+                type="storefront",
+                from_agent_id=buyer_owner.id,
+                to_agent_id=supplier_owner.id,
+                amount=float(total_cost),
+                metadata_json={
+                    "good_slug": good_slug,
+                    "quantity": can_buy,
+                    "unit_price": float(unit_price),
+                    "buyer_business": buyer_biz.name,
+                    "supplier_business": supplier_biz.name,
+                    "is_npc_supply_chain": True,
+                },
+            )
+        )
+
+        total_acquired += can_buy
+        logger.debug(
+            "NPC supply chain: %s bought %dx %s from %s at %.2f/unit",
+            buyer_biz.name,
+            can_buy,
+            good_slug,
+            supplier_biz.name,
+            float(unit_price),
+        )
+
+    if total_acquired > 0:
+        await db.flush()
+
+    return total_acquired
+
+
 async def _auto_restock_inputs(
     db: AsyncSession,
     biz: Business,
@@ -42,9 +146,39 @@ async def _auto_restock_inputs(
     central_bank: CentralBank,
     settings: Settings,
 ) -> tuple[bool, list[tuple[InventoryItem, int]]]:
-    """Buy missing recipe inputs from the central bank at base_value."""
+    """Buy missing recipe inputs — first from NPC suppliers, then central bank.
+
+    Tries to purchase shortfalls from other NPC businesses' storefronts
+    before falling back to the central bank.  This creates a real supply
+    chain where raw-material NPC businesses earn revenue from processor
+    NPC businesses.
+    """
+    from backend.agents.inventory import add_to_inventory as _add_inv
+
     goods_config = {g["slug"]: g for g in settings.goods}
     input_scale = effective_quantity / max(recipe.output_quantity, 1)
+
+    # --- Phase 1: Try NPC-to-NPC purchasing for each shortfall ---
+    owner_r = await db.execute(select(Agent).where(Agent.id == biz.owner_id))
+    owner = owner_r.scalar_one_or_none()
+
+    if owner is not None:
+        for inp in recipe.inputs_json or []:
+            inp_slug = inp.get("good_slug") or inp.get("good")
+            inp_qty_needed = max(1, int(int(inp.get("quantity", 1)) * input_scale))
+            inv_r = await db.execute(
+                select(InventoryItem).where(
+                    InventoryItem.owner_type == "business",
+                    InventoryItem.owner_id == biz.id,
+                    InventoryItem.good_slug == inp_slug,
+                )
+            )
+            inv_i = inv_r.scalar_one_or_none()
+            shortfall = max(0, inp_qty_needed - (inv_i.quantity if inv_i else 0))
+            if shortfall > 0:
+                await _buy_from_npc_suppliers(db, biz, owner, inp_slug, shortfall, settings)
+
+    # --- Phase 2: Central bank fallback for remaining shortfalls ---
     restock_cost = Decimal("0")
     restock_items: list[tuple[str, int]] = []
 
@@ -66,15 +200,18 @@ async def _auto_restock_inputs(
             restock_items.append((inp_slug, shortfall))
 
     if restock_cost > Decimal(str(central_bank.reserves)) or not restock_items:
-        return False, []
+        if not restock_items:
+            # All inputs satisfied (possibly via NPC purchasing) — proceed
+            pass
+        else:
+            return False, []
 
-    central_bank.reserves = Decimal(str(central_bank.reserves)) - restock_cost
-    from backend.agents.inventory import add_to_inventory as _add_inv
-
-    for inp_slug, shortfall in restock_items:
-        with contextlib.suppress(ValueError):
-            await _add_inv(db, "business", biz.id, inp_slug, shortfall, settings)
-    await db.flush()
+    if restock_items:
+        central_bank.reserves = Decimal(str(central_bank.reserves)) - restock_cost
+        for inp_slug, shortfall in restock_items:
+            with contextlib.suppress(ValueError):
+                await _add_inv(db, "business", biz.id, inp_slug, shortfall, settings)
+        await db.flush()
 
     # Re-check inputs after restocking
     inputs_used: list[tuple[InventoryItem, int]] = []

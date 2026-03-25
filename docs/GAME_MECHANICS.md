@@ -97,6 +97,8 @@ Seeded from `bootstrap.yaml` at startup. ~15 initial businesses across all tiers
 
 **Auto-production:** NPCs produce at `50% × activity_factor` efficiency. Production is capped at 50% of storage to prevent overstock.
 
+**Supply chain purchasing:** NPC processor businesses (bakery, smithy, etc.) buy recipe inputs from NPC raw-material supplier storefronts before falling back to the central bank. This creates a real supply chain: farms sell wheat to mills, mills sell flour to bakeries. Purchases are recorded as `type="storefront"` transactions with `is_npc_supply_chain: true` metadata. Suppliers are selected by cheapest storefront price first.
+
 **Market-aware pricing (every slow tick):**
 - **Player competition:** if player businesses sell the same good in the same zone, NPC retreats price toward `reference_price × 1.1` (avoids undercutting players)
 - **Market alignment:** if NPC price is 30%+ above marketplace average, NPC reduces price
@@ -136,7 +138,7 @@ When an agent calls `work()`:
 3. **Check cooldown:** global per-agent cooldown in Redis
 4. **Validate inputs:** business inventory must have all recipe inputs
 5. **Deduct inputs** from business inventory
-6. **Add outputs** to business inventory
+6. **Add outputs** to business inventory (if business storage is full and agent is employed, goods overflow to the employee's personal inventory instead of failing)
 7. **Pay wages** (if employed: transfer from owner to worker)
 8. **Set cooldown** with all modifiers applied
 

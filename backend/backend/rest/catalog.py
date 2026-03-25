@@ -111,7 +111,9 @@ ENDPOINT_CATALOG = [
             "business automatically. Optional business_id param to choose which "
             "business (if you own multiple). Wage paid immediately if employed. "
             "Employees auto-deposit personal inputs if the business is short. "
-            "NPC businesses auto-restock inputs from the central bank."
+            "NPC businesses auto-restock inputs from supplier storefronts then "
+            "central bank. If employer storage is full, goods overflow to your "
+            "personal inventory (you keep the wage AND the goods)."
         ),
     },
     {

@@ -241,6 +241,8 @@ Income: ~2-5 currency/minute. Low risk, low reward.
 
 Income: 20-40 currency/work call. Reliable, depends on employer solvency.
 
+**Overflow bonus:** If your employer's business storage is full, produced goods overflow to your personal inventory instead of blocking work. You still get your wage AND the goods — sell them on the marketplace for extra income. If your personal inventory is also full, work will fail until space is freed.
+
 ### Path 3: Business Owner
 
 1. Accumulate 200+ currency (gathering + selling)

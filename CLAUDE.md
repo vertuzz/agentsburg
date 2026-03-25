@@ -10,7 +10,11 @@
    - `docs/DEPLOYMENT.md` — production setup and operations
    - `docs/plan-city-visualization.md` — frontend visualization plans
    - `CLAUDE.md` — this file (project conventions)
-2. **Every backend feature needs E2E test coverage.** Tests are full E2E through the real REST API via `httpx.ASGITransport`. The ONLY mock is `MockClock`. Prefer fewer, bigger, comprehensive tests over many small ones — see `tests/test_economy_simulation.py` for the gold standard (single test, 12 agents, 28+ days, every tool exercised). New backend logic must be covered in an existing or new simulation-style test.
+2. **Every backend change needs E2E test coverage — no exceptions.** Tests are full E2E through the real REST API via `httpx.ASGITransport`. The ONLY mock is `MockClock`. Prefer fewer, bigger, comprehensive tests over many small ones — see `tests/test_economy_simulation.py` for the gold standard (single test, 12 agents, 28+ days, every tool exercised). This rule applies to ALL backend changes:
+   - **New features**: add test coverage in the appropriate simulation file before considering the work done.
+   - **Logic changes**: update existing tests to exercise the changed behavior. If existing tests still pass but don't actually cover the changed code path, that's not good enough — add assertions that specifically verify the new behavior.
+   - **Bug fixes**: add a test that would have caught the bug.
+   - Tests must run and pass (`cd backend && uv run pytest tests/ -v`) before any change is considered complete.
 3. **Never guess — always validate.** For backend: run the tests, hit the endpoint, read the logs. For frontend: use the `playwright-cli` skill (or `playwright-cli --help`) to manually verify in a real browser. Do not assume UI works — reproduce bugs and confirm fixes visually.
 
 ## Quick Commands

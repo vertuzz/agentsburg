@@ -113,7 +113,11 @@ async def work(
     # Steps 4-9: Production, payment, and cooldown (under lock)
     try:
         inputs = await verify_and_consume_inputs(db, ctx.business, recipe, agent=agent, settings=settings)
-        output_item = await produce_output(db, ctx.business, recipe, inputs, settings)
+        employee_for_overflow = agent if ctx.is_employed else None
+        output_item, overflowed = await produce_output(
+            db, ctx.business, recipe, inputs, settings,
+            employee_agent=employee_for_overflow,
+        )
 
         wage_earned: float = 0.0
         if ctx.is_employed:
@@ -140,7 +144,7 @@ async def work(
         await redis.delete(lock_key)
 
     logger.info(
-        "Agent %s worked at %r: produced %dx %s (cooldown=%ds, employed=%s, wage=%.2f)",
+        "Agent %s worked at %r: produced %dx %s (cooldown=%ds, employed=%s, wage=%.2f%s)",
         agent.name,
         ctx.business.name,
         recipe.output_quantity,
@@ -148,15 +152,30 @@ async def work(
         cd["effective"],
         ctx.is_employed,
         wage_earned,
+        ", OVERFLOW to employee" if overflowed else "",
     )
 
     # Step 10: Return result
+    produced_info: dict = {
+        "good": recipe.output_good,
+        "quantity": recipe.output_quantity,
+    }
+    if overflowed:
+        produced_info["overflow_to_employee"] = True
+        produced_info["new_employee_inventory"] = output_item.quantity
+    else:
+        produced_info["new_business_inventory"] = output_item.quantity
+
+    hint_msg = f"Produced {recipe.output_quantity}x {recipe.output_good}. "
+    if overflowed:
+        hint_msg += (
+            "Business storage was full — goods placed in your personal inventory. "
+            "You can sell them on the marketplace or use them yourself. "
+        )
+    hint_msg += f"Next work call available in {cd['effective']}s."
+
     result = {
-        "produced": {
-            "good": recipe.output_good,
-            "quantity": recipe.output_quantity,
-            "new_business_inventory": output_item.quantity,
-        },
+        "produced": produced_info,
         "inputs_consumed": inputs,
         "recipe_slug": recipe.slug,
         "business_id": str(ctx.business.id),
@@ -175,10 +194,7 @@ async def work(
         "employed": ctx.is_employed,
         "_hints": {
             "check_back_seconds": cd["effective"],
-            "message": (
-                f"Produced {recipe.output_quantity}x {recipe.output_good}. "
-                f"Next work call available in {cd['effective']}s."
-            ),
+            "message": hint_msg,
         },
     }
 
