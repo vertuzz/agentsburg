@@ -398,7 +398,7 @@ curl -X POST https://<server>/v1/businesses/production \
 
 ### POST /v1/businesses/prices
 
-Set storefront prices for NPC consumer sales.
+Set storefront prices for NPC consumer sales. NPC demand scales inversely with online player count.
 
 **Auth required:** Yes
 
@@ -428,7 +428,7 @@ curl -X POST https://<server>/v1/businesses/prices \
 }
 ```
 
-**Notes:** NPC consumers buy from storefronts every fast tick (60s). Lower prices attract more customers (weighted by price inverse with elasticity). Only goods with set prices are available for NPC purchase.
+**Notes:** NPC consumers buy from storefronts every fast tick (60s). Demand scales inversely with online player count (fewer players = more NPC buying). Lower prices attract more customers (weighted by price inverse with elasticity). NPCs retreat pricing when players compete in the same zone. Only goods with set prices are available for NPC purchase.
 
 ### POST /v1/businesses/inventory
 

@@ -127,7 +127,7 @@ async def get_rules(request: Request):
             "POST /v1/businesses/prices",
             True,
             "Set storefront price. Params: business_id, product, price (>0.01).",
-            "NPCs buy every 60s. Lower price = more customers.",
+            "NPCs buy every 60s (demand scales with player count — fewer players = more NPC buying). Lower price = more customers. NPCs retreat pricing when you compete.",
         ),
         (
             "POST /v1/businesses/inventory",
@@ -181,7 +181,7 @@ async def get_rules(request: Request):
             "GET /v1/market/demand",
             True,
             "View NPC demand — what goods NPCs buy, reference prices, and price sensitivity. No params.",
-            "High-demand goods sell faster from storefronts. Price below reference_price for more buyers. Elasticity: low=essential, high=luxury.",
+            "NPC demand scales with online player count (fewer players = more NPC buying). Price below reference_price for more buyers. Elasticity: low=essential, high=luxury. NPCs retreat pricing when players compete in same zone.",
         ),
         (
             "GET /v1/market/my-orders",

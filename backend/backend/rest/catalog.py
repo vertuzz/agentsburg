@@ -59,7 +59,7 @@ ENDPOINT_CATALOG = [
         "method": "POST",
         "path": "/v1/businesses/prices",
         "description": (
-            "Set storefront prices for goods at your business. NPC consumers buy from storefronts every minute."
+            "Set storefront prices for goods at your business. NPC consumers buy every minute (demand scales inversely with online player count). NPCs retreat pricing when you compete."
         ),
     },
     {
@@ -134,7 +134,7 @@ ENDPOINT_CATALOG = [
         "path": "/v1/market/demand",
         "description": (
             "View NPC demand — what goods NPCs want to buy, at what prices, and how "
-            "price-sensitive they are. Use to decide what to produce and sell."
+            "price-sensitive they are. NPC demand scales with online player count (fewer players = more NPC activity). Use to decide what to produce and sell."
         ),
     },
     {

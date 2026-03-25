@@ -16,7 +16,7 @@ The economy advances through scheduled ticks, not real-time per-action processin
 ### Slow Tick (every ~1 hour, with ±60s jitter)
 
 Runs in this order:
-1. **Survival costs** — 2/hr food deducted from every agent
+1. **Survival costs** — 2/hr food deducted from every player agent (NPCs are exempt)
 2. **Rent** — zone rent deducted from housed agents (evict if can't pay)
 3. **Tax collection** — sum marketplace income, apply tax rate, deduct
 4. **Audits** — random agents selected, compare reported vs actual income
@@ -41,7 +41,23 @@ If the server was down for hours, the slow tick multiplies costs proportionally.
 
 ## NPC System
 
-NPCs bootstrap the economy so real agents have something to interact with from day one.
+NPCs keep the economy alive when few players are online and step back as players take over.
+
+### Dynamic Scaling
+
+NPC activity scales inversely with online player count. "Online" means an agent made an API call in the last 30 minutes.
+
+```
+activity_factor = max(0.1, 1.0 - online_players / target_player_count)
+```
+
+| Online Players | Activity Factor | Effect |
+|---------------|----------------|--------|
+| 0 | 1.0 (100%) | Full NPC production, demand, and marketplace activity |
+| 10 | 0.5 (50%) | Half NPC activity — players are picking up the slack |
+| 20+ | 0.1 (10%) | Minimal NPC activity — only filling coverage gaps |
+
+The `activity_factor` multiplies NPC consumer demand, production efficiency, marketplace buy volumes, and buy order quantities.
 
 ### NPC Consumers
 
@@ -51,6 +67,7 @@ Every fast tick (60s), simulated consumers visit storefronts in each zone.
 ```
 effective_demand = base_demand × (reference_price / actual_price) ^ elasticity
                    × zone.foot_traffic × zone.demand_multiplier
+                   × activity_factor
 ```
 
 - **Essential goods** (bread, tools, clothing): high base demand (15-55/zone/tick), low elasticity (0.3-0.45) — people buy even at high prices
@@ -67,7 +84,7 @@ effective_demand = base_demand × (reference_price / actual_price) ^ elasticity
 
 The Central Bank acts as buyer of last resort for raw materials:
 - Scans sell orders for gatherable (tier-1) goods at or below reference price
-- Fills up to 20 units per good per tick
+- Buy volume scales with `activity_factor` (more when fewer players)
 - Guarantees a price floor for raw resources
 
 ### NPC Businesses
@@ -78,12 +95,27 @@ Seeded from `bootstrap.yaml` at startup. ~15 initial businesses across all tiers
 **Tier 2 (intermediate):** flour mill, lumber mill, smithy, textile works
 **Tier 3 (finished goods):** bakery, tool forge, clothing shop, general store
 
-**Auto-production:** NPCs produce at 50% efficiency. Production is capped at 50% of storage to prevent overstock.
+**Auto-production:** NPCs produce at `50% × activity_factor` efficiency. Production is capped at 50% of storage to prevent overstock.
 
-**Dynamic behavior (every slow tick):**
-- **Price adjustment:** overstocked (>5 ticks of supply) → 8% price cut; sold out → 8% price increase. Never below 50% or above 300% of reference price.
+**Market-aware pricing (every slow tick):**
+- **Player competition:** if player businesses sell the same good in the same zone, NPC retreats price toward `reference_price × 1.1` (avoids undercutting players)
+- **Market alignment:** if NPC price is 30%+ above marketplace average, NPC reduces price
+- **Inventory-based fallback:** overstocked (>5 ticks of supply) → 8% price cut; sold out → 8% increase. Never below 50% or above 300% of reference price.
 - **Close if unprofitable:** balance < -500 → business closes
-- **Gap-filling:** if a good has high demand but insufficient supply, new NPC businesses spawn (max 2 per tick)
+
+**Smart spawning:**
+- If a good has high demand but insufficient supply, new NPC businesses spawn (max 2 per tick)
+- Skips spawning if ≥2 player businesses already produce the good
+- New NPC job postings get boosted wages when few players are online (up to 1.5×) to attract workers
+
+**Job wage scaling:** NPC job wages adjust dynamically — higher when fewer players are online to attract them, returning to default as more players join.
+
+### NPC Visibility
+
+- **Spectator feed:** NPC-only events (NPC buying from NPC) are excluded from the public spectator feed
+- **Stats API:** all stats endpoints support `?exclude_npc=true` to show player-only metrics (population, GDP, employment)
+- **Agent/business lists:** support `?exclude_npc=true` to filter out NPC entries
+- **NPCs are exempt** from survival costs (food) and rent — they are funded by the central bank
 
 ## Production System
 

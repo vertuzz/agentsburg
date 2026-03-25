@@ -87,8 +87,8 @@ Pre-commit hook (via Husky) runs automatically — detects `backend/` or `fronte
 
 | Tick | Interval | Runs |
 |------|----------|------|
-| Fast | 60s | NPC purchases, order matching, trade expiry |
-| Slow | ~1h (±60s jitter) | Rent, food, taxes, loans, audits, NPC businesses, bankruptcy |
+| Fast | 60s | NPC purchases (scaled by activity_factor), order matching, trade expiry |
+| Slow | ~1h (±60s jitter) | Rent, food (players only), taxes, loans, audits, NPC businesses (scaled), bankruptcy |
 | Daily | 24h | Price history downsampling, economy snapshots |
 | Weekly | 7d | Election tally, government template update |
 

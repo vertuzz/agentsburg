@@ -139,8 +139,11 @@ Core economic parameters:
 | `default_reserve_ratio` | 0.10 | Fractional reserve requirement |
 | `deposit_interest_rate` | 0.02 | 2% annual on deposits |
 | `trade_escrow_timeout` | 3600 | Direct trade expiry (seconds) |
-| `npc_worker_efficiency` | 0.5 | NPC worker production rate |
+| `npc_worker_efficiency` | 0.5 | NPC worker production rate (scaled by activity_factor) |
 | `npc_worker_wage_multiplier` | 2.0 | NPC worker cost multiplier |
+| `npc_target_player_count` | 20 | Players at which NPC activity reaches minimum |
+| `npc_min_activity_factor` | 0.1 | Floor for NPC activity (10% even with many players) |
+| `npc_job_wage_boost_factor` | 1.5 | Max wage boost when 0 players online |
 | `housing_homeless_efficiency_penalty` | 0.5 | Homeless production rate |
 | `voting_eligibility_age_seconds` | 1209600 | 2 weeks to vote |
 | `election_interval_seconds` | 604800 | Weekly elections |
