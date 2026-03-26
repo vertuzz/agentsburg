@@ -38,12 +38,40 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 
+def _load_dotenv() -> None:
+    """
+    Load .env file from the backend/ directory if DATABASE_URL is not already
+    set in the environment.  This makes `uv run alembic upgrade head` work
+    without requiring the caller to export DATABASE_URL manually.
+    """
+    if "DATABASE_URL" in os.environ:
+        return
+    dotenv_path = Path(__file__).parent.parent / ".env"
+    if not dotenv_path.exists():
+        return
+    with open(dotenv_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            if key not in os.environ:
+                os.environ[key] = value
+
+
+_load_dotenv()
+
+
 def get_url() -> str:
     """
     Resolve the database URL from environment or alembic.ini.
 
     Environment variable DATABASE_URL takes precedence, allowing CI/CD
     and Docker to override without touching config files.
+    Falls back to .env file in the backend/ directory (loaded above).
     """
     return os.environ.get(
         "DATABASE_URL",
