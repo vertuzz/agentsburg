@@ -30,10 +30,12 @@
 # Fast tick is every 60 seconds. Slow tick is every 3600 seconds.
 # One full game "day" = 86400 seconds. At 60s ticks, that's 1440 ticks/day.
 # A downtown bakery (1.5x multiplier) selling bread at reference price sells:
-#   55 * 1.5 = 82.5 units/tick. At 1440 ticks/day = ~118,800 bread/day.
-# This seems high, but is spread across ALL businesses in that zone.
+#   30 * 1.5 = 45 units/tick. At 1440 ticks/day = ~64,800 bread/day.
+# This is spread across ALL businesses in that zone.
 # With 2-3 NPC bakeries + player bakeries, each gets a fraction.
 # We expect NPC businesses to hold 500 stock and restock every slow tick.
+# Demand is calibrated so NPC supply can roughly meet demand at launch;
+# unmet demand creates organic price pressure and player opportunity.
 
 npc_demand:
 
@@ -43,25 +45,25 @@ npc_demand:
   # ─────────────────────────────────────────────
 
   - good: bread
-    base_demand_per_zone: 55
+    base_demand_per_zone: 30
     price_elasticity: 0.35
     reference_price: 22
     notes: "Staple food. NPCs will pay 50% above reference if needed. Drop in demand is slow."
 
   - good: clothing
-    base_demand_per_zone: 40
+    base_demand_per_zone: 25
     price_elasticity: 0.40
     reference_price: 40
     notes: "Essential wear. Demand is steady; price spikes cause mild reduction."
 
   - good: tools
-    base_demand_per_zone: 26
+    base_demand_per_zone: 16
     price_elasticity: 0.45
     reference_price: 48
     notes: "Required for advanced work. NPCs replace worn tools regularly."
 
   - good: medicine
-    base_demand_per_zone: 15
+    base_demand_per_zone: 10
     price_elasticity: 0.30
     reference_price: 65
     notes: "Very inelastic — NPCs pay almost any price when sick."
@@ -72,19 +74,19 @@ npc_demand:
   # ─────────────────────────────────────────────
 
   - good: pottery
-    base_demand_per_zone: 15
+    base_demand_per_zone: 10
     price_elasticity: 0.80
     reference_price: 38
     notes: "Storage containers. Moderate demand; substitutable somewhat."
 
   - good: beer
-    base_demand_per_zone: 24
+    base_demand_per_zone: 15
     price_elasticity: 1.20
     reference_price: 30
     notes: "Popular but discretionary. Price-sensitive: expensive beer gets skipped."
 
   - good: housing_materials
-    base_demand_per_zone: 5
+    base_demand_per_zone: 3
     price_elasticity: 0.60
     reference_price: 130
     notes: "Large bulk purchase. Low frequency but high value per sale."
@@ -95,19 +97,19 @@ npc_demand:
   # ─────────────────────────────────────────────
 
   - good: furniture
-    base_demand_per_zone: 18
+    base_demand_per_zone: 10
     price_elasticity: 1.80
     reference_price: 60
     notes: "Luxury durable good. Demand collapses if overpriced."
 
   - good: jewelry
-    base_demand_per_zone: 8
+    base_demand_per_zone: 5
     price_elasticity: 2.50
     reference_price: 95
     notes: "Pure luxury. Very few NPCs buy it; even fewer at high prices."
 
   - good: weapons
-    base_demand_per_zone: 15
+    base_demand_per_zone: 9
     price_elasticity: 1.50
     reference_price: 75
     notes: "Moderate luxury. NPCs value personal defense but price-check."
@@ -119,61 +121,61 @@ npc_demand:
   # ─────────────────────────────────────────────
 
   - good: flour
-    base_demand_per_zone: 25
+    base_demand_per_zone: 15
     price_elasticity: 0.90
     reference_price: 9
     notes: "Some NPCs bake at home. Moderate direct consumer demand."
 
   - good: fabric
-    base_demand_per_zone: 20
+    base_demand_per_zone: 12
     price_elasticity: 1.00
     reference_price: 13
     notes: "Bought by tailors and home sewers."
 
   - good: iron_ingots
-    base_demand_per_zone: 15
+    base_demand_per_zone: 9
     price_elasticity: 1.10
     reference_price: 20
     notes: "Blacksmiths and hobbyists buy ingots directly."
 
   - good: lumber
-    base_demand_per_zone: 18
+    base_demand_per_zone: 10
     price_elasticity: 1.00
     reference_price: 11
     notes: "Home repair and small projects. Steady demand."
 
   - good: bricks
-    base_demand_per_zone: 10
+    base_demand_per_zone: 6
     price_elasticity: 0.80
     reference_price: 9
     notes: "Construction materials. Infrequent but bulk purchases."
 
   - good: glass
-    base_demand_per_zone: 10
+    base_demand_per_zone: 6
     price_elasticity: 1.20
     reference_price: 15
     notes: "Home windows and glassware. Moderate demand."
 
   - good: rope
-    base_demand_per_zone: 12
+    base_demand_per_zone: 7
     price_elasticity: 0.90
     reference_price: 11
     notes: "General utility. Fishing, binding, construction."
 
   - good: leather
-    base_demand_per_zone: 10
+    base_demand_per_zone: 6
     price_elasticity: 1.10
     reference_price: 18
     notes: "Craftspeople buy leather for small projects."
 
   - good: copper_ingots
-    base_demand_per_zone: 8
+    base_demand_per_zone: 5
     price_elasticity: 1.30
     reference_price: 24
     notes: "Low volume; jewelers and tinkerers."
 
   - good: herbs_dried
-    base_demand_per_zone: 14
+    base_demand_per_zone: 8
     price_elasticity: 0.80
     reference_price: 10
     notes: "Cooking spices and home remedies. Inelastic basics use."
@@ -184,67 +186,67 @@ npc_demand:
   # ─────────────────────────────────────────────
 
   - good: wood
-    base_demand_per_zone: 5
+    base_demand_per_zone: 3
     price_elasticity: 0.70
     reference_price: 4
     notes: "Mostly used as input; tiny NPC demand for firewood."
 
   - good: wheat
-    base_demand_per_zone: 8
+    base_demand_per_zone: 5
     price_elasticity: 0.60
     reference_price: 4
     notes: "Home bakers buy a small amount."
 
   - good: herbs
-    base_demand_per_zone: 7
+    base_demand_per_zone: 4
     price_elasticity: 0.80
     reference_price: 4
     notes: "Fresh herbs for cooking."
 
   - good: berries
-    base_demand_per_zone: 9
+    base_demand_per_zone: 5
     price_elasticity: 1.00
     reference_price: 3
     notes: "Snack food. Low value but consistent small demand."
 
   - good: fish
-    base_demand_per_zone: 10
+    base_demand_per_zone: 6
     price_elasticity: 0.90
     reference_price: 5
     notes: "Fresh fish has moderate NPC demand, mostly waterfront."
 
   - good: cotton
-    base_demand_per_zone: 4
+    base_demand_per_zone: 3
     price_elasticity: 0.80
     reference_price: 4
     notes: "Home crafters; very low direct demand."
 
   - good: clay
-    base_demand_per_zone: 3
+    base_demand_per_zone: 2
     price_elasticity: 0.70
     reference_price: 3
     notes: "Potters buy small amounts."
 
   - good: stone
-    base_demand_per_zone: 4
+    base_demand_per_zone: 3
     price_elasticity: 0.60
     reference_price: 3
     notes: "Garden edging and small repairs."
 
   - good: iron_ore
-    base_demand_per_zone: 3
+    base_demand_per_zone: 2
     price_elasticity: 0.80
     reference_price: 6
     notes: "Hobbyist smiths. Negligible volume."
 
   - good: copper_ore
-    base_demand_per_zone: 2
+    base_demand_per_zone: 1
     price_elasticity: 0.80
     reference_price: 7
     notes: "Extremely niche direct demand."
 
   - good: sand
-    base_demand_per_zone: 2
+    base_demand_per_zone: 1
     price_elasticity: 0.50
     reference_price: 2
     notes: "Almost no NPC demand; production input only."

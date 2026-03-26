@@ -30,60 +30,62 @@ templates:
   - slug: free_market
     name: Free Market
     tax_rate: 0.05
-    enforcement_probability: 0.10
+    enforcement_probability: 0.12
     interest_rate_modifier: 0.80
     reserve_ratio: 0.10
     licensing_cost_modifier: 1.0
     production_cooldown_modifier: 0.90
     rent_modifier: 1.0
-    fine_multiplier: 1.5
+    fine_multiplier: 3.0
     max_jail_seconds: 3600        # 1 hour max
     description: >
-      Light-touch government. Low taxes encourage commerce; low enforcement means
-      tax evasion is tempting and largely unpunished. Cheap loans (low interest)
-      and low reserve requirements allow aggressive lending. Businesses start
-      fast with no extra licensing fees. Production runs slightly faster.
-      Wealth inequality will emerge quickly. Favored by entrepreneurs and
-      speculators. Crime pays — but just barely.
+      Light-touch government. Low taxes encourage commerce; modest enforcement (12%)
+      with steep fines (3x) means tax evasion is tempting but risky if caught.
+      Cheap loans (low interest) and low reserve requirements allow aggressive
+      lending. Businesses start fast with no extra licensing fees. Production runs
+      slightly faster. Wealth inequality will emerge quickly. Favored by
+      entrepreneurs and speculators. Crime pays — but just barely.
 
   - slug: social_democracy
     name: Social Democracy
     tax_rate: 0.12
-    enforcement_probability: 0.25
+    enforcement_probability: 0.30
     interest_rate_modifier: 1.0
     reserve_ratio: 0.20
     licensing_cost_modifier: 1.2
     production_cooldown_modifier: 0.85
     rent_modifier: 0.90
-    fine_multiplier: 2.0
+    fine_multiplier: 3.0
     max_jail_seconds: 14400       # 4 hours max
     description: >
       Balanced governance. Moderate taxes fund public infrastructure, giving a
-      production bonus and subsidized housing. Crime is moderately risky due to
-      enforcement. Normal loan rates and reserve ratios keep the money supply
-      stable. Slightly higher licensing costs reduce fly-by-night businesses.
-      The middle ground between growth and stability — agents benefit from
-      collective investment.
+      production bonus and subsidized housing. Crime is near break-even: 30%
+      audit chance with 3x fines means expected loss nearly matches the tax
+      saved, and repeat offenders face jail. Normal loan rates and reserve
+      ratios keep the money supply stable. Slightly higher licensing costs
+      reduce fly-by-night businesses. The middle ground between growth and
+      stability — agents benefit from collective investment.
 
   - slug: authoritarian
     name: Authoritarian
     tax_rate: 0.20
-    enforcement_probability: 0.40
+    enforcement_probability: 0.45
     interest_rate_modifier: 1.50
     reserve_ratio: 0.40
     licensing_cost_modifier: 2.0
     production_cooldown_modifier: 1.00
     rent_modifier: 1.10
-    fine_multiplier: 2.5
+    fine_multiplier: 3.5
     max_jail_seconds: 86400       # 24 hours max
     description: >
       Heavy state control. High taxes drain income. Aggressive enforcement makes
-      tax evasion very dangerous — 40% chance of audit per tick. Expensive loans
-      (high interest modifier) and large reserve requirements restrict credit and
-      money creation. High licensing costs discourage new business formation.
-      Central planning offsets bureaucratic drag so production runs at baseline.
-      Rents are modestly elevated. Crime is rarely worth it. Favored by agents
-      who benefit from existing market position and want to freeze out competitors.
+      tax evasion very dangerous — 45% chance of audit per tick with 3.5x fines
+      means crime costs more than it saves. Expensive loans (high interest
+      modifier) and large reserve requirements restrict credit and money creation.
+      High licensing costs discourage new business formation. Central planning
+      offsets bureaucratic drag so production runs at baseline. Rents are modestly
+      elevated. Crime clearly doesn't pay. Favored by agents who benefit from
+      existing market position and want to freeze out competitors.
 
   - slug: libertarian
     name: Libertarian
@@ -94,13 +96,14 @@ templates:
     licensing_cost_modifier: 0.60
     production_cooldown_modifier: 0.85
     rent_modifier: 0.90
-    fine_multiplier: 1.0
+    fine_multiplier: 1.5
     max_jail_seconds: 1800        # 30 minutes max
     description: >
       Minimal state. Taxes are very low; enforcement is light (8% audit chance).
       Cheap loans and modest reserve requirements allow the bank to expand credit
       — risk of inflation is real but safer banking limits systemic risk. Business
       registration is heavily discounted. Production cooldowns are reduced (15%
-      faster). Rents are discounted across all zones. Fines for crime are trivial.
+      faster). Rents are discounted across all zones. Fines for crime are mild
+      (1.5x) and enforcement rare — evasion is very profitable here.
       The economy moves fast but is fragile. Favored by high-volume producers
       and speculators.

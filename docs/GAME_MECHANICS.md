@@ -71,7 +71,7 @@ effective_demand = base_demand × (reference_price / actual_price) ^ elasticity
                    × activity_factor
 ```
 
-- **Essential goods** (bread, tools, clothing): high base demand (15-55/zone/tick), low elasticity (0.3-0.45) — people buy even at high prices
+- **Essential goods** (bread, tools, clothing): high base demand (10-30/zone/tick), low elasticity (0.3-0.45) — people buy even at high prices
 - **Semi-essentials** (pottery, beer, housing materials): medium demand, medium elasticity (0.6-1.2)
 - **Luxuries** (furniture, jewelry, weapons): low base demand, high elasticity (1.5-2.5) — demand drops fast with price increases
 
@@ -359,43 +359,43 @@ New money enters the system through loans (fractional reserve). Money leaves thr
 | Good | Storage | Base Value | Gather Cooldown |
 |------|---------|-----------|----------------|
 | berries | 1 | 2 | 25s |
-| sand | 1 | 1 | 20s |
+| sand | 2 | 1 | 20s |
 | wood | 2 | 3 | 30s |
 | herbs | 1 | 3 | 30s |
-| cotton | 1 | 2 | 35s |
+| cotton | 1 | 3 | 35s |
 | clay | 2 | 2 | 35s |
-| wheat | 1 | 2 | 40s |
+| wheat | 2 | 3 | 40s |
 | stone | 3 | 2 | 40s |
-| fish | 1 | 3 | 45s |
-| copper_ore | 2 | 3 | 55s |
-| iron_ore | 3 | 4 | 60s |
+| fish | 1 | 4 | 45s |
+| copper_ore | 3 | 6 | 55s |
+| iron_ore | 3 | 5 | 60s |
 
 ### Tier 2 — Intermediate (Manufactured)
 
 | Good | Storage | Base Value | Made From |
 |------|---------|-----------|-----------|
-| flour | 1 | 5 | wheat (3) |
-| lumber | 2 | 8 | wood (3) |
-| bricks | 2 | 7 | stone (2) + clay (2) |
-| iron_ingots | 2 | 10 | iron_ore (3) |
-| fabric | 1 | 6 | cotton (3) |
-| copper_ingots | 2 | 8 | copper_ore (3) |
-| glass | 1 | 5 | sand (3) |
-| leather | 2 | 7 | (tanning recipe) |
-| herbs_dried | 1 | 6 | herbs (3) |
-| rope | 1 | 4 | cotton (2) |
+| flour | 1 | 8 | wheat (3) |
+| lumber | 3 | 10 | wood (3) |
+| bricks | 3 | 8 | stone (2) + clay (2) |
+| iron_ingots | 2 | 18 | iron_ore (3) |
+| fabric | 1 | 12 | cotton (3) |
+| copper_ingots | 2 | 22 | copper_ore (3) |
+| glass | 2 | 14 | sand (4) |
+| leather | 2 | 16 | herbs (2) + clay (1) |
+| herbs_dried | 1 | 9 | herbs (3) |
+| rope | 2 | 10 | cotton (2) |
 
 ### Tier 3 — Finished (Consumer Goods)
 
 | Good | Storage | Base Value | Made From |
 |------|---------|-----------|-----------|
-| bread | 1 | 12 | flour (2) + berries (1) |
-| furniture | 3 | 30 | lumber (4) + rope (1) |
-| tools | 2 | 25 | iron_ingots (2) + lumber (1) |
-| clothing | 1 | 20 | fabric (3) + rope (1) |
-| pottery | 2 | 15 | clay (3) + herbs_dried (1) |
-| medicine | 1 | 40 | herbs_dried (3) + glass (1) |
-| jewelry | 1 | 60 | copper_ingots (2) + iron_ingots (1) + glass (1) |
-| weapons | 3 | 45 | iron_ingots (3) + lumber (2) |
-| beer | 1 | 15 | wheat (3) + herbs (2) |
+| bread | 1 | 20 | flour (2) + berries (1) |
+| furniture | 5 | 55 | lumber (4) + rope (1) |
+| tools | 2 | 45 | iron_ingots (2) + lumber (1) |
+| clothing | 2 | 38 | fabric (3) + rope (1) |
+| pottery | 3 | 35 | clay (3) + herbs_dried (1) |
+| medicine | 1 | 60 | herbs_dried (3) + glass (1) |
+| jewelry | 1 | 90 | copper_ingots (2) + iron_ingots (1) + glass (1) |
+| weapons | 3 | 70 | iron_ingots (3) + lumber (2) |
+| beer | 2 | 28 | wheat (3) + herbs (2) |
 | housing_materials | 5 | 120 | lumber (5) + bricks (4) + glass (2) |

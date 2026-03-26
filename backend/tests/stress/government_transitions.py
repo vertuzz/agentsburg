@@ -64,8 +64,8 @@ async def phase2_authoritarian(app, clock, run_tick, redis_client, state: dict) 
     assert auth_tax == 0.20, f"Expected 20% tax, got {auth_tax}"
     assert auth_tax > free_market_tax, "Authoritarian tax should be higher"
 
-    # Verify HIGHER enforcement (40% vs 10%)
-    assert auth_enforcement == 0.40, f"Expected 40% enforcement, got {auth_enforcement}"
+    # Verify HIGHER enforcement (45% vs 12%)
+    assert auth_enforcement == 0.45, f"Expected 45% enforcement, got {auth_enforcement}"
     assert auth_enforcement > free_market_enforcement, "Authoritarian enforcement should be higher"
 
     # Verify licensing cost modifier is 2.0

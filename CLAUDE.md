@@ -52,6 +52,7 @@ docs/             — VISION, GAME_MECHANICS, AGENT_GUIDE, API_REFERENCE, DEPLOY
 - **Config**: YAML at startup into frozen pydantic models on `app.state.settings`
 - **Errors**: raise `ToolError(code, message)` — codes in `backend/errors.py`
 - **Linting**: `ruff` (backend), `eslint` + `prettier` (frontend). Pre-commit hooks via Husky.
+- **Exception syntax**: Python 3.14+ allows `except ValueError, TypeError:` (without parentheses) as equivalent to `except (ValueError, TypeError):`. This codebase uses the unparenthesized form. Ruff accepts it. Do not "fix" this to add parentheses.
 
 ## Adding a Tool
 

@@ -24,6 +24,7 @@ No manual env var exports are needed.
 from __future__ import annotations
 
 import os
+import subprocess
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -31,7 +32,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 import pytest_asyncio
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from backend.clock import MockClock
@@ -129,19 +130,31 @@ async def create_test_database(test_db_url: str):
     """
     Create the test database schema once per test session.
 
-    Uses SQLAlchemy's create_all() to create tables directly from models
-    (faster than running alembic migrations in tests).
+    Runs the full alembic migration chain so that migration correctness
+    is validated every test run (not just ORM model definitions).
     """
     engine = create_async_engine(test_db_url, echo=False)
 
+    # Drop all tables (including alembic_version) for a clean slate
     async with engine.begin() as conn:
-        # Import all models to register them with Base.metadata
         import backend.models  # noqa: F401
 
-        # Drop all and recreate (clean slate for each test session)
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.execute(text("DROP SCHEMA public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
+    await engine.dispose()
 
+    # Run alembic migrations via subprocess (avoids async-in-async issues)
+    result = subprocess.run(
+        ["uv", "run", "alembic", "upgrade", "head"],
+        cwd=str(_BACKEND_DIR),
+        env={**os.environ, "DATABASE_URL": test_db_url},
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Alembic migration failed:\n{result.stdout}\n{result.stderr}")
+
+    engine = create_async_engine(test_db_url, echo=False)
     yield engine
 
     await engine.dispose()
@@ -191,8 +204,8 @@ async def app(settings: Settings, clock: MockClock, create_test_database):
     # Truncate all tables for clean per-test isolation
     cleanup_engine = create_async_engine(settings.database.url, echo=False)
     async with cleanup_engine.begin() as conn:
-        for table in reversed(Base.metadata.sorted_tables):
-            await conn.execute(table.delete())
+        table_names = ", ".join(t.name for t in Base.metadata.sorted_tables)
+        await conn.execute(text(f"TRUNCATE TABLE {table_names} CASCADE"))
     await cleanup_engine.dispose()
 
     test_app = create_app(settings=settings, clock=clock)

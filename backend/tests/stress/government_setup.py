@@ -90,7 +90,7 @@ async def phase1_free_market(client, app, clock, run_tick, redis_client) -> dict
     free_market_enforcement = current["enforcement_probability"]
     print(f"  Free market: tax={free_market_tax}, enforcement={free_market_enforcement}")
     assert free_market_tax == 0.05, f"Expected 5% tax, got {free_market_tax}"
-    assert free_market_enforcement == 0.10, f"Expected 10% enforcement, got {free_market_enforcement}"
+    assert free_market_enforcement == 0.12, f"Expected 12% enforcement, got {free_market_enforcement}"
 
     # Run 3 days of simulation under free market
     print("  Running 3 days under free_market...")
