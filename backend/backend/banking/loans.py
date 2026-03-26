@@ -3,6 +3,7 @@ Loan operations for Agent Economy banking.
 
 Public functions:
   take_loan()                       — disburse a new loan if credit & reserves allow
+  repay_loan()                      — early full repayment of an active loan
 
 Re-exports from loan_admin:
   process_loan_payments()           — collect installments (slow tick / hourly)
@@ -217,6 +218,110 @@ async def take_loan(
         "installment_amount": float(installment_amount),
         "installments_remaining": LOAN_INSTALLMENTS,
         "next_payment_at": next_payment_at.isoformat(),
+        "wallet_balance": float(agent.balance),
+        "loan_id": str(loan.id),
+    }
+
+
+async def repay_loan(
+    db: AsyncSession,
+    agent: Agent,
+    clock: Clock,
+    settings: Settings,
+) -> dict:
+    """
+    Early full repayment of an active loan.
+
+    Pays off the entire remaining balance immediately. The agent must have
+    sufficient wallet balance to cover the outstanding amount.
+
+    Updates:
+      agent.balance       -= remaining_balance
+      bank.total_loaned   -= remaining_balance  (debt cleared)
+      bank.reserves       += remaining_balance   (money returns to bank)
+      loan.status          = "paid_off"
+
+    Transaction type: "loan_repayment"
+
+    Args:
+        db:       Active async session.
+        agent:    Borrowing agent.
+        clock:    For transaction timestamp.
+        settings: Application settings.
+
+    Returns:
+        Dict with repayment details and new wallet balance.
+
+    Raises:
+        ValueError: If no active loan or insufficient balance.
+    """
+    # Lock agent row
+    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
+    agent = agent_row.scalar_one()
+
+    # Find active loan
+    loan_result = await db.execute(
+        select(Loan)
+        .where(
+            Loan.agent_id == agent.id,
+            Loan.status == "active",
+        )
+        .with_for_update()
+    )
+    loan = loan_result.scalar_one_or_none()
+    if loan is None:
+        raise ValueError("You have no active loan to repay.")
+
+    remaining = _to_decimal(loan.remaining_balance)
+    wallet = _to_decimal(agent.balance)
+
+    if wallet < remaining:
+        raise ValueError(
+            f"Insufficient balance to repay loan. "
+            f"Remaining balance: {float(remaining):.2f}, wallet: {float(wallet):.2f}"
+        )
+
+    # Update agent
+    agent.balance = _round_money(wallet - remaining)
+
+    # Update bank
+    bank = await _get_central_bank(db, lock=True)
+    bank.total_loaned = _round_money(_to_decimal(bank.total_loaned) - _to_decimal(loan.principal))
+    bank.reserves = _round_money(_to_decimal(bank.reserves) + remaining)
+
+    # Close loan
+    loan.remaining_balance = 0
+    loan.installments_remaining = 0
+    loan.status = "paid_off"
+
+    # Transaction record
+    txn = Transaction(
+        type="loan_repayment",
+        from_agent_id=agent.id,
+        to_agent_id=None,  # to bank
+        amount=remaining,
+        metadata_json={
+            "loan_id": str(loan.id),
+            "principal": float(loan.principal),
+            "amount_repaid": float(remaining),
+            "early_repayment": True,
+            "tick_time": clock.now().isoformat(),
+        },
+    )
+    db.add(txn)
+    await db.flush()
+
+    logger.info(
+        "Loan repaid early: agent=%s amount=%.2f principal=%.2f",
+        agent.name,
+        float(remaining),
+        float(loan.principal),
+    )
+
+    return {
+        "action": "repay_loan",
+        "amount_repaid": float(remaining),
+        "principal": float(loan.principal),
         "wallet_balance": float(agent.balance),
         "loan_id": str(loan.id),
     }

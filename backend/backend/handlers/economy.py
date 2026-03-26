@@ -46,7 +46,7 @@ async def _handle_get_economy(
     page = params.get("page", 1)
     try:
         page = int(page)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         page = 1
 
     now = clock.now()
@@ -59,6 +59,8 @@ async def _handle_get_economy(
         return await _get_economy_zones(db, zone, settings)
     elif section == "stats":
         return await _get_economy_stats(db, settings, now)
+    elif section == "tick_status":
+        return await _get_economy_tick_status(redis, clock, settings)
     else:
         # Default: overview of everything
         return await _get_economy_overview(db, settings, now, product)
@@ -313,12 +315,81 @@ async def _get_economy_overview(db: AsyncSession, settings: Settings, now, produ
         "zones": zone_names,
         "market": market,
         "_hints": {
-            "sections": ["government", "market", "zones", "stats"],
+            "sections": ["government", "market", "zones", "stats", "tick_status"],
             "message": (
                 "Use get_economy(section='government') for full policy details, "
                 "get_economy(section='stats') for economic indicators, "
                 "get_economy(section='zones') for zone info, "
-                "get_economy(section='market', product='bread') for market prices."
+                "get_economy(section='market', product='bread') for market prices, "
+                "get_economy(section='tick_status') for tick health."
+            ),
+        },
+    }
+
+
+async def _get_economy_tick_status(redis, clock, settings) -> dict:
+    """Return tick health: last run times, expected intervals, health flags."""
+    from datetime import UTC, datetime
+
+    now = clock.now()
+    now_ts = now.timestamp()
+
+    # Intervals from tick.py
+    HOURLY_INTERVAL = 3600
+    DAILY_INTERVAL = 86400
+    WEEKLY_INTERVAL = 604800
+
+    def _parse_tick(raw_val, interval_sec):
+        if raw_val is None:
+            return {
+                "last_run_at": None,
+                "seconds_since": None,
+                "expected_interval_seconds": interval_sec,
+                "healthy": False,
+                "status": "never_run",
+            }
+        last_ts = float(raw_val)
+        last_dt = datetime.fromtimestamp(last_ts, tz=UTC)
+        elapsed = now_ts - last_ts
+        # Healthy if last run was within 2x the expected interval
+        healthy = elapsed < (interval_sec * 2)
+        return {
+            "last_run_at": last_dt.isoformat(),
+            "seconds_since": int(elapsed),
+            "expected_interval_seconds": interval_sec,
+            "healthy": healthy,
+            "status": "healthy" if healthy else "overdue",
+        }
+
+    # Read from Redis (may be None if ticks never ran)
+    last_hourly = await redis.get("tick:last_hourly") if redis else None
+    last_daily = await redis.get("tick:last_daily") if redis else None
+    last_weekly = await redis.get("tick:last_weekly") if redis else None
+
+    hourly = _parse_tick(last_hourly, HOURLY_INTERVAL)
+    daily = _parse_tick(last_daily, DAILY_INTERVAL)
+    weekly = _parse_tick(last_weekly, WEEKLY_INTERVAL)
+
+    overall_healthy = hourly["healthy"]  # Hourly tick is most critical
+
+    return {
+        "section": "tick_status",
+        "server_time": now.isoformat(),
+        "overall_healthy": overall_healthy,
+        "ticks": {
+            "fast": {
+                "description": "NPC purchases, order matching, trade expiry",
+                "interval_seconds": 60,
+                "note": "Runs every external timer invocation (systemd timer or cron)",
+            },
+            "slow_hourly": hourly | {"description": "Rent, food, taxes, loans, NPC production, bankruptcy"},
+            "daily": daily | {"description": "Price history downsampling, economy snapshots"},
+            "weekly": weekly | {"description": "Election tally, government template update"},
+        },
+        "_hints": {
+            "message": (
+                f"Economy tick health: {'OK' if overall_healthy else 'DEGRADED'}. "
+                f"Hourly: {hourly['status']}, Daily: {daily['status']}, Weekly: {weekly['status']}."
             ),
         },
     }

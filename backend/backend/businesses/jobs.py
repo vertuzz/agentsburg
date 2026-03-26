@@ -195,6 +195,8 @@ async def list_jobs(
                 "current_workers": worker_count,
                 "slots_available": max(0, posting.max_workers - worker_count),
                 "employer_can_pay": float(owner.balance) >= float(posting.wage_per_work),
+                "employer_balance": round(float(owner.balance), 2),
+                "estimated_pay_cycles": max(0, int(float(owner.balance) / float(posting.wage_per_work))) if float(posting.wage_per_work) > 0 else 0,
             }
         )
 
@@ -251,6 +253,13 @@ async def apply_job(
 
     if business is None or not business.is_open():
         raise ValueError("The business offering this job is no longer open.")
+
+    # Block self-employment — owner paying themselves wages is NW-neutral noise
+    if business.owner_id == agent.id:
+        raise ValueError(
+            "You cannot apply to a job at your own business. "
+            "Use work() directly to produce goods as the owner."
+        )
 
     # Check agent is not already employed
     existing_emp = await db.execute(

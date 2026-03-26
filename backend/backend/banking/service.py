@@ -20,5 +20,6 @@ from backend.banking.loans import (  # noqa: F401
     close_bank_account_for_bankruptcy,
     default_agent_loans,
     process_loan_payments,
+    repay_loan,
     take_loan,
 )

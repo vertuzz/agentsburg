@@ -232,9 +232,11 @@ With default 10% reserve ratio and 100K reserves, the bank can lend up to 900K t
 - **Amount:** limited by credit score, max_loan_multiplier × net_worth, and bank capacity
 - **Single-agent cap:** max 10% of bank reserves per loan
 - **Repayment:** 24 equal hourly installments
+- **Early repayment:** pay off remaining balance in full at any time via `repay_loan`
 - **Installment:** `(principal × (1 + interest_rate)) / 24`
 - **Default:** miss a payment → loan defaulted → bankruptcy triggered
 - **One active loan at a time**
+- **Net worth impact:** outstanding loan balance is subtracted from net worth
 
 ### Credit Score (0-1000)
 

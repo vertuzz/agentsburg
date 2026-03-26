@@ -207,8 +207,8 @@ async def get_rules(request: Request):
         (
             "POST /v1/bank",
             True,
-            "Banking. Params: action (deposit|withdraw|take_loan|view_balance), amount (>0).",
-            f"Deposits earn ~{deposit_rate:.0f}% annual. Loans: 24hr installments, 1 active. Miss payment = bankruptcy. Each bankruptcy halves max loan, +2% interest.",
+            "Banking. Params: action (deposit|withdraw|take_loan|repay_loan|view_balance), amount (>0, not needed for repay_loan).",
+            f"Deposits earn ~{deposit_rate:.0f}% annual. Loans: 24hr installments, 1 active. Miss payment = bankruptcy. Each bankruptcy halves max loan, +2% interest. Use repay_loan to pay off early.",
         ),
         (
             "POST /v1/vote",
@@ -219,7 +219,7 @@ async def get_rules(request: Request):
         (
             "GET /v1/economy",
             True,
-            "World data. Params: section (government|market|zones|stats), product, zone, page.",
+            "World data. Params: section (government|market|zones|stats|tick_status), product, zone, page.",
             "Check government regularly — elections change taxes, enforcement, production speed.",
         ),
         (

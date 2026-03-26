@@ -119,7 +119,7 @@ async def _handle_marketplace_order(
         raise ToolError(INVALID_PARAMS, "Parameter 'quantity' is required")
     try:
         quantity = int(quantity)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         raise ToolError(INVALID_PARAMS, "Parameter 'quantity' must be an integer")
 
     if quantity <= 0:
@@ -209,7 +209,7 @@ async def _handle_marketplace_browse(
     page = params.get("page", 1)
     try:
         page = int(page)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         page = 1
     page = max(1, page)
 
@@ -322,16 +322,18 @@ async def _handle_leaderboard(
     View the net-worth leaderboard.
 
     Shows all active agents ranked by net worth (balance + bank deposits +
-    inventory value + business value). The stated game goal is to reach #1.
+    inventory value + business value + business inventory + locked sell orders
+    - loan liabilities). The stated game goal is to reach #1.
     """
     from datetime import timedelta
 
     from sqlalchemy import and_, func
 
     from backend.models.agent import Agent as _Agent
-    from backend.models.banking import BankAccount
+    from backend.models.banking import BankAccount, Loan
     from backend.models.business import Business as _Business
     from backend.models.inventory import InventoryItem
+    from backend.models.marketplace import MarketOrder
     from backend.models.transaction import Transaction
 
     goods_config = {g["slug"]: g for g in settings.goods}
@@ -390,6 +392,55 @@ async def _handle_leaderboard(
     )
     revenue_by_agent: dict[str, float] = {str(row[0]): float(row[1]) for row in rev_result.all()}
 
+    # Business inventory value (attributed to business owner)
+    biz_inv_result = await db.execute(
+        select(_Business.owner_id, InventoryItem.good_slug, func.sum(InventoryItem.quantity))
+        .join(
+            InventoryItem,
+            and_(
+                InventoryItem.owner_type == "business",
+                InventoryItem.owner_id == _Business.id,
+                InventoryItem.quantity > 0,
+            ),
+        )
+        .where(_Business.closed_at.is_(None))
+        .group_by(_Business.owner_id, InventoryItem.good_slug)
+    )
+    biz_inv_by_agent: dict[str, float] = {}
+    for owner_id, good_slug, qty in biz_inv_result.all():
+        good_data = goods_config.get(good_slug)
+        if good_data:
+            key = str(owner_id)
+            biz_inv_by_agent[key] = biz_inv_by_agent.get(key, 0) + float(good_data.get("base_value", 0)) * float(qty)
+
+    # Locked sell order value (goods on marketplace still belong to seller)
+    sell_orders_result = await db.execute(
+        select(
+            MarketOrder.agent_id,
+            MarketOrder.good_slug,
+            func.sum(MarketOrder.quantity_total - MarketOrder.quantity_filled),
+        )
+        .where(
+            MarketOrder.side == "sell",
+            MarketOrder.status.in_(["open", "partially_filled"]),
+        )
+        .group_by(MarketOrder.agent_id, MarketOrder.good_slug)
+    )
+    sell_lock_by_agent: dict[str, float] = {}
+    for agent_id, good_slug, qty_remaining in sell_orders_result.all():
+        good_data = goods_config.get(good_slug)
+        if good_data:
+            key = str(agent_id)
+            sell_lock_by_agent[key] = sell_lock_by_agent.get(key, 0) + float(good_data.get("base_value", 0)) * float(
+                qty_remaining
+            )
+
+    # Loan liabilities (subtract from net worth)
+    loan_result = await db.execute(
+        select(Loan.agent_id, func.sum(Loan.remaining_balance)).where(Loan.status == "active").group_by(Loan.agent_id)
+    )
+    loan_by_agent: dict[str, float] = {str(row[0]): float(row[1]) for row in loan_result.all()}
+
     # Compute rankings
     rankings = []
     for a in all_agents:
@@ -401,7 +452,10 @@ async def _handle_leaderboard(
         base_biz_val = num_biz * reg_cost
         rev_7d = revenue_by_agent.get(aid, 0.0)
         biz_val = base_biz_val + rev_7d
-        total = wallet + bank + inv_val + biz_val
+        biz_inv = biz_inv_by_agent.get(aid, 0.0)
+        sell_lock = sell_lock_by_agent.get(aid, 0.0)
+        loan_debt = loan_by_agent.get(aid, 0.0)
+        total = wallet + bank + inv_val + biz_val + biz_inv + sell_lock - loan_debt
 
         rankings.append(
             {

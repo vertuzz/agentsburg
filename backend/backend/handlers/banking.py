@@ -49,6 +49,11 @@ async def _handle_bank(
       Defaulting triggers bankruptcy. Only one active loan at a time.
       Requires: credit score > 0, bank has capacity, amount <= credit limit.
 
+    action='repay_loan':
+      Pay off your active loan early in full. Requires sufficient wallet
+      balance to cover the remaining loan balance. No extra fee — you pay
+      exactly what you owe. Frees you to take a new loan immediately.
+
     action='view_balance':
       Show your bank account balance, active loans, and current credit score.
       Credit score determines your borrowing limit and interest rate.
@@ -60,7 +65,7 @@ async def _handle_bank(
         )
 
     action = params.get("action")
-    valid_actions = ("deposit", "withdraw", "take_loan", "view_balance")
+    valid_actions = ("deposit", "withdraw", "take_loan", "repay_loan", "view_balance")
     if action not in valid_actions:
         raise ToolError(
             INVALID_PARAMS,
@@ -69,7 +74,7 @@ async def _handle_bank(
 
     from decimal import Decimal as _Decimal
 
-    from backend.banking.service import deposit, take_loan, view_balance, withdraw
+    from backend.banking.service import deposit, repay_loan, take_loan, view_balance, withdraw
     from backend.hints import get_pending_events
 
     if action == "view_balance":
@@ -77,6 +82,31 @@ async def _handle_bank(
         pending_events = await get_pending_events(db, agent)
         result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 3600}
         return result
+
+    if action == "repay_loan":
+        try:
+            result = await repay_loan(db, agent, clock, settings)
+        except ValueError as e:
+            error_msg = str(e)
+            if "no active loan" in error_msg.lower():
+                raise ToolError(NOT_ELIGIBLE, error_msg) from e
+            if "insufficient" in error_msg.lower():
+                raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
+            raise ToolError(INVALID_PARAMS, error_msg) from e
+
+        pending_events = await get_pending_events(db, agent)
+        return {
+            **result,
+            "_hints": {
+                "pending_events": pending_events,
+                "check_back_seconds": 60,
+                "message": (
+                    f"Loan repaid in full! Amount paid: {result['amount_repaid']:.2f}. "
+                    f"Wallet balance: {result['wallet_balance']:.2f}. "
+                    f"You can now take a new loan."
+                ),
+            },
+        }
 
     # All other actions require 'amount'
     raw_amount = params.get("amount")

@@ -22,7 +22,7 @@ from backend.banking._helpers import (
     _round_money,
     _to_decimal,
 )
-from backend.models.banking import BankAccount
+from backend.models.banking import BankAccount, Loan
 from backend.models.business import Business, Employment
 
 if TYPE_CHECKING:
@@ -131,14 +131,64 @@ async def calculate_credit(
     revenue_7d = _to_decimal(rev_result.scalar() or 0)
     business_value = base_business_value + revenue_7d
 
-    net_worth = wallet + bank_balance + inventory_value + business_value
+    # Business inventory value (goods stored in agent's businesses)
+    owned_biz_ids = [b.id for b in owned_businesses]
+    business_inventory_value = Decimal("0")
+    if owned_biz_ids:
+        biz_inv_result = await db.execute(
+            select(InventoryItem).where(
+                InventoryItem.owner_type == "business",
+                InventoryItem.owner_id.in_(owned_biz_ids),
+                InventoryItem.quantity > 0,
+            )
+        )
+        for item in biz_inv_result.scalars().all():
+            good_data = goods_config.get(item.good_slug)
+            if good_data:
+                business_inventory_value += _to_decimal(good_data.get("base_value", 0)) * item.quantity
+
+    # Locked sell order value (goods on the marketplace still belong to agent)
+    from backend.models.marketplace import MarketOrder
+
+    sell_lock_result = await db.execute(
+        select(MarketOrder).where(
+            MarketOrder.agent_id == agent.id,
+            MarketOrder.side == "sell",
+            MarketOrder.status.in_(["open", "partially_filled"]),
+        )
+    )
+    locked_sell_value = Decimal("0")
+    for order in sell_lock_result.scalars().all():
+        good_data = goods_config.get(order.good_slug)
+        if good_data:
+            remaining = order.quantity_total - order.quantity_filled
+            locked_sell_value += _to_decimal(good_data.get("base_value", 0)) * remaining
+
+    # Loan liability (outstanding loan balance reduces net worth)
+    loan_result = await db.execute(
+        select(func.coalesce(func.sum(Loan.remaining_balance), 0)).where(
+            Loan.agent_id == agent.id,
+            Loan.status == "active",
+        )
+    )
+    loan_liability = _to_decimal(loan_result.scalar() or 0)
+
+    net_worth = (
+        wallet
+        + bank_balance
+        + inventory_value
+        + business_value
+        + business_inventory_value
+        + locked_sell_value
+        - loan_liability
+    )
 
     # Loan-eligible net worth: illiquid assets count fully, but cash/bank
     # balances are capped at 50% to limit manipulation via cash transfers
     # between colluding agents (fractional reserve loan exploit).
     liquid_assets = wallet + bank_balance
-    illiquid_assets = inventory_value + business_value
-    loan_eligible_worth = illiquid_assets + min(liquid_assets, illiquid_assets + Decimal("200"))
+    illiquid_assets = inventory_value + business_value + business_inventory_value + locked_sell_value
+    loan_eligible_worth = illiquid_assets + min(liquid_assets, illiquid_assets + Decimal("200")) - loan_liability
 
     # --- Employment status ---
     emp_result = await db.execute(
@@ -237,6 +287,9 @@ async def calculate_credit(
             "bank_balance": float(bank_balance),
             "inventory_value": float(inventory_value),
             "business_value": float(business_value),
+            "business_inventory_value": float(business_inventory_value),
+            "locked_sell_value": float(locked_sell_value),
+            "loan_liability": float(loan_liability),
             "employed": employed,
             "bankruptcy_count": agent.bankruptcy_count,
             "violation_count": agent.violation_count,

@@ -151,7 +151,7 @@ ENDPOINT_CATALOG = [
         "path": "/v1/leaderboard",
         "description": (
             "View the net-worth leaderboard. Shows all agents ranked by "
-            "total net worth (wallet + bank + inventory + businesses)."
+            "total net worth (wallet + bank + inventory + businesses + business inventory + locked sell orders - loans)."
         ),
     },
     {
@@ -166,8 +166,9 @@ ENDPOINT_CATALOG = [
         "method": "POST",
         "path": "/v1/bank",
         "description": (
-            "Banking: deposit, withdraw, take_loan, view_balance. Deposits earn interest. Loans via fractional reserve. "
-            "New agents (<1hr old) qualify for a starter loan up to 75 with no assets required."
+            "Banking: deposit, withdraw, take_loan, repay_loan, view_balance. Deposits earn interest. Loans via fractional reserve. "
+            "New agents (<1hr old) qualify for a starter loan up to 75 with no assets required. "
+            "Use repay_loan to pay off your loan early and free up credit."
         ),
     },
     {
@@ -182,8 +183,8 @@ ENDPOINT_CATALOG = [
         "method": "GET",
         "path": "/v1/economy",
         "description": (
-            "Query economic data. Sections: government, market, zones, stats. "
-            "No section returns overview. Use for strategic decisions."
+            "Query economic data. Sections: government, market, zones, stats, tick_status. "
+            "No section returns overview. Use tick_status to check economy health."
         ),
     },
     {

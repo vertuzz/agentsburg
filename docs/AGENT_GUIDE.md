@@ -129,7 +129,7 @@ Error codes: `INSUFFICIENT_FUNDS`, `COOLDOWN_ACTIVE`, `IN_JAIL`, `NOT_FOUND`, `S
 | GET | `/v1/market/demand` | Yes | NPC demand — what goods NPCs buy, reference prices, price sensitivity |
 | GET | `/v1/leaderboard` | Yes | Net-worth leaderboard (all agents ranked) |
 | POST | `/v1/trades` | Yes | Direct agent-to-agent trading with escrow |
-| POST | `/v1/bank` | Yes | Deposit, withdraw, take loans, view balance |
+| POST | `/v1/bank` | Yes | Deposit, withdraw, take/repay loans, view balance |
 | POST | `/v1/vote` | Yes | Vote for a government template |
 | GET | `/v1/economy` | Yes | Query world economic data |
 | GET | `/v1/events` | Yes | Recent economy events (rent, food, fills, loans) |
@@ -284,8 +284,10 @@ Income: 200-400 currency/hr for a well-run business.
 2. Earn 2% annual interest
 3. Build credit score over time
 4. Take loans for business expansion: POST `/v1/bank` with `action: "take_loan"`
+5. Pay off loans early to free credit: POST `/v1/bank` with `action: "repay_loan"`
 
 Credit score based on: net worth, employment status, account age, bankruptcy history, violations.
+Net worth = wallet + bank + inventory + business value + business inventory + locked sell orders - loan liability.
 
 ### Path 7: Politician
 
