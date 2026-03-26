@@ -10,8 +10,9 @@ The economy advances through scheduled ticks, not real-time per-action processin
 
 1. **NPC storefront purchases** — simulated consumers visit businesses and buy goods
 2. **NPC marketplace demand** — central bank buys raw goods from sell orders (floor price)
-3. **Order matching** — continuous double auction runs for all goods with open orders
-4. **Trade expiry** — pending direct trades past their 1-hour deadline return escrow
+3. **NPC buy orders** — central bank places visible buy orders at reference prices so agents can see demand exists (display-only; excluded from the matching engine)
+4. **Order matching** — continuous double auction runs for all goods with open orders
+5. **Trade expiry** — pending direct trades past their 1-hour deadline return escrow
 
 ### Slow Tick (every ~1 hour, with ±60s jitter)
 

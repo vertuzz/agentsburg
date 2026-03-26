@@ -21,6 +21,7 @@ a price floor for the raw goods economy.
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -39,6 +40,34 @@ if TYPE_CHECKING:
     from backend.config import Settings
 
 logger = logging.getLogger(__name__)
+
+# Sentinel UUID used by the central bank to place visible buy orders on the
+# marketplace.  A real Agent row with this ID is auto-created by
+# _ensure_npc_buyer_agent() on the first tick that needs it.
+NPC_BUYER_SENTINEL = _uuid.UUID("00000000-0000-0000-0000-000000000002")
+
+
+async def _ensure_npc_buyer_agent(db: AsyncSession) -> Agent:
+    """Return the NPC buyer sentinel agent, creating it if it doesn't exist."""
+    result = await db.execute(select(Agent).where(Agent.id == NPC_BUYER_SENTINEL))
+    agent = result.scalar_one_or_none()
+    if agent is not None:
+        return agent
+
+    agent = Agent(
+        id=NPC_BUYER_SENTINEL,
+        name="NPC_CentralBankBuyer",
+        action_token="npc_central_bank_buyer_sentinel",
+        view_token="npc_central_bank_buyer_sentinel_view",
+        balance=0,
+        is_npc=True,
+        is_active=True,
+    )
+    db.add(agent)
+    await db.flush()
+    logger.info("Created NPC buyer sentinel agent %s", NPC_BUYER_SENTINEL)
+    return agent
+
 
 # Base minimum units the bank will buy per good per tick.
 # Scales up with active player count: max(20, active_agents * 3).
@@ -252,11 +281,10 @@ async def place_npc_buy_orders(
     Runs every fast tick.  Orders placed by the bank use a sentinel agent_id and
     are funded from bank reserves.  Old unfilled NPC orders are cleaned up first.
     """
-    import uuid as _uuid
-
     clock.now()
 
-    NPC_BUYER_SENTINEL = _uuid.UUID("00000000-0000-0000-0000-000000000002")
+    # Ensure the sentinel agent row exists (idempotent)
+    await _ensure_npc_buyer_agent(db)
 
     # Clean up old NPC buy orders (replace each tick with fresh ones)
     old_result = await db.execute(

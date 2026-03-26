@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from backend.agents.inventory import add_to_inventory
+from backend.economy.npc_marketplace import NPC_BUYER_SENTINEL
 from backend.models.agent import Agent
 from backend.models.marketplace import MarketOrder, MarketTrade
 from backend.models.transaction import Transaction
@@ -65,12 +66,15 @@ async def match_orders(
 
     # Load all open buy orders for this good, sorted by price DESC then created_at ASC
     # (highest bidder first; earliest order breaks ties)
+    # Exclude the NPC buyer sentinel — those orders are display-only demand
+    # signals; actual NPC buying happens via simulate_npc_marketplace_demand.
     buy_result = await db.execute(
         select(MarketOrder)
         .where(
             MarketOrder.good_slug == good_slug,
             MarketOrder.side == "buy",
             MarketOrder.status.in_(["open", "partially_filled"]),
+            MarketOrder.agent_id != NPC_BUYER_SENTINEL,
         )
         .order_by(MarketOrder.price.desc(), MarketOrder.created_at.asc())
         .with_for_update()

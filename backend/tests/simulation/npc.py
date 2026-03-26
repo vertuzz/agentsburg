@@ -454,4 +454,95 @@ async def run_npc_simulation(client, app, clock, run_tick, redis_client):
         print("  ✓ 0 food/survival transactions for NPC agents")
         print(f"  ✓ {player_count} non-NPC agents charged survival costs")
 
+    # ═══════════════════════════════════════════════════════════════
+    # PHASE 10: NPC buy orders — sentinel agent created, orders visible,
+    #           orders excluded from matching engine
+    # ═══════════════════════════════════════════════════════════════
+
+    print("\n=== NPC Phase 10: NPC Buy Orders (Sentinel) ===")
+
+    from backend.economy.npc_marketplace import NPC_BUYER_SENTINEL
+    from backend.models.marketplace import MarketOrder
+
+    # Run a fast tick to trigger place_npc_buy_orders
+    await _set_online_players(redis_client, 0)
+    tick_result = await run_tick(minutes=1)
+
+    # Verify NPC buy orders were placed (fast tick should include the result)
+    fast_tick = tick_result.get("fast_tick", {})
+    npc_buy_info = next(
+        (p for p in fast_tick.get("processed", []) if p.get("type") == "npc_buy_orders"),
+        {},
+    )
+    orders_placed = npc_buy_info.get("orders_placed", 0)
+    assert orders_placed > 0, f"Expected NPC buy orders placed, got {orders_placed}"
+    print(f"  ✓ {orders_placed} NPC buy orders placed on marketplace")
+
+    # Verify the sentinel agent exists in the DB
+    async with app.state.session_factory() as session:
+        sentinel_result = await session.execute(select(Agent).where(Agent.id == NPC_BUYER_SENTINEL))
+        sentinel_agent = sentinel_result.scalar_one_or_none()
+        assert sentinel_agent is not None, "NPC buyer sentinel agent should exist"
+        assert sentinel_agent.is_npc is True, "Sentinel should be NPC"
+        assert sentinel_agent.name == "NPC_CentralBankBuyer"
+        print(f"  ✓ Sentinel agent exists: {sentinel_agent.name} (is_npc=True)")
+
+        # Verify open NPC buy orders are on the book
+        npc_orders_result = await session.execute(
+            select(MarketOrder).where(
+                MarketOrder.agent_id == NPC_BUYER_SENTINEL,
+                MarketOrder.side == "buy",
+                MarketOrder.status == "open",
+            )
+        )
+        npc_orders = list(npc_orders_result.scalars().all())
+        assert len(npc_orders) > 0, "Expected open NPC buy orders on the book"
+        print(f"  ✓ {len(npc_orders)} open NPC buy orders visible on marketplace")
+
+    # Verify NPC buy orders don't consume player sell orders via matching.
+    # Place a player sell order for a good that has an NPC buy order.
+    # The sell should NOT be matched against the NPC order.
+    test_seller = await TestAgent.signup(client, "NpcBuyTestSeller")
+    async with app.state.session_factory() as session:
+        result = await session.execute(select(Agent).where(Agent.name == "NpcBuyTestSeller"))
+        seller_agent = result.scalar_one()
+        seller_agent.balance = 500
+        await session.commit()
+
+    from tests.conftest import give_inventory
+
+    # Pick a good that has NPC buy orders
+    npc_order_good = npc_orders[0].good_slug
+    npc_order_price = float(npc_orders[0].price)
+    await give_inventory(app, "NpcBuyTestSeller", npc_order_good, 10)
+
+    # Place sell order at price below NPC buy order price (would cross if matching)
+    sell_result = await test_seller.call(
+        "marketplace_order",
+        {"action": "sell", "product": npc_order_good, "quantity": 3, "price": npc_order_price * 0.5},
+    )
+    # The sell order should NOT have been immediately filled by NPC buy orders
+    immediate_fills = sell_result.get("immediate_fills", 0)
+    assert immediate_fills == 0, (
+        f"NPC buy orders should not match during place_order, "
+        f"but got {immediate_fills} immediate fills for {npc_order_good}"
+    )
+    print(
+        f"  ✓ Player sell order for {npc_order_good} NOT matched against NPC buy orders "
+        f"(0 immediate fills, NPC orders are display-only)"
+    )
+
+    # Verify the sell order is still open (not consumed)
+    async with app.state.session_factory() as session:
+        sell_order_result = await session.execute(
+            select(MarketOrder).where(
+                MarketOrder.agent_id == seller_agent.id,
+                MarketOrder.good_slug == npc_order_good,
+                MarketOrder.side == "sell",
+            )
+        )
+        sell_order = sell_order_result.scalar_one()
+        assert sell_order.status == "open", f"Sell order should be open, got {sell_order.status}"
+        print("  ✓ Sell order still open — available for player buyers")
+
     print("\n=== NPC Simulation Complete ===\n")
