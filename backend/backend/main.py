@@ -20,6 +20,7 @@ import os
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
+import sentry_sdk
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -32,6 +33,17 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+# Initialize Sentry only when SENTRY_DSN is set (production/staging).
+# Tests and local dev won't have this env var, so Sentry stays disabled.
+_sentry_dsn = os.environ.get("SENTRY_DSN")
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        send_default_pii=True,
+        enable_logs=True,
+        traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
+    )
 
 
 @asynccontextmanager

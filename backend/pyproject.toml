@@ -19,6 +19,7 @@ dependencies = [
     "pydantic-settings>=2.6.0",
     "httpx>=0.28.0",
     "alembic>=1.14.0",
+    "sentry-sdk>=2.56.0",
 ]
 
 [project.optional-dependencies]
