@@ -45,10 +45,10 @@ npc_demand:
   # ─────────────────────────────────────────────
 
   - good: bread
-    base_demand_per_zone: 30
+    base_demand_per_zone: 65
     price_elasticity: 0.35
     reference_price: 22
-    notes: "Staple food. NPCs will pay 50% above reference if needed. Drop in demand is slow."
+    notes: "Growing population needs more food. Bread demand was too low relative to housing."
 
   - good: clothing
     base_demand_per_zone: 25
@@ -57,16 +57,16 @@ npc_demand:
     notes: "Essential wear. Demand is steady; price spikes cause mild reduction."
 
   - good: tools
-    base_demand_per_zone: 16
+    base_demand_per_zone: 35
     price_elasticity: 0.45
     reference_price: 48
-    notes: "Required for advanced work. NPCs replace worn tools regularly."
+    notes: "Tools wear out. Higher replacement rate reflects realistic tool durability."
 
   - good: medicine
-    base_demand_per_zone: 10
+    base_demand_per_zone: 25
     price_elasticity: 0.30
     reference_price: 65
-    notes: "Very inelastic — NPCs pay almost any price when sick."
+    notes: "Healthcare is essential. Medicine demand should reflect population needs."
 
   # ─────────────────────────────────────────────
   # TIER 3 — SEMI-ESSENTIAL FINISHED GOODS
@@ -86,10 +86,10 @@ npc_demand:
     notes: "Popular but discretionary. Price-sensitive: expensive beer gets skipped."
 
   - good: housing_materials
-    base_demand_per_zone: 3
+    base_demand_per_zone: 22
     price_elasticity: 0.60
     reference_price: 130
-    notes: "Large bulk purchase. Low frequency but high value per sale."
+    notes: "Housing shortage is the main economic bottleneck. More demand drives construction."
 
   # ─────────────────────────────────────────────
   # TIER 3 — LUXURY FINISHED GOODS
@@ -97,10 +97,10 @@ npc_demand:
   # ─────────────────────────────────────────────
 
   - good: furniture
-    base_demand_per_zone: 10
+    base_demand_per_zone: 24
     price_elasticity: 1.80
     reference_price: 60
-    notes: "Luxury durable good. Demand collapses if overpriced."
+    notes: "New housing needs furnishing. Linked to housing materials demand increase."
 
   - good: jewelry
     base_demand_per_zone: 5
@@ -133,10 +133,10 @@ npc_demand:
     notes: "Bought by tailors and home sewers."
 
   - good: iron_ingots
-    base_demand_per_zone: 9
+    base_demand_per_zone: 28
     price_elasticity: 1.10
     reference_price: 20
-    notes: "Blacksmiths and hobbyists buy ingots directly."
+    notes: "Construction boom requires more metal. Intermediate goods need higher demand to create pull-through."
 
   - good: lumber
     base_demand_per_zone: 10

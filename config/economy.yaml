@@ -209,10 +209,12 @@ min_deposit_for_interest: 10
 # NPC WORKERS
 # ─────────────────────────────────────────────
 
-npc_worker_efficiency: 0.5
-# NPC workers produce at 50% of a real agent's rate.
-# A recipe with 60s cooldown takes NPC workers 120s to complete.
-# This makes hiring real agents strictly preferable when available.
+npc_worker_efficiency: 0.6
+# NPC workers produce at 60% of a real agent's rate.
+# A recipe with 60s cooldown takes NPC workers 100s to complete.
+# This makes hiring real agents strictly preferable when available,
+# while ensuring NPC workers provide meaningful passive income
+# for business owners who invest in hiring them.
 
 npc_worker_wage_multiplier: 2.0
 # NPC workers are paid 2x the posted job wage.
@@ -222,6 +224,13 @@ npc_worker_wage_multiplier: 2.0
 npc_worker_max_per_business: 5
 # Maximum NPC workers a single business can hire.
 # Prevents unlimited NPC automation making agent workers irrelevant.
+
+npc_worker_production_enabled: true
+# When true, NPC workers at player-owned businesses automatically produce
+# goods during the fast tick, using the business's selected production recipe.
+# Workers produce at npc_worker_efficiency rate (0.6 = 60% speed).
+# If false, NPC workers are hired but do not auto-produce (legacy behavior).
+# Note: wages are still charged per work cycle regardless of this setting.
 
 # ─────────────────────────────────────────────
 # CRIME & ENFORCEMENT
@@ -265,9 +274,11 @@ npc_target_player_count: 20
 # "Online" = made an API call in the last 30 minutes.
 # With 0 players, NPCs run at 100%. With 20+, NPCs run at minimum.
 
-npc_min_activity_factor: 0.1
+npc_min_activity_factor: 0.25
 # Floor for NPC activity scaling. Even with many players, NPCs still
 # operate at this fraction of full capacity to fill coverage gaps.
+# At 0.25, NPC demand never falls below 25% even at peak player count,
+# preventing storefronts from becoming unprofitable during active hours.
 
 npc_job_wage_boost_factor: 1.5
 # When few players are online, NPC job wages are boosted by up to this
