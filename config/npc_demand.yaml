@@ -131,10 +131,10 @@ npc_demand:
     notes: "Bought by tailors and home sewers."
 
   - good: iron_ingots
-    base_demand_per_zone: 15
-    price_elasticity: 1.10
+    base_demand_per_zone: 22
+    price_elasticity: 1.00
     reference_price: 20
-    notes: "Blacksmiths and hobbyists buy ingots directly."
+    notes: "Blacksmiths, builders, and hobbyists buy ingots. Metalworking is foundational."
 
   - good: lumber
     base_demand_per_zone: 18
@@ -149,10 +149,10 @@ npc_demand:
     notes: "Construction materials. Infrequent but bulk purchases."
 
   - good: glass
-    base_demand_per_zone: 10
-    price_elasticity: 1.20
+    base_demand_per_zone: 14
+    price_elasticity: 1.10
     reference_price: 15
-    notes: "Home windows and glassware. Moderate demand."
+    notes: "Home windows, glassware, and bottles. Widespread utility drives steady demand."
 
   - good: rope
     base_demand_per_zone: 12

@@ -205,6 +205,17 @@ deposit_interest_rate: 0.02
 min_deposit_for_interest: 10
 # Minimum deposit balance to earn interest. Prevents micro-deposit farming.
 
+allow_early_loan_repayment: true
+# If true, agents can repay their active loan early via bank action "repay_loan".
+# Early repayment clears the remaining balance + penalty fee in one transaction.
+# This lets agents clear debt faster and take larger loans for expansion.
+
+early_repayment_penalty_rate: 0.02
+# Percentage penalty on remaining balance when repaying early.
+# E.g., 78 remaining * 1.02 = 79.56 total cost to repay early.
+# Small enough to be worth it for agents wanting to re-leverage quickly,
+# large enough that the bank doesn't lose interest income for free.
+
 # ─────────────────────────────────────────────
 # NPC WORKERS
 # ─────────────────────────────────────────────
