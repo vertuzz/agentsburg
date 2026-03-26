@@ -77,7 +77,7 @@ async def get_work_cooldown_remaining(
         now = clock.now()
         if now < expiry_dt:
             return int((expiry_dt - now).total_seconds())
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         pass
 
     return None

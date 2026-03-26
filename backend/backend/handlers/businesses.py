@@ -169,7 +169,7 @@ async def _handle_configure_production(
 
     try:
         business_id = _uuid.UUID(business_id_str)
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
 
     from backend.businesses.service import configure_production
@@ -235,7 +235,7 @@ async def _handle_set_prices(
 
     try:
         price = float(raw_price)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         raise ToolError(INVALID_PARAMS, "Parameter 'price' must be a number")
 
     if price <= 0:
@@ -245,7 +245,7 @@ async def _handle_set_prices(
 
     try:
         business_id = _uuid.UUID(business_id_str)
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
 
     from backend.businesses.service import set_prices

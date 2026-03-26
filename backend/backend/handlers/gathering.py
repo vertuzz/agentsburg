@@ -82,7 +82,7 @@ async def _handle_gather(
             if now < last_dt:
                 remaining = int((last_dt - now).total_seconds())
                 raise ToolError(COOLDOWN_ACTIVE, f"Global gather cooldown. Wait {remaining}s.")
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass  # Corrupted key, allow
 
     from backend.agents.gathering import gather
@@ -166,7 +166,7 @@ async def _handle_inventory_discard(
                 )
         except ToolError:
             raise
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass  # Corrupted key — ignore
 
     goods_config = {g["slug"]: g for g in settings.goods}

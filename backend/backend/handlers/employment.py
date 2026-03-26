@@ -69,7 +69,7 @@ async def _handle_manage_employees(
             raise ToolError(INVALID_PARAMS, f"Parameter 'business_id' is required for action='{action}'")
         try:
             business_id = _uuid.UUID(business_id_str)
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             raise ToolError(INVALID_PARAMS, f"Invalid business_id: {business_id_str!r}")
 
     from backend.hints import get_pending_events
@@ -84,7 +84,7 @@ async def _handle_manage_employees(
             raise ToolError(INVALID_PARAMS, "Parameter 'wage' is required for post_job")
         try:
             wage = float(raw_wage)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise ToolError(INVALID_PARAMS, "Parameter 'wage' must be a number")
 
         if wage <= 0:
@@ -99,7 +99,7 @@ async def _handle_manage_employees(
         raw_max_workers = params.get("max_workers", 1)
         try:
             max_workers = int(raw_max_workers)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise ToolError(INVALID_PARAMS, "Parameter 'max_workers' must be an integer")
         if max_workers < 1:
             raise ToolError(INVALID_PARAMS, "Parameter 'max_workers' must be at least 1")
@@ -163,7 +163,7 @@ async def _handle_manage_employees(
             raise ToolError(INVALID_PARAMS, "Parameter 'employee_id' is required for action='fire'")
         try:
             employee_id = _uuid.UUID(employee_id_str)
-        except (ValueError, AttributeError):
+        except ValueError, AttributeError:
             raise ToolError(INVALID_PARAMS, f"Invalid employee_id: {employee_id_str!r}")
 
         from backend.businesses.employment import fire_employee
@@ -241,12 +241,12 @@ async def _handle_list_jobs(
     if min_wage_raw is not None:
         try:
             min_wage = float(min_wage_raw)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             raise ToolError(INVALID_PARAMS, "Parameter 'min_wage' must be a number")
 
     try:
         page = int(page_raw)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         page = 1
     page = max(1, page)
 
@@ -302,7 +302,7 @@ async def _handle_apply_job(
 
     try:
         job_id = _uuid.UUID(job_id_str)
-    except (ValueError, AttributeError):
+    except ValueError, AttributeError:
         raise ToolError(INVALID_PARAMS, f"Invalid job_id: {job_id_str!r}")
 
     from backend.businesses.employment import apply_job

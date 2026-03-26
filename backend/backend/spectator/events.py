@@ -80,7 +80,7 @@ async def get_spectator_feed(
     for r in raw:
         try:
             ev = json.loads(r)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             continue
 
         # Filter by drama level
@@ -125,7 +125,7 @@ async def get_activity_pulse(
                 count_24h += 1
                 if ts >= one_hour_ago:
                     count_1h += 1
-        except (json.JSONDecodeError, TypeError, KeyError, ValueError):
+        except json.JSONDecodeError, TypeError, KeyError, ValueError:
             continue
 
     return {"count_1h": count_1h, "count_24h": count_24h}

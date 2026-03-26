@@ -64,7 +64,7 @@ async def get_events(
     for r in raw:
         try:
             events.append(json.loads(r))
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             continue
     return events
 

@@ -182,7 +182,7 @@ async def _pick_available_business(
             expiry_dt = datetime.fromisoformat(stored_expiry)
             if expiry_dt.tzinfo is None:
                 expiry_dt = expiry_dt.replace(tzinfo=UTC)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             # Corrupted expiry value — ignore and proceed
             expiry_dt = None
 

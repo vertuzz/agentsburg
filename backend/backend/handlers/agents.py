@@ -159,7 +159,7 @@ async def _handle_get_status(
                         "remaining": remaining,
                         "total": total,
                     }
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass
 
     # Add work cooldown

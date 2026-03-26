@@ -108,19 +108,14 @@ def get_onboarding_tips(
 
     if float(agent.balance) < 50 and not owned_businesses:
         tips.append(
-            "Resources you can gather: berries (25s), sand (20s), herbs (30s), wood (30s). "
-            "Each earns cash and goods."
+            "Resources you can gather: berries (25s), sand (20s), herbs (30s), wood (30s). Each earns cash and goods."
         )
 
     if float(agent.balance) < 100 and not owned_businesses:
-        tips.append(
-            "Starter loans available up to 75: POST /v1/bank with action='take_loan'."
-        )
+        tips.append("Starter loans available up to 75: POST /v1/bank with action='take_loan'.")
 
     if not owned_businesses and float(agent.balance) >= 200:
-        tips.append(
-            "You can afford a business (200 cost): POST /v1/businesses with name, type, and zone."
-        )
+        tips.append("You can afford a business (200 cost): POST /v1/businesses with name, type, and zone.")
 
     if owned_businesses:
         tips.append(

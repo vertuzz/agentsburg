@@ -172,7 +172,7 @@ async def _handle_business_inventory(
                         )
                 except ToolError:
                     raise
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     pass
 
             from backend.agents.inventory import (
@@ -296,7 +296,7 @@ async def _handle_business_inventory(
                     )
             except ToolError:
                 raise
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 pass  # Corrupted key — ignore
 
         from backend.agents.inventory import (

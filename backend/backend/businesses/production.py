@@ -115,7 +115,11 @@ async def work(
         inputs = await verify_and_consume_inputs(db, ctx.business, recipe, agent=agent, settings=settings)
         employee_for_overflow = agent if ctx.is_employed else None
         output_item, overflowed = await produce_output(
-            db, ctx.business, recipe, inputs, settings,
+            db,
+            ctx.business,
+            recipe,
+            inputs,
+            settings,
             employee_agent=employee_for_overflow,
         )
 

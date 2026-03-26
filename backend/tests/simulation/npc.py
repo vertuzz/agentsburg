@@ -164,7 +164,9 @@ async def run_npc_simulation(client, app, clock, run_tick, redis_client):
                 f"  ✓ {len(npc_supply_txns)} NPC supply chain transactions "
                 f"({total_supply_volume} units, ${total_supply_revenue:.2f} revenue)"
             )
-            print(f"    Example: {meta['buyer_business']} bought {meta['quantity']}x {meta['good_slug']} from {meta['supplier_business']}")
+            print(
+                f"    Example: {meta['buyer_business']} bought {meta['quantity']}x {meta['good_slug']} from {meta['supplier_business']}"
+            )
         else:
             # Supply chain purchasing is opportunistic — it only fires when a
             # processor NPC needs restocking AND a supplier NPC has stock with

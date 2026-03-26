@@ -52,7 +52,7 @@ async def classify_agent(
     if cached is not None:
         try:
             return json.loads(cached)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError, TypeError:
             pass
 
     # --- fetch data ---
