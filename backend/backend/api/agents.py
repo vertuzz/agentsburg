@@ -232,11 +232,18 @@ async def get_agent_profile(
             )
         )
     )
+    all_businesses = owned_biz_result.scalars().all()
+
+    # Batch-load zones to avoid N+1 queries
+    biz_zone_ids = {biz.zone_id for biz in all_businesses if biz.zone_id}
+    biz_zones_map: dict = {}
+    if biz_zone_ids:
+        biz_zones_result = await db.execute(select(Zone).where(Zone.id.in_(list(biz_zone_ids))))
+        biz_zones_map = {z.id: z for z in biz_zones_result.scalars().all()}
+
     businesses = []
-    for biz in owned_biz_result.scalars().all():
-        # Get zone slug
-        biz_zone_result = await db.execute(select(Zone).where(Zone.id == biz.zone_id))
-        biz_zone = biz_zone_result.scalar_one_or_none()
+    for biz in all_businesses:
+        biz_zone = biz_zones_map.get(biz.zone_id)
         businesses.append(
             {
                 "id": str(biz.id),
