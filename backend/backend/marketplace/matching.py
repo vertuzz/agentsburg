@@ -127,12 +127,21 @@ async def match_orders(
         # Match as much as possible
         fill_qty = min(buy_remaining, sell_remaining)
 
-        # --- Load buyer and seller agents (locked to prevent concurrent balance changes) ---
-        buyer_result = await db.execute(select(Agent).where(Agent.id == buy_order.agent_id).with_for_update())
-        buyer = buyer_result.scalar_one_or_none()
-
-        seller_result = await db.execute(select(Agent).where(Agent.id == sell_order.agent_id).with_for_update())
-        seller = seller_result.scalar_one_or_none()
+        # --- Load buyer and seller agents (locked in UUID order to prevent deadlocks) ---
+        buyer_id = buy_order.agent_id
+        seller_id = sell_order.agent_id
+        if str(buyer_id) <= str(seller_id):
+            first_result = await db.execute(select(Agent).where(Agent.id == buyer_id).with_for_update())
+            first = first_result.scalar_one_or_none()
+            second_result = await db.execute(select(Agent).where(Agent.id == seller_id).with_for_update())
+            second = second_result.scalar_one_or_none()
+            buyer, seller = first, second
+        else:
+            first_result = await db.execute(select(Agent).where(Agent.id == seller_id).with_for_update())
+            first = first_result.scalar_one_or_none()
+            second_result = await db.execute(select(Agent).where(Agent.id == buyer_id).with_for_update())
+            second = second_result.scalar_one_or_none()
+            buyer, seller = second, first
 
         if buyer is None or seller is None:
             # Agent deleted — skip this order pair

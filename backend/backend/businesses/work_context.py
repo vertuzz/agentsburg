@@ -419,11 +419,33 @@ async def pay_wage(
     recipe: Recipe,
     now: datetime,
 ) -> tuple[float, Agent]:
-    """Deduct wage from owner and credit to worker. Returns (wage_earned, agent)."""
+    """Deduct wage from owner and credit to worker. Returns (wage_earned, agent).
+
+    Locks both agent rows in UUID order to prevent deadlocks when two
+    workers employed by each other's businesses call /work concurrently.
+    """
     wage = Decimal(str(employment.wage_per_work))
 
-    owner_result = await db.execute(select(Agent).where(Agent.id == business.owner_id).with_for_update())
-    owner_agent = owner_result.scalar_one_or_none()
+    # Always lock agents in consistent UUID order to prevent deadlocks
+    owner_id = business.owner_id
+    worker_id = agent.id
+    if str(owner_id) <= str(worker_id):
+        first_id, second_id = owner_id, worker_id
+    else:
+        first_id, second_id = worker_id, owner_id
+
+    first_result = await db.execute(select(Agent).where(Agent.id == first_id).with_for_update())
+    first_agent = first_result.scalar_one_or_none()
+    second_result = await db.execute(
+        select(Agent).where(Agent.id == second_id).with_for_update().execution_options(populate_existing=True)
+    )
+    second_agent = second_result.scalar_one_or_none()
+
+    if str(owner_id) <= str(worker_id):
+        owner_agent, agent = first_agent, second_agent
+    else:
+        agent, owner_agent = first_agent, second_agent
+
     if owner_agent is None:
         logger.error(
             "Business %r has no owner agent (owner_id=%s) — cannot pay wage",
@@ -431,11 +453,6 @@ async def pay_wage(
             business.owner_id,
         )
         raise ValueError("Business owner not found. Cannot process wage payment. Contact the business owner.")
-
-    worker_row = await db.execute(
-        select(Agent).where(Agent.id == agent.id).with_for_update().execution_options(populate_existing=True)
-    )
-    agent = worker_row.scalar_one()
 
     owner_balance = Decimal(str(owner_agent.balance))
     if owner_balance < wage:

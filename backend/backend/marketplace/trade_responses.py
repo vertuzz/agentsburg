@@ -84,12 +84,19 @@ async def respond_trade(
     if now >= trade.expires_at:
         raise ValueError(f"Trade has expired (expired at {trade.expires_at.isoformat()})")
 
-    # Load and lock both agents to prevent concurrent balance/inventory changes
-    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
-    agent = agent_row.scalar_one()
-
-    proposer_result = await db.execute(select(Agent).where(Agent.id == trade.proposer_id).with_for_update())
-    proposer = proposer_result.scalar_one_or_none()
+    # Load and lock both agents in UUID order to prevent deadlocks
+    responder_id = agent.id
+    proposer_id = trade.proposer_id
+    if str(responder_id) <= str(proposer_id):
+        first_row = await db.execute(select(Agent).where(Agent.id == responder_id).with_for_update())
+        agent = first_row.scalar_one()
+        second_row = await db.execute(select(Agent).where(Agent.id == proposer_id).with_for_update())
+        proposer = second_row.scalar_one_or_none()
+    else:
+        first_row = await db.execute(select(Agent).where(Agent.id == proposer_id).with_for_update())
+        proposer = first_row.scalar_one_or_none()
+        second_row = await db.execute(select(Agent).where(Agent.id == responder_id).with_for_update())
+        agent = second_row.scalar_one()
     if proposer is None:
         raise ValueError("Trade proposer no longer exists")
 
