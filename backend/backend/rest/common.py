@@ -4,6 +4,7 @@ Shared dependencies, rate limiting, error handling, and helpers for REST routes.
 
 from __future__ import annotations
 
+import json
 import logging
 
 import redis.asyncio as aioredis
@@ -12,7 +13,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.errors import ToolError
+from backend.errors import INVALID_PARAMS, ToolError
 
 logger = logging.getLogger(__name__)
 
@@ -186,4 +187,10 @@ async def _body_or_empty(request: Request) -> dict:
     body = await request.body()
     if not body or body.strip() == b"":
         return {}
-    return await request.json()
+    try:
+        return json.loads(body)
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ToolError(
+            INVALID_PARAMS,
+            f"Invalid JSON in request body: {exc}",
+        ) from exc

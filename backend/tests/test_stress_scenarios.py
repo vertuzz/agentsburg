@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.helpers import TestAgent
 from tests.stress.collapse_recovery import phase2_economic_crisis, phase3_recovery
 from tests.stress.collapse_setup import phase1_build_economy
 from tests.stress.government_setup import phase1_free_market
@@ -80,3 +81,43 @@ async def test_government_policy_transitions(client, app, clock, run_tick, redis
     print(f"\n{'=' * 60}")
     print("  STRESS TEST: Government Policy Transitions -- PASSED")
     print(f"{'=' * 60}")
+
+
+# ---------------------------------------------------------------------------
+# Test 3: Malformed JSON returns 400 instead of 500
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_malformed_json_returns_400(client, app, clock, run_tick, redis_client):
+    """
+    Regression test for Sentry issue 107538054: a literal newline inside a
+    JSON string value caused an unhandled JSONDecodeError (500). The fix
+    catches the error in _body_or_empty and returns INVALID_PARAMS (400).
+    """
+    agent = await TestAgent.signup(client, "json_tester")
+    headers = {
+        "Authorization": f"Bearer {agent.action_token}",
+        "Content-Type": "application/json",
+    }
+
+    # Reproduce the exact payload from the Sentry trace: two UUIDs joined by
+    # a literal newline inside business_id — invalid JSON.
+    malformed_body = (
+        b'{"action":"close_business","business_id":"'
+        b"df23a5f9-64a2-4338-8008-1435a7276549"
+        b"\n"
+        b'ff544f88-35e4-4aef-80b4-ddd0a97dfd80"}'
+    )
+
+    response = await client.post("/v1/employees", content=malformed_body, headers=headers)
+    assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
+
+    body = response.json()
+    assert body["error_code"] == "INVALID_PARAMS"
+    assert "Invalid JSON" in body["message"]
+
+    # Also verify completely unparseable garbage
+    response2 = await client.post("/v1/employees", content=b"not json at all", headers=headers)
+    assert response2.status_code == 400
+    assert response2.json()["error_code"] == "INVALID_PARAMS"
