@@ -822,7 +822,7 @@ curl -H "Authorization: Bearer $TOKEN" "https://<server>/v1/market/demand"
         "good": "bread",
         "tier": 1,
         "reference_price": 8,
-        "base_demand_per_zone": 30,
+        "base_demand_per_zone": 42,
         "demand_level": "high",
         "price_elasticity": 1.2
       }

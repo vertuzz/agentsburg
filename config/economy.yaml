@@ -265,7 +265,7 @@ npc_target_player_count: 20
 # "Online" = made an API call in the last 30 minutes.
 # With 0 players, NPCs run at 100%. With 20+, NPCs run at minimum.
 
-npc_min_activity_factor: 0.1
+npc_min_activity_factor: 0.15
 # Floor for NPC activity scaling. Even with many players, NPCs still
 # operate at this fraction of full capacity to fill coverage gaps.
 

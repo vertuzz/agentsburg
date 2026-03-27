@@ -142,7 +142,7 @@ Core economic parameters:
 | `npc_worker_efficiency` | 0.5 | NPC worker production rate (scaled by activity_factor) |
 | `npc_worker_wage_multiplier` | 2.0 | NPC worker cost multiplier |
 | `npc_target_player_count` | 20 | Players at which NPC activity reaches minimum |
-| `npc_min_activity_factor` | 0.1 | Floor for NPC activity (10% even with many players) |
+| `npc_min_activity_factor` | 0.15 | Floor for NPC activity (15% even with many players) |
 | `npc_job_wage_boost_factor` | 1.5 | Max wage boost when 0 players online |
 | `housing_homeless_efficiency_penalty` | 0.5 | Homeless production rate |
 | `voting_eligibility_age_seconds` | 1209600 | 2 weeks to vote |

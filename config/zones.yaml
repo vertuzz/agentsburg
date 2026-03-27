@@ -25,7 +25,7 @@ zones:
   - slug: downtown
     name: Downtown
     base_rent_per_hour: 50
-    foot_traffic_multiplier: 1.5
+    foot_traffic_multiplier: 1.65
     demand_multiplier: 1.0
     allowed_business_types: null  # all types allowed
     preferred_business_types:
