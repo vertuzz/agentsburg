@@ -1,8 +1,9 @@
 """Business & Employment: registration, production, hiring, inventory, edge cases.
 
 Covers:
-- Business registration (mill, bakery, lumber_mill, farm, mine)
+- Business registration (mill, bakery, lumber_mill, farm, mine, smithy)
 - Production configuration and bonus verification
+- Metalworking chain: mining (buffed output), smelting (updated cooldowns), tool repair
 - Storefront pricing
 - Job posting, application, and employment
 - Inventory transfers (deposit, withdraw, batch) with cooldown enforcement
@@ -521,8 +522,131 @@ async def run_business(agents: dict[str, TestAgent], client, app, clock, run_tic
     clock.advance(120)
     mine_work = await agents["eco_gatherer1"].call("work", {"business_id": mine_id})
     assert mine_work["produced"]["good"] == "copper_ore"
+    assert mine_work["produced"]["quantity"] == 4, "Mining should produce 4 units after balance buff"
     assert mine_work["recipe_slug"] == "mine_copper"
-    print(f"  Mine: recipe={mine_work['recipe_slug']}, produced {mine_work['produced']['good']}")
+    print(
+        f"  Mine: recipe={mine_work['recipe_slug']}, produced {mine_work['produced']['quantity']}x {mine_work['produced']['good']}"
+    )
+
+    # ------------------------------------------------------------------
+    # Iron mining + smelting balance + repair_tools recipe
+    # ------------------------------------------------------------------
+    print_section("Metalworking chain: mine → smelt → repair_tools")
+
+    # Register a smithy for smelting and repair
+    await give_balance(app, "eco_gatherer1", 3000)
+    smithy_reg = await agents["eco_gatherer1"].call(
+        "register_business",
+        {"name": "Test Smithy", "type": "smithy", "zone": "industrial"},
+    )
+    smithy_id = smithy_reg["business_id"]
+
+    # Mine iron ore (should produce 4 units with the balance buff)
+    await agents["eco_gatherer1"].call(
+        "configure_production",
+        {"business_id": mine_id, "product": "iron_ore"},
+    )
+    clock.advance(120)
+    iron_mine_work = await agents["eco_gatherer1"].call("work", {"business_id": mine_id})
+    assert iron_mine_work["produced"]["good"] == "iron_ore"
+    assert iron_mine_work["produced"]["quantity"] == 4, "Iron mining should produce 4 units"
+    assert iron_mine_work["recipe_slug"] == "mine_iron"
+    print(f"  Iron mining: {iron_mine_work['produced']['quantity']}x iron_ore")
+
+    # Mine more iron ore to have enough for smelting (need 3 for one smelt)
+    # We have 4 in business inventory already. Withdraw to personal for smelting at smithy.
+    clock.advance(120)
+    iron_mine_work2 = await agents["eco_gatherer1"].call("work", {"business_id": mine_id})
+    assert iron_mine_work2["produced"]["quantity"] == 4
+    print(f"  Second mining cycle: {iron_mine_work2['produced']['quantity']}x iron_ore")
+
+    # Withdraw iron ore from mine to personal inventory
+    clock.advance(31)
+    await agents["eco_gatherer1"].call(
+        "business_inventory",
+        {"action": "withdraw", "business_id": mine_id, "good": "iron_ore", "quantity": 8},
+    )
+
+    # Deposit iron ore at smithy for smelting
+    clock.advance(31)
+    await agents["eco_gatherer1"].call(
+        "business_inventory",
+        {"action": "deposit", "business_id": smithy_id, "good": "iron_ore", "quantity": 6},
+    )
+
+    # Configure smithy for smelting iron
+    await agents["eco_gatherer1"].call(
+        "configure_production",
+        {"business_id": smithy_id, "product": "iron_ingots"},
+    )
+    cfg_smelt = await agents["eco_gatherer1"].call(
+        "configure_production",
+        {"business_id": smithy_id, "product": "iron_ingots"},
+    )
+    assert cfg_smelt["bonus_applies"] is True, "Smithy should get smelting bonus"
+
+    # Smelt iron — verify updated cooldown (85s base, 0.60 smithy bonus = 51s)
+    clock.advance(120)
+    smelt_work = await agents["eco_gatherer1"].call("work", {"business_id": smithy_id})
+    assert smelt_work["produced"]["good"] == "iron_ingots"
+    assert smelt_work["produced"]["quantity"] == 2
+    assert smelt_work["recipe_slug"] == "smelt_iron"
+    # Verify bonus applied and cooldown is less than base 85s
+    assert smelt_work["cooldown_seconds"] < 85, (
+        f"Smithy smelting should have reduced cooldown, got {smelt_work['cooldown_seconds']}s"
+    )
+    print(f"  Smelting: {smelt_work['produced']['quantity']}x iron_ingots, cooldown={smelt_work['cooldown_seconds']}s")
+
+    # Smelt a second batch to build up iron ingots
+    clock.advance(120)
+    smelt_work2 = await agents["eco_gatherer1"].call("work", {"business_id": smithy_id})
+    assert smelt_work2["produced"]["good"] == "iron_ingots"
+    print(f"  Second smelt: {smelt_work2['produced']['quantity']}x iron_ingots")
+
+    # Now test tool production at smithy: forge_tools or repair_tools
+    # Both have smithy bonus; system picks one based on DB ordering.
+    # Supply all possible ingredients so whichever recipe is selected works.
+    await give_inventory(app, "eco_gatherer1", "tools", 5)
+    await give_inventory(app, "eco_gatherer1", "lumber", 5)
+
+    # Withdraw iron ingots from smithy to personal
+    clock.advance(31)
+    await agents["eco_gatherer1"].call(
+        "business_inventory",
+        {"action": "withdraw", "business_id": smithy_id, "good": "iron_ingots", "quantity": 4},
+    )
+
+    # Deposit all possible tool-making ingredients at smithy
+    clock.advance(31)
+    await agents["eco_gatherer1"].call(
+        "business_inventory",
+        {
+            "action": "batch_deposit",
+            "business_id": smithy_id,
+            "goods": [
+                {"good": "tools", "quantity": 2},
+                {"good": "iron_ingots", "quantity": 4},
+                {"good": "lumber", "quantity": 3},
+            ],
+        },
+    )
+
+    # Configure smithy for tool production
+    cfg_tools = await agents["eco_gatherer1"].call(
+        "configure_production",
+        {"business_id": smithy_id, "product": "tools"},
+    )
+    assert cfg_tools["bonus_applies"] is True
+    selected_recipe = cfg_tools["selected_recipe"]
+    assert selected_recipe in ("forge_tools", "repair_tools"), f"Unexpected recipe: {selected_recipe}"
+
+    clock.advance(120)
+    tool_work = await agents["eco_gatherer1"].call("work", {"business_id": smithy_id})
+    assert tool_work["produced"]["good"] == "tools"
+    assert tool_work["produced"]["quantity"] == 2
+    print(f"  Tool production at smithy: recipe={tool_work['recipe_slug']}, {tool_work['produced']['quantity']}x tools")
+
+    print("  Metalworking chain COMPLETE")
 
     # ------------------------------------------------------------------
     # Multi-business work routing with business_id

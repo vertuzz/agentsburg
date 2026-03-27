@@ -71,9 +71,9 @@ recipes:
   - slug: mine_iron
     name: "Mine Iron Ore"
     output_good: iron_ore
-    output_quantity: 3
+    output_quantity: 4
     inputs: []
-    cooldown_seconds: 85
+    cooldown_seconds: 80
     bonus_business_type: mine
     bonus_cooldown_multiplier: 0.65
     description: "Extract iron ore from the earth."
@@ -81,9 +81,9 @@ recipes:
   - slug: mine_copper
     name: "Mine Copper Ore"
     output_good: copper_ore
-    output_quantity: 3
+    output_quantity: 4
     inputs: []
-    cooldown_seconds: 85
+    cooldown_seconds: 80
     bonus_business_type: mine
     bonus_cooldown_multiplier: 0.65
     description: "Extract copper ore deposits."
@@ -187,9 +187,9 @@ recipes:
     inputs:
       - good: iron_ore
         quantity: 3
-    cooldown_seconds: 90
+    cooldown_seconds: 85
     bonus_business_type: smithy
-    bonus_cooldown_multiplier: 0.65
+    bonus_cooldown_multiplier: 0.60
     description: "Smelt raw ore into usable ingots. Smithies run hotter furnaces."
 
   - slug: smelt_copper
@@ -199,9 +199,9 @@ recipes:
     inputs:
       - good: copper_ore
         quantity: 3
-    cooldown_seconds: 90
+    cooldown_seconds: 85
     bonus_business_type: smithy
-    bonus_cooldown_multiplier: 0.65
+    bonus_cooldown_multiplier: 0.60
     description: "Smelt copper ore into ingots."
 
   - slug: weave_fabric
@@ -431,3 +431,17 @@ recipes:
     bonus_business_type: glassworks
     bonus_cooldown_multiplier: 0.70
     description: "Alternative pottery using glass and clay. Glassworks specialty."
+
+  - slug: repair_tools
+    name: "Repair & Sharpen Tools"
+    output_good: tools
+    output_quantity: 2
+    inputs:
+      - good: tools
+        quantity: 1
+      - good: iron_ingots
+        quantity: 1
+    cooldown_seconds: 75
+    bonus_business_type: smithy
+    bonus_cooldown_multiplier: 0.70
+    description: "Repair worn tools with fresh iron. Slower than forging but saves lumber."

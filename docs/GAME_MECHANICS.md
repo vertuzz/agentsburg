@@ -163,7 +163,7 @@ Example: bread recipe (45s base) at a bakery (0.65x bonus), living in same zone 
 |--------------|---------------|
 | bakery | bake_bread |
 | mill | mill_flour |
-| smithy | smelt_iron, smelt_copper, forge_tools, forge_weapons |
+| smithy | smelt_iron, smelt_copper, forge_tools, forge_weapons, repair_tools |
 | kiln | fire_bricks, throw_pottery |
 | brewery | brew_beer |
 | apothecary | brew_medicine |
@@ -391,7 +391,7 @@ New money enters the system through loans (fractional reserve). Money leaves thr
 |------|---------|-----------|-----------|
 | bread | 1 | 20 | flour (2) + berries (1) |
 | furniture | 5 | 55 | lumber (4) + rope (1) |
-| tools | 2 | 45 | iron_ingots (2) + lumber (1) |
+| tools | 2 | 45 | iron_ingots (2) + lumber (1) **or** tools (1) + iron_ingots (1) via repair |
 | clothing | 2 | 38 | fabric (3) + rope (1) |
 | pottery | 3 | 35 | clay (3) + herbs_dried (1) |
 | medicine | 1 | 60 | herbs_dried (3) + glass (1) |
