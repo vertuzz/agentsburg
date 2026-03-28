@@ -48,6 +48,14 @@ class WorkContext:
     employment: Employment | None = None
 
 
+@dataclass
+class LockedWorkAgents:
+    """Refreshed agent rows locked for a work() transaction."""
+
+    worker: Agent
+    owner: Agent
+
+
 async def resolve_work_context(
     db: AsyncSession,
     agent: Agent,
@@ -200,6 +208,30 @@ async def _pick_available_business(
         if b.default_recipe_slug is not None:
             return b
     return businesses[0]
+
+
+async def lock_work_agents(
+    db: AsyncSession,
+    worker_id,
+    owner_id,
+) -> LockedWorkAgents:
+    """Lock worker and owner agent rows in stable UUID order before inventory work."""
+    agent_ids = sorted({worker_id, owner_id}, key=str)
+    locked_agents: dict = {}
+
+    for agent_id in agent_ids:
+        agent_row = await db.execute(
+            select(Agent).where(Agent.id == agent_id).with_for_update().execution_options(populate_existing=True)
+        )
+        locked_agent = agent_row.scalar_one_or_none()
+        if locked_agent is None:
+            raise ValueError(f"Agent not found during work lock acquisition: {agent_id}")
+        locked_agents[agent_id] = locked_agent
+
+    return LockedWorkAgents(
+        worker=locked_agents[worker_id],
+        owner=locked_agents[owner_id],
+    )
 
 
 async def select_recipe(
@@ -412,39 +444,16 @@ async def produce_output(
 
 async def pay_wage(
     db: AsyncSession,
-    agent: Agent,
+    worker_agent: Agent,
+    owner_agent: Agent,
     employment: Employment,
     business: Business,
     product_slug: str,
     recipe: Recipe,
     now: datetime,
 ) -> tuple[float, Agent]:
-    """Deduct wage from owner and credit to worker. Returns (wage_earned, agent).
-
-    Locks both agent rows in UUID order to prevent deadlocks when two
-    workers employed by each other's businesses call /work concurrently.
-    """
+    """Deduct wage from owner and credit to worker using already-locked agent rows."""
     wage = Decimal(str(employment.wage_per_work))
-
-    # Always lock agents in consistent UUID order to prevent deadlocks
-    owner_id = business.owner_id
-    worker_id = agent.id
-    if str(owner_id) <= str(worker_id):
-        first_id, second_id = owner_id, worker_id
-    else:
-        first_id, second_id = worker_id, owner_id
-
-    first_result = await db.execute(select(Agent).where(Agent.id == first_id).with_for_update())
-    first_agent = first_result.scalar_one_or_none()
-    second_result = await db.execute(
-        select(Agent).where(Agent.id == second_id).with_for_update().execution_options(populate_existing=True)
-    )
-    second_agent = second_result.scalar_one_or_none()
-
-    if str(owner_id) <= str(worker_id):
-        owner_agent, agent = first_agent, second_agent
-    else:
-        agent, owner_agent = first_agent, second_agent
 
     if owner_agent is None:
         logger.error(
@@ -463,12 +472,12 @@ async def pay_wage(
         )
 
     owner_agent.balance = owner_balance - wage
-    agent.balance = Decimal(str(agent.balance)) + wage
+    worker_agent.balance = Decimal(str(worker_agent.balance)) + wage
 
     txn = Transaction(
         type="wage",
         from_agent_id=owner_agent.id,
-        to_agent_id=agent.id,
+        to_agent_id=worker_agent.id,
         amount=wage,
         metadata_json={
             "business_id": str(business.id),
@@ -480,4 +489,4 @@ async def pay_wage(
         },
     )
     db.add(txn)
-    return float(wage), agent
+    return float(wage), worker_agent

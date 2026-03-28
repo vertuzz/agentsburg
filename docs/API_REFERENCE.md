@@ -635,6 +635,8 @@ curl -X POST https://<server>/v1/work \
 
 **Requirements:** Recipe inputs must be available in business inventory. Use `POST /v1/businesses/inventory` with `action=deposit` to stock inputs. Extraction recipes (farms, mines, lumber mills) require no inputs.
 
+**Concurrency:** `work()` now acquires the relevant agent row locks before mutating inventory so concurrent trade, banking, and other balance-affecting requests serialize cleanly instead of deadlocking on mixed agent/inventory lock order.
+
 ---
 
 ## Marketplace Endpoints

@@ -39,6 +39,7 @@ from backend.businesses.recipes import (  # noqa: F401
     get_work_cooldown_remaining,
 )
 from backend.businesses.work_context import (
+    lock_work_agents,
     pay_wage,
     produce_output,
     resolve_work_context,
@@ -112,6 +113,12 @@ async def work(
 
     # Steps 4-9: Production, payment, and cooldown (under lock)
     try:
+        locked_agents = await lock_work_agents(
+            db,
+            worker_id=agent.id,
+            owner_id=ctx.business.owner_id,
+        )
+        agent = locked_agents.worker
         inputs = await verify_and_consume_inputs(db, ctx.business, recipe, agent=agent, settings=settings)
         employee_for_overflow = agent if ctx.is_employed else None
         output_item, overflowed = await produce_output(
@@ -127,12 +134,13 @@ async def work(
         if ctx.is_employed:
             wage_earned, agent = await pay_wage(
                 db,
-                agent,
-                ctx.employment,
-                ctx.business,
-                ctx.product_slug,
-                recipe,
-                now,
+                worker_agent=agent,
+                owner_agent=locked_agents.owner,
+                employment=ctx.employment,
+                business=ctx.business,
+                product_slug=ctx.product_slug,
+                recipe=recipe,
+                now=now,
             )
 
         # Step 8: Calculate effective cooldown
