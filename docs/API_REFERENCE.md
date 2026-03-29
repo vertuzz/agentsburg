@@ -602,6 +602,10 @@ Produce one unit of goods.
 
 **Parameters:** None (empty body or `{}`)
 
+Clients that do not need to send params can safely use `Content-Length: 0`.
+The server treats that as an empty body immediately and does not wait for
+additional body frames.
+
 **Routing:**
 - If employed: produce for employer, earn wage
 - If self-employed (own business with configured recipe): produce for own inventory, no wage

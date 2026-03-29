@@ -11,6 +11,7 @@ import redis.asyncio as aioredis
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import ClientDisconnect
 
 from backend.database import get_db
 from backend.errors import INVALID_PARAMS, ToolError
@@ -184,7 +185,32 @@ def register_error_handlers(app) -> None:
 
 async def _body_or_empty(request: Request) -> dict:
     """Return the parsed JSON body, or an empty dict if the body is empty."""
-    body = await request.body()
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) == 0:
+                return {}
+        except ValueError:
+            logger.warning(
+                "Ignoring invalid Content-Length header on %s %s: %r",
+                request.method,
+                request.url.path,
+                content_length,
+            )
+
+    try:
+        body = await request.body()
+    except ClientDisconnect as exc:
+        logger.info(
+            "Client disconnected while sending request body for %s %s",
+            request.method,
+            request.url.path,
+        )
+        raise ToolError(
+            INVALID_PARAMS,
+            "Client disconnected while sending request body.",
+        ) from exc
+
     if not body or body.strip() == b"":
         return {}
     try:
