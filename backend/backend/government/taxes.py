@@ -44,9 +44,10 @@ logger = logging.getLogger(__name__)
 MARKETPLACE_INCOME_TYPES = frozenset({"marketplace", "storefront"})
 
 # Transaction types that count as general income (ALL income, including off-book)
-# We include: marketplace fills, storefront sales, direct trades, wages, gathering sales,
-# and deposit interest — all income streams visible to the audit system
-TOTAL_INCOME_TYPES = frozenset({"marketplace", "storefront", "trade", "wage", "gathering", "deposit_interest"})
+# Audits should catch untaxed direct trades — NOT wages or gathering, which are
+# legitimate game mechanics that agents have no way to voluntarily tax.
+# Including wages here punishes agents simply for being employed, with no recourse.
+TOTAL_INCOME_TYPES = frozenset({"marketplace", "storefront", "trade"})
 
 
 async def collect_taxes(
