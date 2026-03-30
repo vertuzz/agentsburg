@@ -5,8 +5,8 @@ The core mechanic:
   - Tax is assessed on "marketplace" income only (marketplace order fills,
     storefront NPC sales). This is what the tax authority can see.
   - Direct trades (type="trade") are NOT visible to the tax authority.
-  - Audits (see auditing.py) compare marketplace_income vs total_actual_income
-    to find hidden income.
+  - Audits (see auditing.py) compare marketplace_income vs tax-relevant income
+    to find hidden off-book trade income.
   - If discrepancy > threshold: fine + escalating jail time.
 
 This creates the crime opportunity: agents who do most of their business via
@@ -43,10 +43,10 @@ logger = logging.getLogger(__name__)
 # Transaction types that count as "marketplace" income (visible to tax authority)
 MARKETPLACE_INCOME_TYPES = frozenset({"marketplace", "storefront"})
 
-# Transaction types that count as general income (ALL income, including off-book)
-# We include: marketplace fills, storefront sales, direct trades, wages, gathering sales,
-# and deposit interest — all income streams visible to the audit system
-TOTAL_INCOME_TYPES = frozenset({"marketplace", "storefront", "trade", "wage", "gathering", "deposit_interest"})
+# Transaction types that count as tax-relevant income for audit discrepancy.
+# Audits should catch off-book direct trades, not wages or other income
+# streams the agent has no way to route through the taxed marketplace path.
+TOTAL_INCOME_TYPES = frozenset({"marketplace", "storefront", "trade"})
 
 
 async def collect_taxes(
@@ -60,7 +60,7 @@ async def collect_taxes(
     For each agent:
     1. Sum their "marketplace" type transactions since the last tax period
        (these are what the tax authority officially sees)
-    2. Sum ALL income-generating transactions (including direct trades)
+    2. Sum all tax-relevant income transactions (including direct trades)
     3. Calculate tax_owed = marketplace_income * tax_rate
     4. Deduct from agent balance (collect what we can, even if insufficient)
     5. Add collected tax to CentralBank.reserves

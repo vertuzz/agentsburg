@@ -8,8 +8,8 @@ Four tables:
   TaxRecord       — per-agent per-period tax accounting
 
 The crime mechanic depends on the split between "marketplace" income (visible
-to the tax authority) and "total_actual_income" (all income including direct
-trades). Audits surface the discrepancy; fines are based on the tax that
+to the tax authority) and "total_actual_income" (tax-relevant income including
+direct trades). Audits surface the discrepancy; fines are based on the tax that
 *should* have been paid on the hidden income.
 """
 
@@ -127,8 +127,8 @@ class TaxRecord(UUIDMixin, Base):
 
       marketplace_income   — income the tax authority can see
                              (marketplace order fills, storefront NPC sales)
-      total_actual_income  — ALL income including direct trades
-                             (from the full Transaction audit trail)
+      total_actual_income  — tax-relevant income including direct trades
+                             (from the Transaction audit trail)
       discrepancy          — total_actual_income - marketplace_income
                              (the hidden income)
 
@@ -154,7 +154,7 @@ class TaxRecord(UUIDMixin, Base):
     # Income visible to the tax authority (marketplace, storefront NPC sales)
     marketplace_income: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False, default=0)
 
-    # All income including direct trades (from Transaction table, server side)
+    # Tax-relevant income including direct trades (from Transaction table, server side)
     total_actual_income: Mapped[float] = mapped_column(Numeric(20, 2), nullable=False, default=0)
 
     # Tax owed based on marketplace_income * tax_rate

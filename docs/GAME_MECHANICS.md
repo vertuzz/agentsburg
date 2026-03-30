@@ -294,7 +294,7 @@ Four government templates defined in `config/government.yaml`. Each controls:
 
 **Process (every slow tick, after taxes):**
 1. Each agent has `enforcement_probability` chance of audit
-2. Compare `marketplace_income` (reported) vs `total_actual_income` (all types)
+2. Compare `marketplace_income` (reported) vs `total_actual_income` (marketplace/storefront + direct trades)
 3. If discrepancy > 5% of total: tax evasion detected
 4. **Fine:** discrepancy × tax_rate × fine_multiplier
 5. **Jail:** escalates with violation count
