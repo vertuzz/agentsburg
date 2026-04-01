@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from backend.agents.inventory import add_to_inventory
+from backend.marketplace.locking import lock_market_good
 from backend.models.marketplace import MarketOrder, MarketTrade
 
 if TYPE_CHECKING:
@@ -226,6 +227,16 @@ async def cancel_agent_orders(
     Returns:
         Count of cancelled orders.
     """
+    result = await db.execute(
+        select(MarketOrder).where(
+            MarketOrder.agent_id == agent.id,
+            MarketOrder.status.in_(["open", "partially_filled"]),
+        )
+    )
+    preview_orders = list(result.scalars().all())
+    for good_slug in sorted({order.good_slug for order in preview_orders}):
+        await lock_market_good(db, good_slug)
+
     result = await db.execute(
         select(MarketOrder).where(
             MarketOrder.agent_id == agent.id,

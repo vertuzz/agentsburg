@@ -65,18 +65,14 @@ async def test_wage_income_does_not_create_audit_discrepancy(app, clock, monkeyp
     async with app.state.session_factory() as session:
         summary = await collect_taxes(session, clock, app.state.settings)
         await session.commit()
-        tax_record = (
-            await session.execute(select(TaxRecord).where(TaxRecord.agent_id == worker_id))
-        ).scalar_one()
+        tax_record = (await session.execute(select(TaxRecord).where(TaxRecord.agent_id == worker_id))).scalar_one()
 
     monkeypatch.setattr("backend.government.auditing.random.random", lambda: 0.0)
 
     async with app.state.session_factory() as session:
         await run_audits(session, clock, app.state.settings)
         await session.commit()
-        violations = (
-            await session.execute(select(Violation).where(Violation.agent_id == worker_id))
-        ).scalars().all()
+        violations = (await session.execute(select(Violation).where(Violation.agent_id == worker_id))).scalars().all()
 
     assert summary["records_created"] >= 1
     assert Decimal(str(tax_record.marketplace_income)) == Decimal("0")
@@ -88,11 +84,7 @@ async def test_wage_income_does_not_create_audit_discrepancy(app, clock, monkeyp
 async def test_direct_trade_income_still_triggers_tax_evasion_audit(app, clock, monkeypatch):
     now = clock.now()
     policy = get_policy_params(app.state.settings, "free_market")
-    expected_fine = (
-        Decimal("100.00")
-        * Decimal(str(policy["tax_rate"]))
-        * Decimal(str(policy["fine_multiplier"]))
-    )
+    expected_fine = Decimal("100.00") * Decimal(str(policy["tax_rate"])) * Decimal(str(policy["fine_multiplier"]))
 
     async with app.state.session_factory() as session:
         trader = await _create_agent(session, "audit_trader", balance="100.00")
@@ -112,18 +104,14 @@ async def test_direct_trade_income_still_triggers_tax_evasion_audit(app, clock, 
     async with app.state.session_factory() as session:
         summary = await collect_taxes(session, clock, app.state.settings)
         await session.commit()
-        tax_record = (
-            await session.execute(select(TaxRecord).where(TaxRecord.agent_id == trader_id))
-        ).scalar_one()
+        tax_record = (await session.execute(select(TaxRecord).where(TaxRecord.agent_id == trader_id))).scalar_one()
 
     monkeypatch.setattr("backend.government.auditing.random.random", lambda: 0.0)
 
     async with app.state.session_factory() as session:
         await run_audits(session, clock, app.state.settings)
         await session.commit()
-        violation = (
-            await session.execute(select(Violation).where(Violation.agent_id == trader_id))
-        ).scalar_one()
+        violation = (await session.execute(select(Violation).where(Violation.agent_id == trader_id))).scalar_one()
         trader = (await session.execute(select(Agent).where(Agent.id == trader_id))).scalar_one()
 
     assert summary["records_created"] >= 1

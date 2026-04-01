@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from backend.agents.inventory import add_to_inventory
 from backend.economy.npc_marketplace import NPC_BUYER_SENTINEL
-from backend.models.agent import Agent
+from backend.marketplace.locking import lock_agents_in_order, lock_market_good
 from backend.models.marketplace import MarketOrder, MarketTrade
 from backend.models.transaction import Transaction
 
@@ -63,6 +63,10 @@ async def match_orders(
     trades_executed = 0
     total_volume = 0
     trade_details: list[dict] = []
+
+    # Serialize same-good order book mutations across request handlers and the
+    # fast tick so every transaction sees one lock acquisition order.
+    await lock_market_good(db, good_slug)
 
     # Load all open buy orders for this good, sorted by price DESC then created_at ASC
     # (highest bidder first; earliest order breaks ties)
@@ -127,21 +131,10 @@ async def match_orders(
         # Match as much as possible
         fill_qty = min(buy_remaining, sell_remaining)
 
-        # --- Load buyer and seller agents (locked in UUID order to prevent deadlocks) ---
-        buyer_id = buy_order.agent_id
-        seller_id = sell_order.agent_id
-        if str(buyer_id) <= str(seller_id):
-            first_result = await db.execute(select(Agent).where(Agent.id == buyer_id).with_for_update())
-            first = first_result.scalar_one_or_none()
-            second_result = await db.execute(select(Agent).where(Agent.id == seller_id).with_for_update())
-            second = second_result.scalar_one_or_none()
-            buyer, seller = first, second
-        else:
-            first_result = await db.execute(select(Agent).where(Agent.id == seller_id).with_for_update())
-            first = first_result.scalar_one_or_none()
-            second_result = await db.execute(select(Agent).where(Agent.id == buyer_id).with_for_update())
-            second = second_result.scalar_one_or_none()
-            buyer, seller = second, first
+        # --- Load buyer and seller agents in stable UUID order ---
+        locked_agents = await lock_agents_in_order(db, [buy_order.agent_id, sell_order.agent_id])
+        buyer = locked_agents.get(buy_order.agent_id)
+        seller = locked_agents.get(sell_order.agent_id)
 
         if buyer is None or seller is None:
             # Agent deleted — skip this order pair

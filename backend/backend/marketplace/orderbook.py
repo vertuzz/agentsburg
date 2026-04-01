@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from backend.agents.inventory import add_to_inventory, remove_from_inventory
-from backend.models.agent import Agent
+from backend.marketplace.locking import lock_agents_in_order, lock_market_good
 from backend.models.marketplace import MarketOrder
 
 if TYPE_CHECKING:
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
     from backend.clock import Clock
     from backend.config import Settings
+    from backend.models.agent import Agent
 
 # --- Re-exports so existing imports continue to work ---
 from backend.marketplace.browsing import browse_orders, cancel_agent_orders  # noqa: F401
@@ -100,6 +101,10 @@ async def place_order(
     if good_slug not in goods_config:
         raise ValueError(f"Unknown good: {good_slug!r}")
 
+    # Serialize same-good order book mutations so immediate matching and
+    # cancellation cannot interleave into opposite agent lock orders.
+    await lock_market_good(db, good_slug)
+
     # Enforce per-agent open order limit to prevent order book flooding
     max_orders = getattr(settings.economy, "marketplace_max_orders_per_agent", 20)
     open_count_result = await db.execute(
@@ -113,6 +118,11 @@ async def place_order(
         raise ValueError(
             f"You have {open_count} open orders (max {max_orders}). Cancel some orders before placing new ones."
         )
+
+    # Lock the placing agent before any inventory or balance mutation. This
+    # keeps marketplace writes aligned with the agent-first lock order used by
+    # other balance-affecting flows like work() and trade responses.
+    agent = (await lock_agents_in_order(db, [agent.id]))[agent.id]
 
     if side == "sell":
         # Lock goods: remove from inventory into the order
@@ -171,10 +181,6 @@ async def place_order(
             total_cost = max_cost
         else:
             total_cost = price * quantity
-
-        # Lock agent row to prevent concurrent balance manipulation
-        agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
-        agent = agent_row.scalar_one()
 
         agent_balance = Decimal(str(agent.balance))
         if agent_balance < total_cost:
@@ -254,6 +260,14 @@ async def cancel_order(
     except ValueError:
         raise ValueError(f"Invalid order ID: {order_id!r}")
 
+    preview_result = await db.execute(select(MarketOrder).where(MarketOrder.id == order_uuid))
+    preview_order = preview_result.scalar_one_or_none()
+
+    if preview_order is None:
+        raise ValueError(f"Order {order_id!r} not found")
+
+    await lock_market_good(db, preview_order.good_slug)
+
     result = await db.execute(select(MarketOrder).where(MarketOrder.id == order_uuid).with_for_update())
     order = result.scalar_one_or_none()
 
@@ -268,6 +282,8 @@ async def cancel_order(
 
     # Calculate how much to return
     unfilled_qty = order.quantity_total - order.quantity_filled
+
+    agent = (await lock_agents_in_order(db, [agent.id]))[agent.id]
 
     # Calculate 2% cancellation fee to discourage order spoofing
     locked_value = Decimal(str(order.price)) * unfilled_qty
