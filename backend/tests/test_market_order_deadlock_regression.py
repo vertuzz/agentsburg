@@ -7,9 +7,11 @@ import asyncio
 import pytest
 from sqlalchemy import func, select
 
+from backend.economy.fast_tick import run_fast_tick
 from backend.marketplace.locking import market_good_lock_key
 from backend.models.agent import Agent
 from backend.models.inventory import InventoryItem
+from backend.models.marketplace import MarketOrder
 from tests.conftest import give_balance, give_inventory
 from tests.helpers import TestAgent
 
@@ -84,3 +86,41 @@ async def test_marketplace_orders_serialize_same_good_mutations(client, app):
 
     assert result["order"]["side"] == "buy"
     assert result["order"]["good_slug"] == good_slug
+
+
+@pytest.mark.asyncio
+async def test_fast_tick_waits_on_market_good_lock_before_locking_sell_orders(client, app, clock, redis_client):
+    """Fast tick should take the per-good advisory lock before sell-order row locks."""
+    seller = await TestAgent.signup(client, "market_tick_seller")
+    await give_inventory(app, "market_tick_seller", "wheat", 5)
+
+    order = await seller.call(
+        "marketplace_order",
+        {"action": "sell", "product": "wheat", "quantity": 1, "price": 1},
+    )
+    order_id = order["order"]["id"]
+    good_slug = "wheat"
+
+    async with app.state.session_factory() as lock_session:
+        await lock_session.execute(select(func.pg_advisory_xact_lock(market_good_lock_key(good_slug))))
+
+        async def _run_tick():
+            async with app.state.session_factory() as tick_session:
+                return await run_fast_tick(tick_session, clock, app.state.settings, redis=redis_client)
+
+        tick_task = asyncio.create_task(_run_tick())
+        try:
+            await asyncio.sleep(0.2)
+            assert not tick_task.done(), "fast tick should wait for the same-good advisory lock"
+
+            async with app.state.session_factory() as probe_session:
+                await probe_session.execute(
+                    select(MarketOrder).where(MarketOrder.id == order_id).with_for_update(nowait=True)
+                )
+                await probe_session.rollback()
+        finally:
+            await lock_session.rollback()
+
+        result = await asyncio.wait_for(tick_task, timeout=5)
+
+    assert result["tick_type"] == "fast"

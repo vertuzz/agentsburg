@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from backend.marketplace.locking import lock_market_good
 from backend.models.agent import Agent
 from backend.models.banking import CentralBank
 from backend.models.marketplace import MarketOrder
@@ -148,6 +149,10 @@ async def simulate_npc_marketplace_demand(
         )
         if remaining_budget <= 0:
             continue
+
+        # Keep fast-tick marketplace writers on the same lock order as
+        # request handlers and the matcher: per-good advisory lock first.
+        await lock_market_good(db, good_slug)
 
         # Find open sell orders at or below reference price
         sell_result = await db.execute(
@@ -286,6 +291,28 @@ async def place_npc_buy_orders(
     # Ensure the sentinel agent row exists (idempotent)
     await _ensure_npc_buyer_agent(db)
 
+    # Build reference prices from npc_demand config
+    npc_demand_config = settings.npc_demand
+    demand_entries = npc_demand_config.get("npc_demand", [])
+    ref_prices: dict[str, Decimal] = {}
+    for entry in demand_entries:
+        good = entry.get("good")
+        ref_price = entry.get("reference_price")
+        if good and ref_price is not None:
+            ref_prices[good] = Decimal(str(ref_price))
+
+    preview_old_result = await db.execute(
+        select(MarketOrder.good_slug).where(
+            MarketOrder.agent_id == NPC_BUYER_SENTINEL,
+            MarketOrder.side == "buy",
+            MarketOrder.status.in_(["open", "partially_filled"]),
+        )
+    )
+    affected_goods = set(ref_prices)
+    affected_goods.update(row[0] for row in preview_old_result.all())
+    for good_slug in sorted(affected_goods):
+        await lock_market_good(db, good_slug)
+
     # Clean up old NPC buy orders (replace each tick with fresh ones)
     old_result = await db.execute(
         select(MarketOrder)
@@ -307,16 +334,6 @@ async def place_npc_buy_orders(
         return {"type": "npc_buy_orders", "orders_placed": 0}
 
     bank_reserves = Decimal(str(central_bank.reserves))
-
-    # Build reference prices from npc_demand config
-    npc_demand_config = settings.npc_demand
-    demand_entries = npc_demand_config.get("npc_demand", [])
-    ref_prices: dict[str, Decimal] = {}
-    for entry in demand_entries:
-        good = entry.get("good")
-        ref_price = entry.get("reference_price")
-        if good and ref_price is not None:
-            ref_prices[good] = Decimal(str(ref_price))
 
     # Place buy orders for tier 1 and tier 2 goods with NPC demand config
     orders_placed = 0
