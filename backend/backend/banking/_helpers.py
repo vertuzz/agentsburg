@@ -12,13 +12,14 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from backend.models.agent import Agent
 from backend.models.banking import BankAccount, CentralBank
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from backend.config import Settings
-    from backend.models.agent import Agent
+    from backend.models.banking import Loan
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +46,17 @@ def _to_decimal(value) -> Decimal:
 def _round_money(value: Decimal) -> Decimal:
     """Round to 2 decimal places (currency precision)."""
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+async def lock_agent_for_update(db: AsyncSession, agent_id) -> Agent:
+    """Lock and refresh an agent row before mutating any dependent state."""
+    result = await db.execute(
+        select(Agent).where(Agent.id == agent_id).with_for_update().execution_options(populate_existing=True)
+    )
+    agent = result.scalar_one_or_none()
+    if agent is None:
+        raise ValueError(f"Agent not found during banking lock acquisition: {agent_id}")
+    return agent
 
 
 async def _get_or_create_account(db: AsyncSession, agent: Agent, *, lock: bool = False) -> BankAccount:
@@ -84,6 +96,22 @@ async def _get_central_bank(db: AsyncSession, *, lock: bool = False) -> CentralB
     if bank is None:
         raise RuntimeError("CentralBank singleton not found — run seed_central_bank() during bootstrap")
     return bank
+
+
+async def lock_active_loans_for_agent(db: AsyncSession, agent_id) -> list[Loan]:
+    """Lock an agent's active loans in stable primary-key order."""
+    from backend.models.banking import Loan
+
+    result = await db.execute(
+        select(Loan)
+        .where(
+            Loan.agent_id == agent_id,
+            Loan.status == "active",
+        )
+        .order_by(Loan.id)
+        .with_for_update()
+    )
+    return list(result.scalars().all())
 
 
 def _get_current_policy(settings: Settings) -> dict:

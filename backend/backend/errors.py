@@ -60,6 +60,10 @@ NOT_ELIGIBLE = "NOT_ELIGIBLE"
 ALREADY_EXISTS = "ALREADY_EXISTS"
 """The entity already exists (e.g., name already taken, already employed)."""
 
+# Concurrency / retries
+TEMPORARY_CONFLICT = "TEMPORARY_CONFLICT"
+"""A concurrent database conflict occurred; retry the request."""
+
 # Housing
 NO_HOUSING = "NO_HOUSING"
 """Agent does not have housing. Rent a zone first with rent_housing()."""

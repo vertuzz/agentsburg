@@ -9,6 +9,7 @@ from backend.errors import (
     INSUFFICIENT_FUNDS,
     INVALID_PARAMS,
     NOT_ELIGIBLE,
+    TEMPORARY_CONFLICT,
     UNAUTHORIZED,
     ToolError,
 )
@@ -74,7 +75,10 @@ async def _handle_bank(
 
     from decimal import Decimal as _Decimal
 
+    from sqlalchemy.exc import DBAPIError
+
     from backend.banking.service import deposit, repay_loan, take_loan, view_balance, withdraw
+    from backend.database_errors import is_deadlock_error
     from backend.hints import get_pending_events
 
     if action == "view_balance":
@@ -93,6 +97,10 @@ async def _handle_bank(
             if "insufficient" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
+        except DBAPIError as e:
+            if is_deadlock_error(e):
+                raise ToolError(TEMPORARY_CONFLICT, "Concurrent banking conflict. Retry the request.") from e
+            raise
 
         pending_events = await get_pending_events(db, agent)
         return {
@@ -131,6 +139,10 @@ async def _handle_bank(
             if "insufficient" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
+        except DBAPIError as e:
+            if is_deadlock_error(e):
+                raise ToolError(TEMPORARY_CONFLICT, "Concurrent banking conflict. Retry the request.") from e
+            raise
 
         pending_events = await get_pending_events(db, agent)
         return {
@@ -153,6 +165,10 @@ async def _handle_bank(
             if "insufficient" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
+        except DBAPIError as e:
+            if is_deadlock_error(e):
+                raise ToolError(TEMPORARY_CONFLICT, "Concurrent banking conflict. Retry the request.") from e
+            raise
 
         pending_events = await get_pending_events(db, agent)
         return {
@@ -180,6 +196,10 @@ async def _handle_bank(
             if "capacity" in error_msg.lower():
                 raise ToolError(INSUFFICIENT_FUNDS, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
+        except DBAPIError as e:
+            if is_deadlock_error(e):
+                raise ToolError(TEMPORARY_CONFLICT, "Concurrent banking conflict. Retry the request.") from e
+            raise
 
         # Spectator feed: loan disbursed
         try:

@@ -21,8 +21,8 @@ from backend.banking._helpers import (
     _get_or_create_account,
     _round_money,
     _to_decimal,
+    lock_agent_for_update,
 )
-from backend.models.agent import Agent
 from backend.models.banking import BankAccount, Loan
 from backend.models.transaction import Transaction
 
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from backend.clock import Clock
     from backend.config import Settings
+    from backend.models.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,7 @@ async def deposit(
         raise ValueError("Deposit amount must be positive")
 
     # Lock agent row, bank account, and central bank to prevent concurrent mutations
-    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
-    agent = agent_row.scalar_one()
+    agent = await lock_agent_for_update(db, agent.id)
 
     agent_balance = _to_decimal(agent.balance)
     if agent_balance < amount:
@@ -146,8 +146,7 @@ async def withdraw(
         raise ValueError("Withdrawal amount must be positive")
 
     # Lock agent row, bank account, and central bank to prevent concurrent mutations
-    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
-    agent = agent_row.scalar_one()
+    agent = await lock_agent_for_update(db, agent.id)
 
     account = await _get_or_create_account(db, agent, lock=True)
     account_balance = _to_decimal(account.balance)

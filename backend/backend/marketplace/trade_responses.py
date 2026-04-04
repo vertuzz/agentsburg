@@ -15,7 +15,7 @@ from sqlalchemy import select
 
 from backend.agents.inventory import add_to_inventory, remove_from_inventory
 from backend.marketplace.escrow import return_escrow_to_proposer as _return_escrow_to_proposer
-from backend.models.agent import Agent
+from backend.marketplace.locking import lock_agents_in_order
 from backend.models.inventory import InventoryItem
 from backend.models.marketplace import Trade
 from backend.models.transaction import Transaction
@@ -25,6 +25,7 @@ if TYPE_CHECKING:
 
     from backend.clock import Clock
     from backend.config import Settings
+    from backend.models.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -87,18 +88,9 @@ async def respond_trade(
     # Load and lock both agents in UUID order to prevent deadlocks
     responder_id = agent.id
     proposer_id = trade.proposer_id
-    if str(responder_id) <= str(proposer_id):
-        first_row = await db.execute(select(Agent).where(Agent.id == responder_id).with_for_update())
-        agent = first_row.scalar_one()
-        second_row = await db.execute(select(Agent).where(Agent.id == proposer_id).with_for_update())
-        proposer = second_row.scalar_one_or_none()
-    else:
-        first_row = await db.execute(select(Agent).where(Agent.id == proposer_id).with_for_update())
-        proposer = first_row.scalar_one_or_none()
-        second_row = await db.execute(select(Agent).where(Agent.id == responder_id).with_for_update())
-        agent = second_row.scalar_one()
-    if proposer is None:
-        raise ValueError("Trade proposer no longer exists")
+    locked_agents = await lock_agents_in_order(db, [responder_id, proposer_id])
+    agent = locked_agents[responder_id]
+    proposer = locked_agents.get(proposer_id)
 
     if not accept:
         # Reject: return escrowed items/money to proposer
@@ -265,7 +257,7 @@ async def cancel_trade(
     except ValueError:
         raise ValueError(f"Invalid trade ID: {trade_id!r}")
 
-    trade_result = await db.execute(select(Trade).where(Trade.id == trade_uuid))
+    trade_result = await db.execute(select(Trade).where(Trade.id == trade_uuid).with_for_update())
     trade = trade_result.scalar_one_or_none()
 
     if trade is None:
@@ -277,8 +269,10 @@ async def cancel_trade(
     if trade.status != "pending":
         raise ValueError(f"Trade is no longer pending (status: {trade.status!r})")
 
+    proposer = (await lock_agents_in_order(db, [agent.id]))[agent.id]
+
     # Return escrowed items/money to proposer
-    await _return_escrow_to_proposer(db, trade, agent, settings)
+    await _return_escrow_to_proposer(db, trade, proposer, settings)
 
     trade.status = "cancelled"
     trade.escrow_locked = False

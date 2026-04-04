@@ -17,6 +17,7 @@ from backend.errors import (
     NOT_EMPLOYED,
     NOT_FOUND,
     STORAGE_FULL,
+    TEMPORARY_CONFLICT,
     UNAUTHORIZED,
     ToolError,
 )
@@ -351,7 +352,10 @@ async def _handle_work(
     except ValueError as e:
         raise ToolError(IN_JAIL, str(e)) from e
 
+    from sqlalchemy.exc import DBAPIError
+
     from backend.businesses.production import work
+    from backend.database_errors import is_deadlock_error
 
     business_id = params.get("business_id")
 
@@ -379,6 +383,10 @@ async def _handle_work(
         if "jailed" in error_msg.lower():
             raise ToolError(IN_JAIL, error_msg) from e
         raise ToolError(INVALID_PARAMS, error_msg) from e
+    except DBAPIError as e:
+        if is_deadlock_error(e):
+            raise ToolError(TEMPORARY_CONFLICT, "Concurrent work conflict. Retry the request.") from e
+        raise
 
     from backend.hints import get_pending_events
 

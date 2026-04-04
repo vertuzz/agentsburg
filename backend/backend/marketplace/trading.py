@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from backend.agents.inventory import remove_from_inventory
+from backend.marketplace.locking import lock_agents_in_order
 from backend.models.agent import Agent
 from backend.models.inventory import InventoryItem
 from backend.models.marketplace import Trade
@@ -119,6 +120,9 @@ async def propose_trade(
     if request_money < 0:
         raise ValueError("request_money cannot be negative")
 
+    # Lock proposer before touching dependent inventory/balance rows.
+    agent = (await lock_agents_in_order(db, [agent.id]))[agent.id]
+
     # Verify proposer has all offered goods (locked to prevent concurrent removal)
     for item in offer_items:
         slug = item["good_slug"]
@@ -136,14 +140,6 @@ async def propose_trade(
         have = inv_item.quantity if inv_item else 0
         if have < qty:
             raise ValueError(f"Insufficient inventory: have {have}x {slug!r}, need {qty}")
-
-    # Re-lock agent row before balance modification (prevent double-spend).
-    # populate_existing=True forces SQLAlchemy to overwrite the cached identity
-    # map entry with fresh data from the DB after the lock is acquired.
-    agent_row = await db.execute(
-        select(Agent).where(Agent.id == agent.id).with_for_update().execution_options(populate_existing=True)
-    )
-    agent = agent_row.scalar_one()
 
     # Verify proposer has enough balance for offer_money
     agent_balance = Decimal(str(agent.balance))

@@ -16,8 +16,9 @@ from backend.banking._helpers import (
     _get_central_bank,
     _round_money,
     _to_decimal,
+    lock_active_loans_for_agent,
+    lock_agent_for_update,
 )
-from backend.models.agent import Agent
 from backend.models.banking import BankAccount, Loan
 from backend.models.transaction import Transaction
 
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 
     from backend.clock import Clock
     from backend.config import Settings
+    from backend.models.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +46,10 @@ async def process_loan_payments(
     if not due_loans:
         return {"type": "loan_payments", "processed": 0, "paid": 0, "defaulted": 0, "total_collected": 0.0}
 
-    agent_ids = {loan.agent_id for loan in due_loans}
-    agents_result = await db.execute(select(Agent).where(Agent.id.in_(agent_ids)).with_for_update())
-    agents_by_id = {a.id: a for a in agents_result.scalars().all()}
+    agents_by_id: dict = {}
+    for agent_id in sorted({loan.agent_id for loan in due_loans}, key=str):
+        locked_agent = await lock_agent_for_update(db, agent_id)
+        agents_by_id[agent_id] = locked_agent
 
     bank = await _get_central_bank(db, lock=True)
     reserves = _to_decimal(bank.reserves)
@@ -157,13 +160,13 @@ async def default_agent_loans(
     """Default all active loans for a bankrupt agent, writing off remaining balances."""
     now = clock.now()
 
-    result = await db.execute(select(Loan).where(Loan.agent_id == agent.id, Loan.status == "active"))
-    active_loans = list(result.scalars().all())
+    agent = await lock_agent_for_update(db, agent.id)
+    active_loans = await lock_active_loans_for_agent(db, agent.id)
 
     if not active_loans:
         return {"loans_defaulted": 0, "total_written_off": 0.0}
 
-    bank = await _get_central_bank(db)
+    bank = await _get_central_bank(db, lock=True)
     total_loaned = _to_decimal(bank.total_loaned)
     total_written_off = Decimal("0")
 
@@ -215,14 +218,15 @@ async def close_bank_account_for_bankruptcy(
     """
     now = clock.now()
 
-    result = await db.execute(select(BankAccount).where(BankAccount.agent_id == agent.id))
+    agent = await lock_agent_for_update(db, agent.id)
+
+    result = await db.execute(select(BankAccount).where(BankAccount.agent_id == agent.id).with_for_update())
     account = result.scalar_one_or_none()
     deposit_balance = _to_decimal(account.balance) if account else Decimal("0")
 
-    loans_result = await db.execute(select(Loan).where(Loan.agent_id == agent.id, Loan.status == "active"))
-    active_loans = list(loans_result.scalars().all())
+    active_loans = await lock_active_loans_for_agent(db, agent.id)
 
-    bank = await _get_central_bank(db)
+    bank = await _get_central_bank(db, lock=True)
     total_loaned = _to_decimal(bank.total_loaned)
 
     applied_to_loans = Decimal("0")

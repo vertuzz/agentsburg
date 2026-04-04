@@ -11,6 +11,7 @@ from backend.errors import (
     INVALID_PARAMS,
     NOT_FOUND,
     STORAGE_FULL,
+    TEMPORARY_CONFLICT,
     TRADE_EXPIRED,
     UNAUTHORIZED,
     ToolError,
@@ -84,6 +85,9 @@ async def _handle_trade(
 
     from decimal import Decimal
 
+    from sqlalchemy.exc import DBAPIError
+
+    from backend.database_errors import is_deadlock_error
     from backend.hints import get_pending_events
     from backend.marketplace.trading import cancel_trade, propose_trade, respond_trade
 
@@ -128,6 +132,10 @@ async def _handle_trade(
             if "not found" in error_msg.lower():
                 raise ToolError(NOT_FOUND, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
+        except DBAPIError as e:
+            if is_deadlock_error(e):
+                raise ToolError(TEMPORARY_CONFLICT, "Concurrent trade conflict. Retry the request.") from e
+            raise
 
         pending_events = await get_pending_events(db, agent)
         return {
@@ -168,6 +176,10 @@ async def _handle_trade(
             if "storage" in error_msg.lower():
                 raise ToolError(STORAGE_FULL, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
+        except DBAPIError as e:
+            if is_deadlock_error(e):
+                raise ToolError(TEMPORARY_CONFLICT, "Concurrent trade conflict. Retry the request.") from e
+            raise
 
         pending_events = await get_pending_events(db, agent)
         result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}
@@ -185,6 +197,10 @@ async def _handle_trade(
             if "not found" in error_msg.lower():
                 raise ToolError(NOT_FOUND, error_msg) from e
             raise ToolError(INVALID_PARAMS, error_msg) from e
+        except DBAPIError as e:
+            if is_deadlock_error(e):
+                raise ToolError(TEMPORARY_CONFLICT, "Concurrent trade conflict. Retry the request.") from e
+            raise
 
         pending_events = await get_pending_events(db, agent)
         result["_hints"] = {"pending_events": pending_events, "check_back_seconds": 60}

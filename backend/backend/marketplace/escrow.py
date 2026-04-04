@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 
 from backend.agents.inventory import add_to_inventory
+from backend.marketplace.locking import lock_agents_in_order
 from backend.models.agent import Agent
 from backend.models.marketplace import Trade
 
@@ -62,6 +63,11 @@ async def expire_trades(
 
     count = 0
     for trade in expired_trades:
+        trade_result = await db.execute(select(Trade).where(Trade.id == trade.id).with_for_update())
+        trade = trade_result.scalar_one_or_none()
+        if trade is None or trade.status != "pending":
+            continue
+
         # Load proposer
         proposer_result = await db.execute(select(Agent).where(Agent.id == trade.proposer_id))
         proposer = proposer_result.scalar_one_or_none()
@@ -114,6 +120,10 @@ async def cancel_agent_trades(
             await return_escrow_to_proposer(db, trade, agent, settings)
         else:
             # Agent is target — return proposer's escrow to them
+            trade_result = await db.execute(select(Trade).where(Trade.id == trade.id).with_for_update())
+            trade = trade_result.scalar_one_or_none()
+            if trade is None or trade.status != "pending":
+                continue
             proposer_result = await db.execute(select(Agent).where(Agent.id == trade.proposer_id))
             proposer = proposer_result.scalar_one_or_none()
             if proposer is not None:
@@ -145,8 +155,12 @@ async def return_escrow_to_proposer(
 
     Called on reject, cancel, and expire.
     """
-    if not trade.escrow_locked:
+    trade_result = await db.execute(select(Trade).where(Trade.id == trade.id).with_for_update())
+    trade = trade_result.scalar_one_or_none()
+    if trade is None or not trade.escrow_locked:
         return  # Already returned
+
+    proposer = (await lock_agents_in_order(db, [proposer.id]))[proposer.id]
 
     # Return offered goods
     for item in trade.offer_items or []:

@@ -18,8 +18,6 @@ from datetime import timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
-
 from backend.banking._helpers import (
     INSTALLMENT_INTERVAL_HOURS,
     LOAN_INSTALLMENTS,
@@ -27,6 +25,8 @@ from backend.banking._helpers import (
     _get_central_bank,
     _round_money,
     _to_decimal,
+    lock_active_loans_for_agent,
+    lock_agent_for_update,
 )
 
 # Re-export admin functions so existing imports from backend.banking.loans still work
@@ -35,7 +35,6 @@ from backend.banking.loan_admin import (  # noqa: F401
     default_agent_loans,
     process_loan_payments,
 )
-from backend.models.agent import Agent
 from backend.models.banking import Loan
 from backend.models.transaction import Transaction
 
@@ -44,6 +43,7 @@ if TYPE_CHECKING:
 
     from backend.clock import Clock
     from backend.config import Settings
+    from backend.models.agent import Agent
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +100,7 @@ async def take_loan(
         raise ValueError("Loan denied: too many prior bankruptcies (3+). Your credit history is too poor.")
 
     # Lock agent row to prevent concurrent loan/balance manipulation
-    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
-    agent = agent_row.scalar_one()
+    agent = await lock_agent_for_update(db, agent.id)
 
     # --- Check credit ---
     credit = await calculate_credit(db, agent, clock, settings)
@@ -119,15 +118,8 @@ async def take_loan(
         )
 
     # --- Check one-loan-at-a-time (locked to prevent double-loan race) ---
-    existing_result = await db.execute(
-        select(Loan)
-        .where(
-            Loan.agent_id == agent.id,
-            Loan.status == "active",
-        )
-        .with_for_update()
-    )
-    existing_loan = existing_result.scalar_one_or_none()
+    existing_loans = await lock_active_loans_for_agent(db, agent.id)
+    existing_loan = existing_loans[0] if existing_loans else None
     if existing_loan is not None:
         raise ValueError(
             f"You already have an active loan with {existing_loan.installments_remaining} "
@@ -256,19 +248,11 @@ async def repay_loan(
         ValueError: If no active loan or insufficient balance.
     """
     # Lock agent row
-    agent_row = await db.execute(select(Agent).where(Agent.id == agent.id).with_for_update())
-    agent = agent_row.scalar_one()
+    agent = await lock_agent_for_update(db, agent.id)
 
     # Find active loan
-    loan_result = await db.execute(
-        select(Loan)
-        .where(
-            Loan.agent_id == agent.id,
-            Loan.status == "active",
-        )
-        .with_for_update()
-    )
-    loan = loan_result.scalar_one_or_none()
+    active_loans = await lock_active_loans_for_agent(db, agent.id)
+    loan = active_loans[0] if active_loans else None
     if loan is None:
         raise ValueError("You have no active loan to repay.")
 
